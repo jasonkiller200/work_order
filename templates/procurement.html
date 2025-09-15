@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生產資訊中心 - 採購儀表板</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>生產資訊中心</h1>
+            <p>一個整合工單料況、庫存與規格的查詢系統</p>
+        </header>
+        
+        <nav>
+            <ul>
+                <li><a href="/procurement" class="active">採購儀表板</a></li>
+                <li><a href="/order_query">訂單查詢</a></li>
+                <li><a href="/admin_dashboard">後台管理</a></li>
+            </ul>
+        </nav>
+
+        <hr>
+
+        <section id="status-section">
+            <h2>系統狀態</h2>
+            <p id="status-text">正在檢查後端服務狀態...</p>
+        </section>
+
+        <hr>
+
+        <section id="procurement-dashboard">
+            <h2>採購缺料總覽儀表板(只顯示缺料或採購不足項目)</h2>
+            <div class="grid">
+                <input type="text" id="material-filter-input" placeholder="輸入物料或物料說明進行查詢">
+                <button id="apply-filter-btn">查詢料號</button>
+            </div>
+            <div id="dashboard-container">
+                <p>正在載入儀表板資料...</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 物料詳情彈出視窗 (Modal) -->
+    <dialog id="details-modal">
+        <article>
+            <header>
+                <a href="#close" aria-label="Close" class="close"></a>
+                <h3 id="modal-title">物料詳情</h3>
+            </header>
+            
+            <!-- 庫存總覽區塊 -->
+            <div id="stock-summary-section">
+                <h4>庫存總覽</h4>
+                <p>未限制庫存: <span id="unrestricted-stock"></span></p>
+                <p>品質檢驗中: <span id="inspection-stock"></span></p>
+                <p>已訂未入: <span id="on-order-stock"></span></p>
+            </div>
+
+            <!-- 分頁導覽 -->
+            <nav>
+                <ul>
+                    <li><a href="#" class="tab-link active" data-tab="tab-demand">需求訂單</a></li>
+                    <li><a href="#" class="tab-link" data-tab="tab-substitute">可替代版本</a></li>
+                </ul>
+            </nav>
+
+            <!-- 分頁內容 -->
+            <div id="modal-content">
+                <div id="tab-demand" class="tab-content active">
+                    <!-- 需求訂單表格將會被動態插入這裡 -->
+                </div>
+                <div id="tab-substitute" class="tab-content">
+                    <!-- 替代版本庫存表格將會被動態插入這裡 -->
+                </div>
+            </div>
+
+            <footer>
+                <button class="secondary" id="close-modal-btn">關閉</button>
+            </footer>
+        </article>
+    </dialog>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

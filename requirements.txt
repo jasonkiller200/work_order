@@ -1,0 +1,6 @@
+Flask
+pandas
+xlrd>=2.0.1
+openpyxl
+waitress
+xlsxwriter
