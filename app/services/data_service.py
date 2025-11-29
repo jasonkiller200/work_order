@@ -4,6 +4,9 @@
 import logging
 import pandas as pd
 import os
+from app.models.database import db, ComponentRequirement, Material, User
+from sqlalchemy.orm import joinedload
+
 from app.config import FilePaths
 from app.utils.helpers import replace_nan_in_dict
 
@@ -38,28 +41,65 @@ class DataService:
             df_prep_semi_finished['訂單'] = df_prep_semi_finished['訂單'].astype(str)
             df_prep_semi_finished = df_prep_semi_finished[df_prep_semi_finished['訂單'].str.startswith(('1', '2', '6'))]
             
-            # DEBUG: 打印出原始 DataFrame 的欄位
-            app_logger.info(f"DEBUG: df_wip_parts 欄位: {df_wip_parts.columns.tolist()}")
-            app_logger.info(f"DEBUG: df_finished_parts 欄位: {df_finished_parts.columns.tolist()}")
-            app_logger.info(f"DEBUG: df_inventory 欄位: {df_inventory.columns.tolist()}")
+            # --- 新增邏輯：讀取資料庫資訊 ---
+            # 1. 讀取組件需求明細的 base_material_id 清單
+            valid_base_ids = set()
+            try:
+                valid_base_ids = {r.base_material_id for r in ComponentRequirement.query.all() if r.base_material_id}
+                app_logger.info(f"已載入 {len(valid_base_ids)} 筆組件需求明細 (base_material_id)")
+            except Exception as e:
+                app_logger.error(f"讀取組件需求明細失敗: {e}")
+
+            # 2. 讀取物料與採購人員對應
+            material_buyer_map = {}
+            try:
+                materials = Material.query.options(joinedload(Material.buyer)).filter(Material.buyer_id.isnot(None)).all()
+                for m in materials:
+                    if m.buyer:
+                        material_buyer_map[m.material_id] = m.buyer.full_name
+                app_logger.info(f"已載入 {len(material_buyer_map)} 筆物料採購人員對應")
+            except Exception as e:
+                app_logger.error(f"讀取物料採購人員對應失敗: {e}")
             
-            df_specs = pd.read_excel(FilePaths.SPECS_FILE)
+            # --- 新增邏輯：成品撥料分流 ---
+            # 計算 base_material_id
+            df_finished_parts['base_material_id'] = df_finished_parts['物料'].astype(str).str[:10]
             
-            # 載入工單總表
-            df_work_order_summary = DataService._load_work_order_summary()
+            # 分流：符合組件需求的 vs 不符合的
+            mask_valid = df_finished_parts['base_material_id'].isin(valid_base_ids)
+            df_finished_parts_valid = df_finished_parts[mask_valid].copy()
+            df_finished_parts_invalid = df_finished_parts[~mask_valid].copy()
             
-            # 載入已訂未交資料
-            df_on_order = DataService._load_on_order_data()
+            app_logger.info(f"成品撥料分流結果: 符合={len(df_finished_parts_valid)}, 不符合={len(df_finished_parts_invalid)}")
             
-            # 處理需求資料
-            df_demand = pd.concat([df_wip_parts, df_finished_parts, df_prep_semi_finished], ignore_index=True)
+            # --- 處理主儀表板資料 (撥料 + 符合的成品撥料 + 備料半成品) ---
+            df_demand = pd.concat([df_wip_parts, df_finished_parts_valid, df_prep_semi_finished], ignore_index=True)
+            
+            # 計算總需求
             df_total_demand = df_demand.groupby('物料')['未結數量 (EINHEIT)'].sum().reset_index()
             df_total_demand.rename(columns={'未結數量 (EINHEIT)': 'total_demand'}, inplace=True)
             
+            # 建立需求詳情對應表
             df_demand['需求日期'] = pd.to_datetime(df_demand['需求日期'], errors='coerce')
             demand_details_map = df_demand.groupby('物料').apply(
                 lambda x: x[['訂單', '未結數量 (EINHEIT)', '需求日期']].to_dict('records'), include_groups=False
             ).to_dict()
+            
+            # --- 處理成品儀表板資料 (不符合的成品撥料) ---
+            df_finished_demand = df_finished_parts_invalid.copy()
+            df_total_finished_demand = df_finished_demand.groupby('物料')['未結數量 (EINHEIT)'].sum().reset_index()
+            df_total_finished_demand.rename(columns={'未結數量 (EINHEIT)': 'total_demand'}, inplace=True)
+            
+            # 成品需求詳情
+            df_finished_demand['需求日期'] = pd.to_datetime(df_finished_demand['需求日期'], errors='coerce')
+            finished_demand_details_map = df_finished_demand.groupby('物料').apply(
+                lambda x: x[['訂單', '未結數量 (EINHEIT)', '需求日期']].to_dict('records'), include_groups=False
+            ).to_dict()
+
+            # --- 共通處理 ---
+            df_specs = pd.read_excel(FilePaths.SPECS_FILE)
+            df_work_order_summary = DataService._load_work_order_summary()
+            df_on_order = DataService._load_on_order_data()
             
             # 處理在途數量
             df_total_on_order = df_on_order.groupby('物料')['仍待交貨〈數量〉'].sum().reset_index()
@@ -67,10 +107,15 @@ class DataService:
             
             # 建立主資料表
             df_main = DataService._build_main_dataframe(
-                df_total_demand, df_inventory, df_total_on_order, df_demand
+                df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map
             )
             
-            # 建立訂單詳情對應表
+            # 建立成品資料表
+            df_finished_dashboard = DataService._build_main_dataframe(
+                df_total_finished_demand, df_inventory, df_total_on_order, df_finished_demand, material_buyer_map
+            )
+            
+            # 建立訂單詳情對應表 (包含所有成品撥料，以便查詢)
             order_details_map = DataService._build_order_details_map(
                 df_wip_parts, df_finished_parts, df_inventory
             )
@@ -82,19 +127,21 @@ class DataService:
             order_summary_map = DataService._build_order_summary_map(df_work_order_summary)
             
             app_logger.info("資料載入與處理完畢。")
-            app_logger.info(f"DEBUG: order_details_map 中包含的訂單: {list(order_details_map.keys())[:5]}... (前5個)")
-            app_logger.info(f"DEBUG: specs_map 中包含的訂單: {list(specs_map.keys())[:5]}... (前5個)")
             
             # 清理 NaN 值
             materials_dashboard_cleaned = df_main.fillna('').to_dict(orient='records')
+            finished_dashboard_cleaned = df_finished_dashboard.fillna('').to_dict(orient='records')
             specs_data_cleaned = df_specs.fillna('').to_dict(orient='records')
             demand_details_map_cleaned = replace_nan_in_dict(demand_details_map)
+            finished_demand_details_map_cleaned = replace_nan_in_dict(finished_demand_details_map)
             order_details_map_cleaned = replace_nan_in_dict(order_details_map)
             
             return {
                 "materials_dashboard": materials_dashboard_cleaned,
+                "finished_dashboard": finished_dashboard_cleaned, # 新增成品儀表板
                 "specs_data": specs_data_cleaned,
                 "demand_details_map": demand_details_map_cleaned,
+                "finished_demand_details_map": finished_demand_details_map_cleaned, # 新增成品需求詳情
                 "order_details_map": order_details_map_cleaned,
                 "specs_map": specs_map,
                 "order_summary_map": order_summary_map
@@ -142,7 +189,7 @@ class DataService:
             return pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
     
     @staticmethod
-    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand):
+    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None):
         """建立主資料表"""
         # 以總需求為基礎，確保所有有需求的物料都被包含
         df_main = df_total_demand.copy()
@@ -181,6 +228,12 @@ class DataService:
         # 排除物料號碼以 '08' 開頭的物料
         df_main = df_main[~df_main['物料'].astype(str).str.startswith('08')]
         df_main['base_material_id'] = df_main['物料'].astype(str).str[:10]
+        
+        # 加入採購人員資訊
+        if material_buyer_map:
+            df_main['採購人員'] = df_main['物料'].astype(str).map(material_buyer_map).fillna('')
+        else:
+            df_main['採購人員'] = ''
         
         return df_main
     

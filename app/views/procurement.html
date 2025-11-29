@@ -1,6 +1,6 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,19 +8,18 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-
 <body>
     <main class="container">
         <header>
             <h1>生產資訊中心</h1>
             <p>一個整合工單料況、庫存與規格的查詢系統</p>
         </header>
-
+        
         <nav>
             <ul>
-                <li><a href="{{ url_for('page.procurement') }}" class="active">採購儀表板</a></li>
-                <li><a href="{{ url_for('page.order_query') }}">訂單查詢</a></li>
-                <li><a href="{{ url_for('page.admin_dashboard') }}">後台管理</a></li>
+                <li><a href="/procurement" class="active">採購儀表板</a></li>
+                <li><a href="/order_query">訂單查詢</a></li>
+                <li><a href="/admin_dashboard">後台管理</a></li>
             </ul>
         </nav>
 
@@ -35,12 +34,37 @@
 
         <section id="procurement-dashboard">
             <h2>採購缺料總覽儀表板(只顯示缺料或採購不足項目)</h2>
-            <div class="grid">
-                <input type="text" id="material-filter-input" placeholder="輸入物料或物料說明進行查詢">
-                <button id="apply-filter-btn">查詢料號</button>
+            
+            <!-- 搜尋與篩選區域 -->
+            <div class="filter-controls">
+                <div class="filter-row">
+                    <input type="text" id="material-filter-input" placeholder="輸入物料編號或物料說明進行搜尋">
+                    <button id="apply-filter-btn">搜尋</button>
+                    <button id="clear-filter-btn" class="secondary">清除搜尋</button>
+                    
+                    <label for="buyer-filter-select" style="margin-left: 1em;">採購人員：</label>
+                    <select id="buyer-filter-select">
+                        <option value="">全部</option>
+                    </select>
+                </div>
             </div>
-            <div id="dashboard-container">
-                <p>正在載入儀表板資料...</p>
+            
+            <!-- 頁籤導覽 -->
+            <nav id="dashboard-tabs-nav">
+                <ul>
+                    <li><a href="#" class="dashboard-tab-link active" data-tab="tab-main-dashboard">主儀表板</a></li>
+                    <li><a href="#" class="dashboard-tab-link" data-tab="tab-finished-dashboard">成品儀表板</a></li>
+                </ul>
+            </nav>
+            
+            <!-- 頁籤內容 -->
+            <div id="dashboard-tabs-content">
+                <div id="tab-main-dashboard" class="dashboard-tab-content active">
+                    <p>正在載入主儀表板資料...</p>
+                </div>
+                <div id="tab-finished-dashboard" class="dashboard-tab-content">
+                    <p>正在載入成品儀表板資料...</p>
+                </div>
             </div>
         </section>
 
@@ -53,7 +77,7 @@
                 <a href="#close" aria-label="Close" class="close"></a>
                 <h3 id="modal-title">物料詳情</h3>
             </header>
-
+            
             <!-- 庫存總覽區塊 -->
             <div id="stock-summary-section">
                 <h4>庫存總覽</h4>
@@ -88,5 +112,4 @@
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
-
 </html>

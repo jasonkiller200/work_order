@@ -10,10 +10,10 @@ if __name__ == '__main__':
     app = create_app()
     
     # 初始化資料
-    initialize_app_data()
+    initialize_app_data(app)
     
     # 啟動背景執行緒
-    start_background_threads()
+    start_background_threads(app)
     
     # 啟動 Waitress 伺服器
     print(f"正在啟動伺服器於 {Config.HOST}:{Config.PORT}...")

@@ -21,10 +21,19 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 @api_bp.route('/materials')
 @cache_required
 def get_materials():
-    """取得物料清單"""
+    """取得主儀表板物料清單"""
     current_data = cache_manager.get_current_data()
-    if current_data and "materials_dashboard" in current_data:
-        return jsonify(current_data["materials_dashboard"])
+    if current_data:
+        return jsonify(current_data.get("materials_dashboard", []))
+    return jsonify([])
+
+@api_bp.route('/finished_materials')
+@cache_required
+def get_finished_materials():
+    """取得成品儀表板物料清單"""
+    current_data = cache_manager.get_current_data()
+    if current_data:
+        return jsonify(current_data.get("finished_dashboard", []))
     return jsonify([])
 
 @api_bp.route('/material/<material_id>/details')
@@ -33,24 +42,32 @@ def get_material_details(material_id):
     """取得物料詳情"""
     try:
         current_data = cache_manager.get_current_data()
+        dashboard_type = request.args.get('type', 'main')
         
         if not current_data:
             app_logger.error("get_material_details: 資料尚未載入")
             return jsonify({"error": "資料尚未載入"}), 500
         
+        # 根據類型選擇資料來源
+        if dashboard_type == 'finished':
+            materials_data = current_data.get("finished_dashboard", [])
+            demand_map = current_data.get("finished_demand_details_map", {})
+        else:
+            materials_data = current_data.get("materials_dashboard", [])
+            demand_map = current_data.get("demand_details_map", {})
+        
         # 建立 MaterialDAO
-        material_dao = MaterialDAO(current_data.get("materials_dashboard", []))
+        material_dao = MaterialDAO(materials_data)
         
         # 1. 獲取庫存總覽
         material_info = material_dao.get_by_id(material_id)
         if not material_info:
-            app_logger.warning(f"get_material_details: 找不到物料 {material_id}")
+            app_logger.warning(f"get_material_details: 找不到物料 {material_id} (type={dashboard_type})")
             return jsonify({"error": "找不到該物料"}), 404
         
         total_available_stock = material_info.get('unrestricted_stock', 0) + material_info.get('inspection_stock', 0)
         
         # 2. 獲取、過濾、排序需求詳情
-        demand_map = current_data.get("demand_details_map", {})
         demand_details = [d.copy() for d in demand_map.get(material_id, [])]
         demand_details = [d for d in demand_details if d.get('未結數量 (EINHEIT)', 0) > 0]
         

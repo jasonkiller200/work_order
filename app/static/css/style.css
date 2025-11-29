@@ -1,15 +1,33 @@
 body {
-    padding: 2em;
+    padding: 1em;
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1600px; /* 從 1200px 增加到 1600px */
     margin: auto;
-    padding: 1em; /* 減少內邊距 */
+    padding: 0.5em; /* 從 1em 減少到 0.5em */
 }
 
 figure {
     overflow-x: auto;
+    margin: 0; /* 移除預設外邊距 */
+}
+
+table {
+    width: 100%;
+    font-size: 0.95em; /* 稍微縮小字體讓更多內容可見 */
+}
+
+/* 表格欄位寬度優化 */
+th, td {
+    padding: 0.5em 0.75em; /* 適中的內邊距 */
+    white-space: nowrap; /* 防止文字換行 */
+}
+
+/* 物料說明欄位可以換行 */
+td:nth-child(2) {
+    white-space: normal;
+    max-width: 300px;
 }
 
 .shortage {
@@ -211,3 +229,271 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     color: #9e9e9e; /* 深灰色文字 */
     cursor: not-allowed;
 }
+
+/* === 分頁功能樣式 === */
+
+/* 表格控制區域 */
+.table-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1em;
+    padding: 0.5em 0;
+    flex-wrap: wrap;
+    gap: 1em;
+}
+
+.items-info {
+    font-size: 0.9em;
+    color: var(--pico-muted-color);
+}
+
+.pagination-controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 0.9em;
+}
+
+.pagination-controls select {
+    padding: 0.3em 0.5em;
+    font-size: 0.9em;
+    min-width: 80px;
+}
+
+/* 分頁按鈕區域 */
+.pagination-wrapper {
+    display: flex;
+    justify-content: flex-end; /* 固定在右側 */
+    margin-top: 1em;
+}
+
+.pagination {
+    display: flex;
+    justify-content: flex-end; /* 靠右對齊 */
+    align-items: center;
+    gap: 0.5em;
+    flex-wrap: wrap;
+}
+
+.pagination button {
+    padding: 0.5em 1em;
+    min-width: 50px;
+    font-size: 0.9em;
+    border: 1px solid var(--pico-border-color);
+    background-color: var(--pico-background-color);
+    color: var(--pico-color);
+    cursor: pointer;
+    border-radius: var(--pico-border-radius);
+    transition: all 0.2s ease;
+}
+
+.pagination button:hover:not(:disabled) {
+    background-color: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+    border-color: var(--pico-primary);
+}
+
+.pagination button.active {
+    background-color: var(--pico-primary);
+    color: var(--pico-primary-inverse);
+    border-color: var(--pico-primary);
+    font-weight: bold;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination span {
+    padding: 0.5em;
+    color: var(--pico-muted-color);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    body {
+        padding: 0.5em; /* 手機版更小的邊距 */
+    }
+    
+    .container {
+        padding: 0.25em;
+    }
+    
+    .table-controls {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .pagination {
+        font-size: 0.85em;
+    }
+    
+    .pagination button {
+        padding: 0.4em 0.8em;
+        min-width: 40px;
+    }
+    
+    .filter-row {
+        flex-direction: column !important;
+    }
+    
+    .filter-row input,
+    .filter-row button {
+        width: 100% !important;
+    }
+}
+
+/* 大螢幕優化 */
+@media (min-width: 1920px) {
+    .container {
+        max-width: 1800px; /* 大螢幕可以更寬 */
+    }
+}
+
+/* === 篩選控制區域樣式 === */
+
+.filter-controls {
+    margin-bottom: 1.5em;
+}
+
+.filter-row {
+    display: flex;
+    gap: 0.5em;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-row input {
+    flex: 1;
+    min-width: 250px;
+}
+
+.filter-row select {
+    min-width: 150px;
+    padding: 0.5em;
+}
+
+.filter-row button {
+    white-space: nowrap;
+    padding: 0.5em 1.5em;
+}
+
+.filter-row button.secondary {
+    background-color: var(--pico-secondary);
+    border-color: var(--pico-secondary);
+}
+
+.filter-row label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* === 訂單查詢頁籤樣式 === */
+
+/* 訂單頁籤連結 */
+.order-tab-link {
+    display: inline-block;
+    padding: 0.5em 1em;
+    text-decoration: none;
+    color: var(--pico-color);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.order-tab-link:hover {
+    background-color: var(--pico-muted-background-color);
+}
+
+.order-tab-link.active {
+    color: var(--pico-primary);
+    border-bottom-color: var(--pico-primary);
+    font-weight: bold;
+}
+
+/* 訂單頁籤內容 */
+.order-tab-content {
+    display: none;
+    padding: 1em 0;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.order-tab-content.active {
+    display: block;
+}
+
+/* === 儀表板頁籤樣式 === */
+
+/* 儀表板頁籤連結 */
+.dashboard-tab-link {
+    display: inline-block;
+    padding: 0.5em 1em;
+    text-decoration: none;
+    color: var(--pico-color);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.dashboard-tab-link:hover {
+    background-color: var(--pico-muted-background-color);
+}
+
+.dashboard-tab-link.active {
+    color: var(--pico-primary);
+    border-bottom-color: var(--pico-primary);
+    font-weight: bold;
+}
+
+/* 儀表板頁籤內容 */
+.dashboard-tab-content {
+    display: none;
+    padding: 1em 0;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.dashboard-tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 訂單摘要卡片 */
+.order-summary-card {
+    background-color: var(--pico-background-color);
+    padding: 1em;
+    border-radius: var(--pico-border-radius);
+    margin-bottom: 1em;
+    border: 1px solid var(--pico-border-color);
+}
+
+.order-summary-card p {
+    margin: 0.5em 0;
+}
+
+/* 訂單備註區域 */
+.order-note-section {
+    margin-bottom: 1.5em;
+}
+
+.order-note-card {
+    background-color: #fffbf0;
+    border-left: 4px solid #ffa726;
+    padding: 1em;
+    margin-top: 0.5em;
+}
+
+.order-note-card p {
+    margin: 0;
+    line-height: 1.6;
+}
+
