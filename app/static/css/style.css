@@ -273,7 +273,7 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     justify-content: flex-end; /* 靠右對齊 */
     align-items: center;
     gap: 0.5em;
-    flex-wrap: wrap;
+    flex-wrap: nowrap; /* 改為不換行 */
 }
 
 .pagination button {
@@ -286,6 +286,7 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     cursor: pointer;
     border-radius: var(--pico-border-radius);
     transition: all 0.2s ease;
+    margin: 0; /* 移除預設 margin */
 }
 
 .pagination button:hover:not(:disabled) {
@@ -307,8 +308,9 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 }
 
 .pagination span {
-    padding: 0.5em;
+    padding: 0 0.5em;
     color: var(--pico-muted-color);
+    display: inline-block;
 }
 
 /* 響應式設計 */
@@ -326,7 +328,13 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
         align-items: flex-start;
     }
     
+    .pagination-wrapper {
+        justify-content: center; /* 手機版置中 */
+    }
+    
     .pagination {
+        flex-wrap: wrap; /* 手機版允許換行 */
+        justify-content: center;
         font-size: 0.85em;
     }
     
