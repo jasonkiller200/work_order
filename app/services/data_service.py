@@ -50,14 +50,15 @@ class DataService:
             except Exception as e:
                 app_logger.error(f"讀取組件需求明細失敗: {e}")
 
-            # 2. 讀取物料與採購人員對應
+            # 2. 讀取物料與採購人員對應（使用前10碼）
             material_buyer_map = {}
             try:
                 materials = Material.query.options(joinedload(Material.buyer)).filter(Material.buyer_id.isnot(None)).all()
                 for m in materials:
-                    if m.buyer:
-                        material_buyer_map[m.material_id] = m.buyer.full_name
-                app_logger.info(f"已載入 {len(material_buyer_map)} 筆物料採購人員對應")
+                    if m.buyer and m.base_material_id:
+                        # 使用前10碼作為 key
+                        material_buyer_map[m.base_material_id] = m.buyer.full_name
+                app_logger.info(f"已載入 {len(material_buyer_map)} 筆物料採購人員對應 (使用前10碼)")
             except Exception as e:
                 app_logger.error(f"讀取物料採購人員對應失敗: {e}")
             
@@ -229,9 +230,9 @@ class DataService:
         df_main = df_main[~df_main['物料'].astype(str).str.startswith('08')]
         df_main['base_material_id'] = df_main['物料'].astype(str).str[:10]
         
-        # 加入採購人員資訊
+        # 加入採購人員資訊（使用前10碼對應）
         if material_buyer_map:
-            df_main['採購人員'] = df_main['物料'].astype(str).map(material_buyer_map).fillna('')
+            df_main['採購人員'] = df_main['base_material_id'].map(material_buyer_map).fillna('')
         else:
             df_main['採購人員'] = ''
         
