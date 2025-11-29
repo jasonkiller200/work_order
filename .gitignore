@@ -1,33 +1,39 @@
+# 實例資料庫
+instance/
+
+# 備份目錄
+_*_backup_*/
+
+# 日誌檔案
+*.log
+
+# 臨時檔案
+page_views.json
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python/
-env/
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# 虛擬環境
 venv/
-*.env
-.env
+ENV/
+env/
 
-# Logs
-*.log
-*.log.*
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Excel files
-*.xls
-*.xlsx
-
-# VSCode
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Node modules (if any)
-node_modules/
+# OS
+.DS_Store
+Thumbs.db
