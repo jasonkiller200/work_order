@@ -218,10 +218,10 @@ function renderMaterialsTable() {
         paginatedData.forEach(m => {
             const buyer = m['採購人員'] || '-';
             tableHTML += `
-                <tr class="clickable-row" data-material-id="${m['物料']}">
-                    <td>${m['物料']}</td>
+                <tr>
+                    <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
-                    <td>${buyer}</td>
+                    <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
                     <td>${m.total_demand.toFixed(0)}</td>
                     <td>${m.unrestricted_stock.toFixed(0)}</td>
                     <td>${m.inspection_stock.toFixed(0)}</td>
@@ -284,7 +284,8 @@ function renderMaterialsTable() {
     }
     
     addSortEventListeners(); // 添加排序事件監聽
-    addTableEventListeners(); // 添加行點擊事件監聽
+    addMaterialLinkListeners(); // 添加物料連結事件監聽
+    addBuyerCellListeners(); // 添加採購人員點擊事件監聽
     updateSortIcons(); // 更新排序圖示
 }
 
@@ -321,11 +322,22 @@ function updateSortIcons() {
     });
 }
 
-function addTableEventListeners() {
-    document.querySelectorAll('.clickable-row').forEach(row => {
-        row.addEventListener('click', function() {
+function addMaterialLinkListeners() {
+    document.querySelectorAll('.material-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.stopPropagation();
             const materialId = this.dataset.materialId;
             openDetailsModal(materialId);
+        });
+    });
+}
+
+function addBuyerCellListeners() {
+    document.querySelectorAll('.buyer-cell').forEach(cell => {
+        cell.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const materialId = this.dataset.materialId;
+            openBuyerReferenceModal(materialId);
         });
     });
 }
@@ -355,22 +367,37 @@ function openDetailsModal(materialId) {
     const modal = document.getElementById('details-modal');
     document.getElementById('modal-title').textContent = `物料詳情: ${materialId}`;
     
+    document.getElementById('stock-summary-section').style.display = 'block';
     document.getElementById('unrestricted-stock').textContent = '載入中...';
     document.getElementById('inspection-stock').textContent = '載入中...';
     document.getElementById('on-order-stock').textContent = '載入中...';
     document.getElementById('tab-demand').innerHTML = '<p>載入中...</p>';
     document.getElementById('tab-substitute').innerHTML = '<p>載入中...</p>';
 
-    modal.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+    modal.querySelectorAll('.tab-link').forEach(l => {
+        l.classList.remove('active');
+        l.classList.remove('hidden');
+    });
     modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.querySelector('.tab-link[data-tab="tab-demand"]').classList.add('active');
     document.getElementById('tab-demand').classList.add('active');
 
     modal.showModal();
 
-    fetch(`/api/material/${materialId}/details`)
-        .then(response => response.json())
+    // 根據當前儀表板類型傳遞參數
+    const dashboardType = currentDashboardType;
+    fetch(`/api/material/${materialId}/details?type=${dashboardType}`)
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => Promise.reject(err));
+            }
+            return response.json();
+        })
         .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
             document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
             document.getElementById('inspection-stock').textContent = data.stock_summary.inspection.toFixed(0);
             document.getElementById('on-order-stock').textContent = data.stock_summary.on_order.toFixed(0);
@@ -405,9 +432,173 @@ function openDetailsModal(materialId) {
         })
         .catch(error => {
             console.error('Error fetching details:', error);
-            document.getElementById('tab-demand').innerHTML = '<p style="color:red;">載入需求時發生錯誤。</p>';
+            const errorMsg = error.error || error.message || '未知錯誤';
+            document.getElementById('unrestricted-stock').textContent = '-';
+            document.getElementById('inspection-stock').textContent = '-';
+            document.getElementById('on-order-stock').textContent = '-';
+            document.getElementById('tab-demand').innerHTML = `<p style="color:red;">載入需求時發生錯誤: ${errorMsg}</p>`;
             document.getElementById('tab-substitute').innerHTML = '<p style="color:red;">載入替代版本時發生錯誤。</p>';
         });
+}
+
+function openBuyerReferenceModal(materialId) {
+    const modal = document.getElementById('details-modal');
+    document.getElementById('modal-title').textContent = `採購人員參考清單: ${materialId}`;
+    
+    document.getElementById('stock-summary-section').style.display = 'none';
+    document.getElementById('tab-demand').innerHTML = '<p>載入中...</p>';
+    document.getElementById('tab-substitute').innerHTML = '';
+    
+    modal.querySelectorAll('.tab-link').forEach(l => l.classList.add('hidden'));
+    document.querySelector('.tab-link[data-tab="tab-demand"]').classList.remove('hidden');
+    modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-demand').classList.add('active');
+    
+    modal.showModal();
+    
+    // 取得當前儀表板類型
+    const dashboardType = currentDashboardType;
+    
+    fetch(`/api/material/${materialId}/buyer_reference?type=${dashboardType}`)
+        .then(response => response.json())
+        .then(data => {
+            // 先取得所有採購人員清單
+            fetch('/api/buyers_list')
+                .then(response => response.json())
+                .then(buyersData => {
+                    let buyerHTML = '<h4>該物料上下25筆採購人員參考（點擊下拉選單可修改採購人員）</h4>';
+                    buyerHTML += '<table><thead><tr><th>物料</th><th>物料說明</th><th>採購人員</th></tr></thead><tbody>';
+                    
+                    if (data.reference_list && data.reference_list.length > 0) {
+                        data.reference_list.forEach(item => {
+                            const isCurrentMaterial = item['物料'] === materialId;
+                            const rowStyle = isCurrentMaterial ? ' style="background-color: #fff3cd; font-weight: bold;"' : '';
+                            const currentBuyer = item['採購人員'] || '';
+                            
+                            // 建立採購人員下拉選單
+                            let buyerSelect = `<select class="buyer-select" data-material-id="${item['物料']}" data-dashboard-type="${dashboardType}">`;
+                            buyerSelect += `<option value="">未指定</option>`;
+                            buyersData.buyers.forEach(buyer => {
+                                const selected = buyer === currentBuyer ? 'selected' : '';
+                                buyerSelect += `<option value="${buyer}" ${selected}>${buyer}</option>`;
+                            });
+                            buyerSelect += `</select>`;
+                            
+                            buyerHTML += `<tr${rowStyle}>
+                                <td>${item['物料']}</td>
+                                <td>${item['物料說明']}</td>
+                                <td>${buyerSelect}</td>
+                            </tr>`;
+                        });
+                    } else {
+                        buyerHTML += '<tr><td colspan="3">沒有找到相關的採購人員資料。</td></tr>';
+                    }
+                    
+                    buyerHTML += '</tbody></table>';
+                    document.getElementById('tab-demand').innerHTML = buyerHTML;
+                    
+                    // 綁定下拉選單變更事件
+                    bindBuyerSelectEvents();
+                })
+                .catch(error => {
+                    console.error('Error fetching buyers list:', error);
+                    let buyerHTML = '<h4>該物料上下25筆採購人員參考</h4>';
+                    buyerHTML += '<table><thead><tr><th>物料</th><th>物料說明</th><th>採購人員</th></tr></thead><tbody>';
+                    
+                    if (data.reference_list && data.reference_list.length > 0) {
+                        data.reference_list.forEach(item => {
+                            const isCurrentMaterial = item['物料'] === materialId;
+                            const rowStyle = isCurrentMaterial ? ' style="background-color: #fff3cd; font-weight: bold;"' : '';
+                            buyerHTML += `<tr${rowStyle}>
+                                <td>${item['物料']}</td>
+                                <td>${item['物料說明']}</td>
+                                <td>${item['採購人員'] || '-'}</td>
+                            </tr>`;
+                        });
+                    }
+                    
+                    buyerHTML += '</tbody></table>';
+                    buyerHTML += '<p style="color: orange;">無法載入採購人員清單，顯示為唯讀模式。</p>';
+                    document.getElementById('tab-demand').innerHTML = buyerHTML;
+                });
+        })
+        .catch(error => {
+            console.error('Error fetching buyer reference:', error);
+            document.getElementById('tab-demand').innerHTML = '<p style="color:red;">載入採購人員參考時發生錯誤。</p>';
+        });
+}
+
+function bindBuyerSelectEvents() {
+    document.querySelectorAll('.buyer-select').forEach(select => {
+        select.addEventListener('change', function() {
+            const materialId = this.dataset.materialId;
+            const newBuyer = this.value;
+            const dashboardType = this.dataset.dashboardType;
+            const originalValue = this.getAttribute('data-original-value') || '';
+            
+            // 暫時禁用選單
+            this.disabled = true;
+            this.style.opacity = '0.6';
+            
+            // 儲存採購人員變更
+            fetch('/api/update_buyer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    material_id: materialId,
+                    buyer: newBuyer,
+                    dashboard_type: dashboardType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 顯示成功訊息
+                    this.style.backgroundColor = '#d4edda';
+                    this.style.borderColor = '#c3e6cb';
+                    setTimeout(() => {
+                        this.style.backgroundColor = '';
+                        this.style.borderColor = '';
+                    }, 1500);
+                    
+                    // 更新快取資料
+                    if (dashboardType === 'finished') {
+                        const material = currentFinishedMaterialsData.find(m => m['物料'] === materialId);
+                        if (material) {
+                            material['採購人員'] = newBuyer;
+                        }
+                    } else {
+                        const material = currentMaterialsData.find(m => m['物料'] === materialId);
+                        if (material) {
+                            material['採購人員'] = newBuyer;
+                        }
+                    }
+                    
+                    // 重新渲染表格以反映變更
+                    renderMaterialsTable();
+                } else {
+                    // 顯示錯誤訊息
+                    alert('儲存失敗: ' + (data.error || '未知錯誤'));
+                    this.value = originalValue;
+                }
+            })
+            .catch(error => {
+                console.error('Error updating buyer:', error);
+                alert('儲存採購人員時發生錯誤');
+                this.value = originalValue;
+            })
+            .finally(() => {
+                // 重新啟用選單
+                this.disabled = false;
+                this.style.opacity = '1';
+            });
+        });
+        
+        // 儲存原始值
+        select.setAttribute('data-original-value', select.value);
+    });
 }
 
 // 設定訂單頁籤切換

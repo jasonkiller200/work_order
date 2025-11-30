@@ -505,3 +505,72 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     line-height: 1.6;
 }
 
+/* 詳情按鈕樣式 */
+.detail-btn {
+    padding: 0.1rem 0.4rem;
+    font-size: 0.75rem;
+    background-color: var(--pico-primary);
+    border: 1px solid var(--pico-primary);
+    color: white;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    margin-left: 0.5rem;
+}
+
+.detail-btn:hover {
+    background-color: var(--pico-primary-hover);
+    transform: scale(1.05);
+}
+
+/* 物料連結樣式 */
+.material-link {
+    cursor: pointer;
+    color: #0066cc;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.material-link:hover {
+    color: #004499;
+    font-weight: bold;
+}
+
+/* 採購人員可點擊樣式 */
+.buyer-cell {
+    cursor: pointer;
+    color: #0066cc;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.buyer-cell:hover {
+    color: #004499;
+    font-weight: bold;
+}
+
+/* 採購人員下拉選單樣式 */
+.buyer-select {
+    padding: 0.3em 0.5em;
+    font-size: 0.9em;
+    min-width: 120px;
+    border: 1px solid var(--pico-border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.buyer-select:hover {
+    border-color: var(--pico-primary);
+}
+
+.buyer-select:focus {
+    outline: none;
+    border-color: var(--pico-primary);
+    box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.2);
+}
+
+/* 隱藏元素的類別 */
+.hidden {
+    display: none !important;
+}

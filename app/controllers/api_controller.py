@@ -3,6 +3,7 @@
 
 import logging
 import pandas as pd
+from datetime import datetime
 from flask import Blueprint, jsonify, make_response, request
 from urllib.parse import quote
 from app.services.cache_service import cache_manager
@@ -11,6 +12,7 @@ from app.services.traffic_service import TrafficService
 from app.models.material import MaterialDAO
 from app.models.order import OrderDAO
 from app.models.traffic import TrafficDAO
+from app.models.database import db, User, Material
 from app.utils.decorators import cache_required
 from app.utils.helpers import format_date
 
@@ -48,24 +50,43 @@ def get_material_details(material_id):
             app_logger.error("get_material_details: 資料尚未載入")
             return jsonify({"error": "資料尚未載入"}), 500
         
-        # 根據類型選擇資料來源
+        # 根據類型選擇需求資料來源
         if dashboard_type == 'finished':
-            materials_data = current_data.get("finished_dashboard", [])
             demand_map = current_data.get("finished_demand_details_map", {})
         else:
-            materials_data = current_data.get("materials_dashboard", [])
             demand_map = current_data.get("demand_details_map", {})
         
-        # 建立 MaterialDAO
-        material_dao = MaterialDAO(materials_data)
+        # 從完整庫存資料中查找物料（而不是只從儀表板資料）
+        inventory_data = current_data.get("inventory_data", [])
+        material_info = None
         
-        # 1. 獲取庫存總覽
-        material_info = material_dao.get_by_id(material_id)
+        for item in inventory_data:
+            if item.get('物料') == material_id:
+                material_info = item
+                break
+        
+        # 如果在庫存資料中找不到，嘗試從儀表板資料查找
+        if not material_info:
+            if dashboard_type == 'finished':
+                materials_data = current_data.get("finished_dashboard", [])
+            else:
+                materials_data = current_data.get("materials_dashboard", [])
+            
+            for item in materials_data:
+                if item.get('物料') == material_id:
+                    material_info = item
+                    break
+        
         if not material_info:
             app_logger.warning(f"get_material_details: 找不到物料 {material_id} (type={dashboard_type})")
             return jsonify({"error": "找不到該物料"}), 404
         
-        total_available_stock = material_info.get('unrestricted_stock', 0) + material_info.get('inspection_stock', 0)
+        # 處理庫存資料
+        unrestricted_stock = material_info.get('unrestricted_stock', 0)
+        inspection_stock = material_info.get('inspection_stock', 0)
+        on_order_stock = material_info.get('on_order_stock', 0)
+        
+        total_available_stock = unrestricted_stock + inspection_stock
         
         # 2. 獲取、過濾、排序需求詳情
         demand_details = [d.copy() for d in demand_map.get(material_id, [])]
@@ -87,13 +108,24 @@ def get_material_details(material_id):
                 item['需求日期'] = item['需求日期'].strftime('%Y-%m-%d')
         
         # 4. 獲取替代品庫存
-        substitute_inventory = material_dao.get_substitutes(material_id)
+        substitute_inventory = []
+        material_base = material_id[:10] if len(material_id) >= 10 else material_id
+        
+        for item in inventory_data:
+            item_base = str(item.get('物料', ''))[:10]
+            if item_base == material_base and item.get('物料') != material_id:
+                substitute_inventory.append({
+                    '物料': item.get('物料', ''),
+                    '物料說明': item.get('物料說明', ''),
+                    'unrestricted_stock': item.get('unrestricted_stock', 0),
+                    'inspection_stock': item.get('inspection_stock', 0)
+                })
         
         return jsonify({
             "stock_summary": {
-                "unrestricted": material_info.get('unrestricted_stock', 0),
-                "inspection": material_info.get('inspection_stock', 0),
-                "on_order": material_info.get('on_order_stock', 0)
+                "unrestricted": unrestricted_stock,
+                "inspection": inspection_stock,
+                "on_order": on_order_stock
             },
             "demand_details": demand_details,
             "substitute_inventory": substitute_inventory
@@ -102,6 +134,205 @@ def get_material_details(material_id):
     except Exception as e:
         app_logger.error(f"在 get_material_details 函式中發生錯誤: {e}", exc_info=True)
         return jsonify({"error": "一個後端錯誤發生了"}), 500
+
+@api_bp.route('/material/<material_id>/buyer_reference')
+@cache_required
+def get_buyer_reference(material_id):
+    """取得物料採購人員參考清單（前後25筆）"""
+    try:
+        current_data = cache_manager.get_current_data()
+        
+        if not current_data:
+            app_logger.error("get_buyer_reference: 資料尚未載入")
+            return jsonify({"error": "資料尚未載入"}), 500
+        
+        # 取得當前儀表板類型
+        dashboard_type = request.args.get('type', 'main')
+        
+        # 根據類型選擇資料來源
+        if dashboard_type == 'finished':
+            materials_data = current_data.get("finished_dashboard", [])
+        else:
+            materials_data = current_data.get("materials_dashboard", [])
+        
+        # 找到目標物料的索引位置
+        target_index = None
+        for idx, material in enumerate(materials_data):
+            if material.get('物料') == material_id:
+                target_index = idx
+                break
+        
+        if target_index is None:
+            app_logger.warning(f"get_buyer_reference: 找不到物料 {material_id}")
+            return jsonify({"error": "找不到該物料"}), 404
+        
+        # 取得前後25筆（總共最多51筆）
+        start_index = max(0, target_index - 25)
+        end_index = min(len(materials_data), target_index + 26)
+        
+        reference_list = []
+        for i in range(start_index, end_index):
+            material = materials_data[i]
+            reference_list.append({
+                '物料': material.get('物料', ''),
+                '物料說明': material.get('物料說明', ''),
+                '採購人員': material.get('採購人員', '')
+            })
+        
+        return jsonify({
+            "reference_list": reference_list,
+            "total_count": len(reference_list),
+            "current_material": material_id
+        })
+    
+    except Exception as e:
+        app_logger.error(f"在 get_buyer_reference 函式中發生錯誤: {e}", exc_info=True)
+        return jsonify({"error": "一個後端錯誤發生了"}), 500
+
+@api_bp.route('/buyers_list')
+@cache_required
+def get_buyers_list():
+    """取得所有採購人員清單"""
+    try:
+        current_data = cache_manager.get_current_data()
+        
+        if not current_data:
+            app_logger.error("get_buyers_list: 資料尚未載入")
+            return jsonify({"error": "資料尚未載入"}), 500
+        
+        # 收集所有不重複的採購人員
+        buyers = set()
+        
+        # 從主儀表板收集
+        materials_data = current_data.get("materials_dashboard", [])
+        for material in materials_data:
+            buyer = material.get('採購人員', '').strip()
+            if buyer:
+                buyers.add(buyer)
+        
+        # 從成品儀表板收集
+        finished_data = current_data.get("finished_dashboard", [])
+        for material in finished_data:
+            buyer = material.get('採購人員', '').strip()
+            if buyer:
+                buyers.add(buyer)
+        
+        # 排序並返回
+        sorted_buyers = sorted(list(buyers))
+        
+        return jsonify({
+            "buyers": sorted_buyers,
+            "count": len(sorted_buyers)
+        })
+    
+    except Exception as e:
+        app_logger.error(f"在 get_buyers_list 函式中發生錯誤: {e}", exc_info=True)
+        return jsonify({"error": "一個後端錯誤發生了"}), 500
+
+@api_bp.route('/update_buyer', methods=['POST'])
+@cache_required
+def update_buyer():
+    """更新物料的採購人員"""
+    try:
+        data = request.get_json()
+        material_id = data.get('material_id')
+        new_buyer_name = data.get('buyer', '').strip()
+        dashboard_type = data.get('dashboard_type', 'main')
+        
+        if not material_id:
+            return jsonify({"success": False, "error": "缺少物料編號"}), 400
+        
+        # 1. 更新記憶體快取
+        current_data = cache_manager.get_current_data()
+        
+        if not current_data:
+            app_logger.error("update_buyer: 資料尚未載入")
+            return jsonify({"success": False, "error": "資料尚未載入"}), 500
+        
+        # 根據類型選擇資料來源
+        if dashboard_type == 'finished':
+            materials_data = current_data.get("finished_dashboard", [])
+        else:
+            materials_data = current_data.get("materials_dashboard", [])
+        
+        # 找到對應的物料並更新快取
+        material_found = False
+        material_description = None
+        base_material_id = material_id[:10] if len(material_id) >= 10 else material_id
+        
+        for material in materials_data:
+            if material.get('物料') == material_id:
+                material['採購人員'] = new_buyer_name
+                material_description = material.get('物料說明', '')
+                material_found = True
+                break
+        
+        # 如果在快取中找不到，嘗試從完整庫存資料找
+        if not material_found:
+            inventory_data = current_data.get("inventory_data", [])
+            for material in inventory_data:
+                if material.get('物料') == material_id:
+                    material['採購人員'] = new_buyer_name
+                    material_description = material.get('物料說明', '')
+                    material_found = True
+                    break
+        
+        # 2. 寫入資料庫
+        try:
+            # 查找或建立採購人員
+            buyer = None
+            if new_buyer_name:
+                buyer = User.query.filter_by(full_name=new_buyer_name, role='buyer').first()
+                if not buyer:
+                    app_logger.warning(f"採購人員 {new_buyer_name} 不存在於資料庫中")
+            
+            # 查找或建立物料
+            material_record = Material.query.filter_by(material_id=material_id).first()
+            
+            if material_record:
+                # 更新現有物料的採購人員
+                material_record.buyer_id = buyer.id if buyer else None
+                material_record.updated_at = datetime.utcnow()
+                app_logger.info(f"更新物料 {material_id} 的採購人員為: {new_buyer_name}")
+            else:
+                # 自動新增物料到資料庫
+                material_record = Material(
+                    material_id=material_id,
+                    description=material_description or '',
+                    base_material_id=base_material_id,
+                    buyer_id=buyer.id if buyer else None,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.session.add(material_record)
+                app_logger.info(f"自動新增物料 {material_id} 到資料庫，採購人員: {new_buyer_name}")
+            
+            db.session.commit()
+            
+            return jsonify({
+                "success": True,
+                "material_id": material_id,
+                "buyer": new_buyer_name,
+                "database_updated": True,
+                "auto_created": material_record.id is None  # 是否為新建
+            })
+            
+        except Exception as db_error:
+            db.session.rollback()
+            app_logger.error(f"資料庫操作失敗: {db_error}", exc_info=True)
+            
+            # 即使資料庫失敗，快取已更新，仍返回部分成功
+            return jsonify({
+                "success": True,
+                "material_id": material_id,
+                "buyer": new_buyer_name,
+                "database_updated": False,
+                "warning": "快取已更新，但資料庫寫入失敗"
+            })
+    
+    except Exception as e:
+        app_logger.error(f"在 update_buyer 函式中發生錯誤: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "一個後端錯誤發生了"}), 500
 
 @api_bp.route('/order/<order_id>')
 @cache_required

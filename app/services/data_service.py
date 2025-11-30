@@ -4,6 +4,7 @@
 import logging
 import pandas as pd
 import os
+from datetime import datetime
 from app.models.database import db, ComponentRequirement, Material, User
 from sqlalchemy.orm import joinedload
 
@@ -133,9 +134,13 @@ class DataService:
             materials_dashboard_cleaned = df_main.fillna('').to_dict(orient='records')
             finished_dashboard_cleaned = df_finished_dashboard.fillna('').to_dict(orient='records')
             specs_data_cleaned = df_specs.fillna('').to_dict(orient='records')
+            inventory_data_cleaned = df_inventory.fillna('').to_dict(orient='records')
             demand_details_map_cleaned = replace_nan_in_dict(demand_details_map)
             finished_demand_details_map_cleaned = replace_nan_in_dict(finished_demand_details_map)
             order_details_map_cleaned = replace_nan_in_dict(order_details_map)
+            
+            # --- 自動同步物料到資料庫 ---
+            DataService._sync_materials_to_database(df_demand, df_finished_demand, material_buyer_map)
             
             return {
                 "materials_dashboard": materials_dashboard_cleaned,
@@ -145,7 +150,8 @@ class DataService:
                 "finished_demand_details_map": finished_demand_details_map_cleaned, # 新增成品需求詳情
                 "order_details_map": order_details_map_cleaned,
                 "specs_map": specs_map,
-                "order_summary_map": order_summary_map
+                "order_summary_map": order_summary_map,
+                "inventory_data": inventory_data_cleaned  # 新增完整庫存資料
             }
         
         except FileNotFoundError as e:
@@ -321,3 +327,82 @@ class DataService:
             app_logger.info(f"DEBUG: order_summary_map 中包含的工單: {list(order_summary_map.keys())[:5]}... (前5個)")
         
         return order_summary_map
+    
+    @staticmethod
+    def _sync_materials_to_database(df_demand, df_finished_demand, material_buyer_map):
+        '''
+        自動同步物料到資料庫
+        將訂單需求中的物料自動加入到 materials 資料表
+        
+        Args:
+            df_demand: 主儀表板需求資料
+            df_finished_demand: 成品儀表板需求資料
+            material_buyer_map: 物料採購人員對應表
+        '''
+        try:
+            # 合併所有需求物料
+            all_materials_df = pd.concat([df_demand, df_finished_demand], ignore_index=True)
+            
+            # 去重並取得唯一的物料清單
+            unique_materials = all_materials_df[['物料', '物料說明']].drop_duplicates(subset=['物料'])
+            
+            # 過濾掉以 '08' 開頭的物料
+            unique_materials = unique_materials[~unique_materials['物料'].astype(str).str.startswith('08')]
+            
+            app_logger.info(f'開始同步物料到資料庫，共 {len(unique_materials)} 筆物料')
+            
+            sync_count = 0
+            skip_count = 0
+            error_count = 0
+            
+            for _, row in unique_materials.iterrows():
+                try:
+                    material_id = str(row['物料'])
+                    description = str(row['物料說明']) if pd.notna(row['物料說明']) else ''
+                    base_material_id = material_id[:10] if len(material_id) >= 10 else material_id
+                    
+                    # 檢查物料是否已存在
+                    existing_material = Material.query.filter_by(material_id=material_id).first()
+                    
+                    if existing_material:
+                        skip_count += 1
+                        continue
+                    
+                    # 查找採購人員
+                    buyer = None
+                    buyer_name = material_buyer_map.get(base_material_id)
+                    if buyer_name:
+                        buyer = User.query.filter_by(full_name=buyer_name, role='buyer').first()
+                    
+                    # 建立新物料記錄
+                    new_material = Material(
+                        material_id=material_id,
+                        description=description,
+                        base_material_id=base_material_id,
+                        buyer_id=buyer.id if buyer else None,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    
+                    db.session.add(new_material)
+                    sync_count += 1
+                    
+                    # 每 100 筆提交一次，避免記憶體問題
+                    if sync_count % 100 == 0:
+                        db.session.commit()
+                        app_logger.info(f'已同步 {sync_count} 筆物料到資料庫')
+                
+                except Exception as e:
+                    error_count += 1
+                    app_logger.warning(f'同步物料 {material_id} 失敗: {e}')
+                    continue
+            
+            # 最後提交剩餘的資料
+            if sync_count % 100 != 0:
+                db.session.commit()
+            
+            app_logger.info(f'物料同步完成: 新增 {sync_count} 筆, 跳過 {skip_count} 筆已存在物料, 錯誤 {error_count} 筆')
+            
+        except Exception as e:
+            db.session.rollback()
+            app_logger.error(f'同步物料到資料庫時發生錯誤: {e}', exc_info=True)
