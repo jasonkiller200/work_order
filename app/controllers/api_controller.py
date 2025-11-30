@@ -81,16 +81,34 @@ def get_material_details(material_id):
             app_logger.warning(f"get_material_details: 找不到物料 {material_id} (type={dashboard_type})")
             return jsonify({"error": "找不到該物料"}), 404
         
-        # 處理庫存資料
-        unrestricted_stock = material_info.get('unrestricted_stock', 0)
-        inspection_stock = material_info.get('inspection_stock', 0)
+        # 處理庫存資料 - 支援中英文欄位名
+        # inventory_data 使用中文欄位名，materials_dashboard 使用英文欄位名
+        unrestricted_stock = material_info.get('unrestricted_stock') or material_info.get('未限制', 0)
+        inspection_stock = material_info.get('inspection_stock') or material_info.get('品質檢驗中', 0)
         on_order_stock = material_info.get('on_order_stock', 0)
+        
+        # 確保是數字類型
+        try:
+            unrestricted_stock = float(unrestricted_stock) if unrestricted_stock else 0
+            inspection_stock = float(inspection_stock) if inspection_stock else 0
+            on_order_stock = float(on_order_stock) if on_order_stock else 0
+        except (ValueError, TypeError):
+            unrestricted_stock = 0
+            inspection_stock = 0
+            on_order_stock = 0
         
         total_available_stock = unrestricted_stock + inspection_stock
         
         # 2. 獲取、過濾、排序需求詳情
         demand_details = [d.copy() for d in demand_map.get(material_id, [])]
+        
+        # 只過濾掉未結數量明確為0或負數的，保留所有正數的需求
         demand_details = [d for d in demand_details if d.get('未結數量 (EINHEIT)', 0) > 0]
+        
+        # 如果過濾後沒有資料，保留原始資料（可能是資料格式問題）
+        if not demand_details and demand_map.get(material_id):
+            app_logger.warning(f"物料 {material_id} 過濾後沒有需求，使用原始資料")
+            demand_details = [d.copy() for d in demand_map.get(material_id, [])]
         
         demand_details.sort(key=lambda x: x.get('需求日期') or pd.Timestamp.max, reverse=False)
         
@@ -114,11 +132,22 @@ def get_material_details(material_id):
         for item in inventory_data:
             item_base = str(item.get('物料', ''))[:10]
             if item_base == material_base and item.get('物料') != material_id:
+                # 支援中英文欄位名
+                sub_unrestricted = item.get('unrestricted_stock') or item.get('未限制', 0)
+                sub_inspection = item.get('inspection_stock') or item.get('品質檢驗中', 0)
+                
+                try:
+                    sub_unrestricted = float(sub_unrestricted) if sub_unrestricted else 0
+                    sub_inspection = float(sub_inspection) if sub_inspection else 0
+                except (ValueError, TypeError):
+                    sub_unrestricted = 0
+                    sub_inspection = 0
+                
                 substitute_inventory.append({
                     '物料': item.get('物料', ''),
                     '物料說明': item.get('物料說明', ''),
-                    'unrestricted_stock': item.get('unrestricted_stock', 0),
-                    'inspection_stock': item.get('inspection_stock', 0)
+                    'unrestricted_stock': sub_unrestricted,
+                    'inspection_stock': sub_inspection
                 })
         
         return jsonify({

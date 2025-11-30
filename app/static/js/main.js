@@ -217,8 +217,12 @@ function renderMaterialsTable() {
     } else {
         paginatedData.forEach(m => {
             const buyer = m['採購人員'] || '-';
+            // 檢查是否在30日內有缺料需求
+            const shortage30Days = m.shortage_within_30_days || false;
+            const rowClass = shortage30Days ? ' class="shortage-30-days"' : '';
+            
             tableHTML += `
-                <tr>
+                <tr${rowClass}>
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
@@ -371,12 +375,24 @@ function openDetailsModal(materialId) {
     document.getElementById('unrestricted-stock').textContent = '載入中...';
     document.getElementById('inspection-stock').textContent = '載入中...';
     document.getElementById('on-order-stock').textContent = '載入中...';
+    
+    // 清空替代品區域
+    const substituteSection = document.getElementById('substitute-section');
+    if (substituteSection) {
+        substituteSection.innerHTML = '<p>載入中...</p>';
+    }
+    
     document.getElementById('tab-demand').innerHTML = '<p>載入中...</p>';
-    document.getElementById('tab-substitute').innerHTML = '<p>載入中...</p>';
 
+    // 隱藏替代版本分頁，只保留需求訂單分頁
     modal.querySelectorAll('.tab-link').forEach(l => {
         l.classList.remove('active');
-        l.classList.remove('hidden');
+        const tabName = l.getAttribute('data-tab');
+        if (tabName === 'tab-substitute') {
+            l.classList.add('hidden');
+        } else {
+            l.classList.remove('hidden');
+        }
     });
     modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.querySelector('.tab-link[data-tab="tab-demand"]').classList.add('active');
@@ -398,10 +414,29 @@ function openDetailsModal(materialId) {
                 throw new Error(data.error);
             }
             
+            // 更新庫存總覽
             document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
             document.getElementById('inspection-stock').textContent = data.stock_summary.inspection.toFixed(0);
             document.getElementById('on-order-stock').textContent = data.stock_summary.on_order.toFixed(0);
 
+            // 顯示替代品資訊在庫存總覽下方
+            let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
+            if (data.substitute_inventory && data.substitute_inventory.length > 0) {
+                subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th></tr></thead><tbody>';
+                data.substitute_inventory.forEach(s => {
+                    subHTML += `<tr><td>${s['物料']}</td><td>${s['物料說明']}</td><td>${s.unrestricted_stock.toFixed(0)}</td><td>${s.inspection_stock.toFixed(0)}</td></tr>`;
+                });
+                subHTML += '</tbody></table>';
+            } else {
+                subHTML += '<p style="font-size: 0.9em; color: var(--pico-muted-color);">沒有找到可用的替代版本。</p>';
+            }
+            
+            const substituteSection = document.getElementById('substitute-section');
+            if (substituteSection) {
+                substituteSection.innerHTML = subHTML;
+            }
+
+            // 顯示需求訂單
             let demandHTML = '<table><thead><tr><th>訂單號碼</th><th>未結數量</th><th>需求日期</th><th>預計剩餘庫存</th></tr></thead><tbody>';
             if (data.demand_details && data.demand_details.length > 0) {
                 data.demand_details.forEach(d => {
@@ -418,17 +453,6 @@ function openDetailsModal(materialId) {
             }
             demandHTML += '</tbody></table>';
             document.getElementById('tab-demand').innerHTML = demandHTML;
-
-            let subHTML = '<table><thead><tr><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th></tr></thead><tbody>';
-            if (data.substitute_inventory && data.substitute_inventory.length > 0) {
-                data.substitute_inventory.forEach(s => {
-                    subHTML += `<tr><td>${s['物料']}</td><td>${s['物料說明']}</td><td>${s.unrestricted_stock.toFixed(0)}</td><td>${s.inspection_stock.toFixed(0)}</td></tr>`;
-                });
-            } else {
-                subHTML += '<tr><td colspan="4">沒有找到可用的替代版本。</td></tr>';
-            }
-            subHTML += '</tbody></table>';
-            document.getElementById('tab-substitute').innerHTML = subHTML;
         })
         .catch(error => {
             console.error('Error fetching details:', error);
@@ -436,8 +460,13 @@ function openDetailsModal(materialId) {
             document.getElementById('unrestricted-stock').textContent = '-';
             document.getElementById('inspection-stock').textContent = '-';
             document.getElementById('on-order-stock').textContent = '-';
+            
+            const substituteSection = document.getElementById('substitute-section');
+            if (substituteSection) {
+                substituteSection.innerHTML = '<p style="color:red;">載入替代版本時發生錯誤。</p>';
+            }
+            
             document.getElementById('tab-demand').innerHTML = `<p style="color:red;">載入需求時發生錯誤: ${errorMsg}</p>`;
-            document.getElementById('tab-substitute').innerHTML = '<p style="color:red;">載入替代版本時發生錯誤。</p>';
         });
 }
 

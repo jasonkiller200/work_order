@@ -109,12 +109,12 @@ class DataService:
             
             # 建立主資料表
             df_main = DataService._build_main_dataframe(
-                df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map
+                df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map, demand_details_map
             )
             
             # 建立成品資料表
             df_finished_dashboard = DataService._build_main_dataframe(
-                df_total_finished_demand, df_inventory, df_total_on_order, df_finished_demand, material_buyer_map
+                df_total_finished_demand, df_inventory, df_total_on_order, df_finished_demand, material_buyer_map, finished_demand_details_map
             )
             
             # 建立訂單詳情對應表 (包含所有成品撥料，以便查詢)
@@ -196,7 +196,7 @@ class DataService:
             return pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
     
     @staticmethod
-    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None):
+    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None, demand_details_map=None):
         """建立主資料表"""
         # 以總需求為基礎，確保所有有需求的物料都被包含
         df_main = df_total_demand.copy()
@@ -225,6 +225,11 @@ class DataService:
         df_main['projected_shortage'] = df_main['total_demand'] - (df_main['unrestricted_stock'] + df_main['inspection_stock'] + df_main['on_order_stock'])
         df_main['current_shortage'] = df_main['current_shortage'].clip(lower=0)
         df_main['projected_shortage'] = df_main['projected_shortage'].clip(lower=0)
+        
+        # 計算未來30日內是否有需求缺料
+        df_main['shortage_within_30_days'] = DataService._check_shortage_within_days(
+            df_main, demand_details_map, days=30
+        )
         
         # 確保物料說明欄位不為空
         df_material_descriptions = df_demand[['物料', '物料說明']].drop_duplicates(subset=['物料'])
@@ -406,3 +411,53 @@ class DataService:
         except Exception as e:
             db.session.rollback()
             app_logger.error(f'同步物料到資料庫時發生錯誤: {e}', exc_info=True)
+    
+    @staticmethod
+    def _check_shortage_within_days(df_materials, demand_details_map, days=30):
+        '''
+        檢查物料是否在未來指定天數內有需求缺料
+        
+        Args:
+            df_materials: 物料DataFrame
+            demand_details_map: 需求詳情對應表
+            days: 檢查天數（預設30天）
+            
+        Returns:
+            Series: 布林值序列，True表示在指定天數內會缺料
+        '''
+        from datetime import datetime, timedelta
+        
+        cutoff_date = pd.Timestamp(datetime.now() + timedelta(days=days))
+        shortage_flags = []
+        
+        for _, material in df_materials.iterrows():
+            material_id = material['物料']
+            available_stock = material.get('unrestricted_stock', 0) + material.get('inspection_stock', 0)
+            
+            # 取得該物料的需求詳情
+            demand_details = demand_details_map.get(material_id, [])
+            
+            # 過濾出指定天數內的需求
+            within_days_demands = []
+            for demand in demand_details:
+                demand_date = demand.get('需求日期')
+                if pd.notna(demand_date) and demand_date <= cutoff_date:
+                    within_days_demands.append(demand)
+            
+            # 按日期排序
+            within_days_demands.sort(key=lambda x: x.get('需求日期', pd.Timestamp.max))
+            
+            # 計算是否會缺料
+            running_stock = available_stock
+            has_shortage = False
+            
+            for demand in within_days_demands:
+                demand_qty = demand.get('未結數量 (EINHEIT)', 0)
+                running_stock -= demand_qty
+                if running_stock < 0:
+                    has_shortage = True
+                    break
+            
+            shortage_flags.append(has_shortage)
+        
+        return pd.Series(shortage_flags, index=df_materials.index)

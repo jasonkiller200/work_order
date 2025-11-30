@@ -40,6 +40,15 @@ td:nth-child(2) {
     font-size: 1.1em;
 }
 
+/* 30日內缺料項目標示 */
+.shortage-30-days {
+    background-color: #e8f5e9 !important; /* 淺綠色背景 */
+}
+
+.shortage-30-days:hover {
+    background-color: #c8e6c9 !important; /* 懸停時稍深的綠色 */
+}
+
 /* 讓表格行有可點擊的視覺提示 */
 .clickable-row,
 .clickable-material { /* 讓表格行和物料欄位有可點擊的視覺提示 */
