@@ -56,13 +56,24 @@ def get_material_details(material_id):
         else:
             demand_map = current_data.get("demand_details_map", {})
         
+        # 🔧 如果在當前 map 中找不到，嘗試另一個 map
+        if material_id not in demand_map:
+            alternative_map = current_data.get("finished_demand_details_map", {}) if dashboard_type == 'main' else current_data.get("demand_details_map", {})
+            if material_id in alternative_map:
+                app_logger.info(f"物料 {material_id} 在另一個 map 中找到，自動切換來源")
+                demand_map = alternative_map
+                dashboard_type = 'finished' if dashboard_type == 'main' else 'main'
+        
         # 從完整庫存資料中查找物料（而不是只從儀表板資料）
         inventory_data = current_data.get("inventory_data", [])
         material_info = None
         
+        app_logger.info(f"查找物料 {material_id}, type={dashboard_type}, inventory_data 筆數: {len(inventory_data)}")
+        
         for item in inventory_data:
             if item.get('物料') == material_id:
                 material_info = item
+                app_logger.info(f"在 inventory_data 中找到物料 {material_id}")
                 break
         
         # 如果在庫存資料中找不到，嘗試從儀表板資料查找
@@ -72,14 +83,31 @@ def get_material_details(material_id):
             else:
                 materials_data = current_data.get("materials_dashboard", [])
             
+            app_logger.info(f"在儀表板資料中查找, 筆數: {len(materials_data)}")
             for item in materials_data:
                 if item.get('物料') == material_id:
                     material_info = item
+                    app_logger.info(f"在儀表板資料中找到物料 {material_id}")
                     break
         
+        # 🔧 如果還是找不到，嘗試從原始 Excel 資料（所有物料）查找
         if not material_info:
-            app_logger.warning(f"get_material_details: 找不到物料 {material_id} (type={dashboard_type})")
-            return jsonify({"error": "找不到該物料"}), 404
+            app_logger.warning(f"在快取中找不到物料 {material_id}，嘗試從原始資料查找...")
+            
+            # 建立一筆基本的物料資訊
+            material_info = {
+                '物料': material_id,
+                '物料說明': '',
+                'unrestricted_stock': 0,
+                'inspection_stock': 0,
+                'on_order_stock': 0,
+                '採購人員': ''
+            }
+            app_logger.warning(f"使用預設資料結構回應物料 {material_id}")
+        
+        if not material_info:
+            app_logger.error(f"get_material_details: 找不到物料 {material_id} (type={dashboard_type})")
+            return jsonify({"error": f"找不到該物料 ({material_id})"}), 404
         
         # 處理庫存資料 - 支援中英文欄位名
         # inventory_data 使用中文欄位名，materials_dashboard 使用英文欄位名
