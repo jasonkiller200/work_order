@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setupModal();
         setupProcurementFilter();
         setupDashboardTabs(); // 設定儀表板頁籤切換
+        setupStatsCardEvents(); // 🆕 設定統計圖卡事件
     } else if (window.location.pathname === '/order_query') {
         setupOrderSearch();
         setupModal();
@@ -14,21 +15,30 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function checkApiStatus() {
+    const badge = document.querySelector('.status-indicator');
+    const badgeText = document.getElementById('status-badge-text');
+    
     fetch('/api/status')
         .then(response => response.json())
         .then(data => {
-            const statusElement = document.getElementById('status-text');
-            if (data.service_status === 'online') {
-                statusElement.textContent = `✅ 後端服務正常。資料已${data.data_loaded ? '成功' : '失敗'}載入。目前使用快取: ${data.live_cache}`;
-                statusElement.style.color = 'green';
+            if (data.service_status === 'online' && data.data_loaded) {
+                // 正常狀態 - 綠色
+                badge.className = 'status-indicator';
+                badgeText.textContent = `✅ 快取: ${data.live_cache}`;
+            } else if (data.service_status === 'online' && !data.data_loaded) {
+                // 服務正常但資料未載入 - 橙色
+                badge.className = 'status-indicator loading';
+                badgeText.textContent = '⚠️ 資料載入中';
             } else {
-                statusElement.textContent = '❌ 無法連接到後端服務。';
-                statusElement.style.color = 'red';
+                // 服務異常 - 紅色
+                badge.className = 'status-indicator error';
+                badgeText.textContent = '❌ 服務異常';
             }
         })
         .catch(error => {
             console.error('Error fetching status:', error);
-            document.getElementById('status-text').textContent = '❌ 連接後端服務時發生錯誤。';
+            badge.className = 'status-indicator error';
+            badgeText.textContent = '❌ 連線失敗';
         });
 }
 
@@ -39,6 +49,10 @@ let currentSortColumn = null;
 let currentSortOrder = 'asc'; // 'asc' 或 'desc'
 let currentFilterKeyword = ''; // 物料篩選關鍵字
 let currentBuyerKeyword = ''; // 採購人員篩選關鍵字
+
+// 🆕 統計圖卡篩選
+let currentStatFilter = 'all'; // 當前圖卡篩選狀態
+let allDeliveryData = {}; // 所有交期資料
 
 // 分頁相關變數
 let currentPage = 1;
@@ -56,42 +70,39 @@ let orderMaterialsSortOrder = 'asc'; // 'asc' 或 'desc'
 let currentOrderId = null;
 
 function loadProcurementDashboard() {
-    // 載入主儀表板資料
-    fetch('/api/materials')
-        .then(response => response.json())
-        .then(data => {
-            if (!data || data.length === 0) {
-                document.getElementById('tab-main-dashboard').innerHTML = '<p>沒有可顯示的物料資料。</p>';
-            } else {
-                currentMaterialsData = data;
-                populateBuyerFilter(data); // 填充採購人員下拉選單
-                if (currentDashboardType === 'main') {
-                    renderMaterialsTable();
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching materials data:', error);
-            document.getElementById('tab-main-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
-        });
-    
-    // 載入成品儀表板資料
-    fetch('/api/finished_materials')
-        .then(response => response.json())
-        .then(data => {
-            if (!data || data.length === 0) {
-                document.getElementById('tab-finished-dashboard').innerHTML = '<p>沒有可顯示的成品物料資料。</p>';
-            } else {
-                currentFinishedMaterialsData = data;
-                if (currentDashboardType === 'finished') {
-                    renderMaterialsTable();
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching finished materials data:', error);
-            document.getElementById('tab-finished-dashboard').innerHTML = '<p style="color: red;">載入成品儀表板資料時發生錯誤。</p>';
-        });
+    // 同時載入主儀表板、成品儀表板、交期資料
+    Promise.all([
+        fetch('/api/materials').then(r => r.json()),
+        fetch('/api/finished_materials').then(r => r.json()),
+        fetch('/api/delivery/all').then(r => r.json()),
+        fetch('/api/demand_details/all').then(r => r.json())
+    ])
+    .then(([materialsData, finishedData, deliveryData, demandDetailsData]) => {
+        // 儲存資料
+        allDeliveryData = deliveryData.schedules || {};
+        
+        // 🆕 為每個物料加入最早需求日期和交期資訊
+        currentMaterialsData = enhanceMaterialsData(materialsData, demandDetailsData, allDeliveryData);
+        currentFinishedMaterialsData = enhanceMaterialsData(finishedData, demandDetailsData, allDeliveryData);
+        
+        // 🆕 計算並更新統計
+        updateStatsCards();
+        
+        // 填充採購人員下拉選單
+        populateBuyerFilter(currentMaterialsData);
+        
+        // 渲染當前儀表板
+        if (currentDashboardType === 'main') {
+            renderMaterialsTable();
+        } else {
+            renderFinishedMaterialsTable();
+        }
+    })
+    .catch(error => {
+        console.error('Error loading dashboard data:', error);
+        document.getElementById('tab-main-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
+        document.getElementById('tab-finished-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
+    });
 }
 
 // 填充採購人員下拉選單
@@ -145,8 +156,13 @@ function renderMaterialsTable() {
     // 應用過濾 (只顯示有目前缺料或預計缺料的項目)
     processedData = processedData.filter(m => m.current_shortage > 0 || m.projected_shortage > 0);
 
+    // 🆕 應用統計圖卡篩選
+    processedData = filterMaterialsByStats(processedData);
 
-    // 應用排序
+    // 🆕 智慧排序（30日內缺料優先，然後按最早需求日期）
+    processedData = sortMaterialsByPriority(processedData);
+
+    // 如果有手動排序，在智慧排序後再套用
     if (currentSortColumn) {
         processedData.sort((a, b) => {
             let valA = a[currentSortColumn];
@@ -204,6 +220,7 @@ function renderMaterialsTable() {
         <th data-sort-key="物料" class="sortable">物料 <span class="sort-icon"></span></th>
         <th data-sort-key="物料說明" class="sortable">物料說明 <span class="sort-icon"></span></th>
         <th data-sort-key="採購人員" class="sortable">採購人員 <span class="sort-icon"></span></th>
+        <th data-sort-key="earliest_demand_date" class="sortable">最早需求日 <span class="sort-icon"></span></th>
         <th data-sort-key="total_demand" class="sortable">總需求 <span class="sort-icon"></span></th>
         <th data-sort-key="unrestricted_stock" class="sortable">庫存 <span class="sort-icon"></span></th>
         <th data-sort-key="inspection_stock" class="sortable">品檢中 <span class="sort-icon"></span></th>
@@ -213,7 +230,7 @@ function renderMaterialsTable() {
         </tr></thead><tbody>`;
 
     if (paginatedData.length === 0) {
-        tableHTML += '<tr><td colspan="9" style="text-align: center;">🎉 太棒了！目前沒有任何符合條件的缺料項目。</td></tr>';
+        tableHTML += '<tr><td colspan="10" style="text-align: center;">🎉 太棒了！目前沒有任何符合條件的缺料項目。</td></tr>';
     } else {
         paginatedData.forEach(m => {
             const buyer = m['採購人員'] || '-';
@@ -221,11 +238,32 @@ function renderMaterialsTable() {
             const shortage30Days = m.shortage_within_30_days || false;
             const rowClass = shortage30Days ? ' class="shortage-30-days"' : '';
             
+            // 🆕 格式化最早需求日期
+            let earliestDateStr = '-';
+            let dateClass = '';
+            if (m.earliest_demand_date) {
+                const date = new Date(m.earliest_demand_date);
+                const today = new Date();
+                const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
+                
+                earliestDateStr = date.toISOString().split('T')[0];
+                
+                // 根據天數設定顏色
+                if (diffDays < 0) {
+                    dateClass = ' style="color: #d32f2f; font-weight: bold;" title="已過期"';
+                } else if (diffDays <= 7) {
+                    dateClass = ' style="color: #ff9800; font-weight: bold;" title="7日內需求"';
+                } else if (diffDays <= 30) {
+                    dateClass = ' style="color: #4caf50; font-weight: bold;" title="30日內需求"';
+                }
+            }
+            
             tableHTML += `
                 <tr${rowClass}>
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
+                    <td${dateClass}>${earliestDateStr}</td>
                     <td>${m.total_demand.toFixed(0)}</td>
                     <td>${m.unrestricted_stock.toFixed(0)}</td>
                     <td>${m.inspection_stock.toFixed(0)}</td>
@@ -435,6 +473,60 @@ function openDetailsModal(materialId) {
             if (substituteSection) {
                 substituteSection.innerHTML = subHTML;
             }
+            
+            // 🆕 計算並顯示缺料警示
+            const totalAvailable = data.stock_summary.unrestricted + data.stock_summary.inspection + data.stock_summary.on_order;
+            const totalDemand = data.demand_details.reduce((sum, d) => sum + d['未結數量 (EINHEIT)'], 0);
+            const shortage = Math.max(0, totalDemand - totalAvailable);
+            
+            if (shortage > 0) {
+                document.getElementById('shortage-alert').style.display = 'block';
+                document.getElementById('current-shortage-qty').textContent = shortage.toFixed(0);
+                
+                // 🔧 找開始缺料的需求日（而不是最早需求日）
+                let shortageStartDate = '-';
+                let runningStock = totalAvailable;
+                
+                for (const demand of data.demand_details) {
+                    runningStock -= demand['未結數量 (EINHEIT)'];
+                    if (runningStock < 0 && shortageStartDate === '-') {
+                        // 這是第一筆造成缺料的需求
+                        shortageStartDate = demand['需求日期'];
+                        break;
+                    }
+                }
+                
+                // 如果都會缺料，就用第一筆需求日
+                if (shortageStartDate === '-' && data.demand_details.length > 0) {
+                    shortageStartDate = data.demand_details[0]['需求日期'];
+                }
+                
+                document.getElementById('earliest-demand-date').textContent = shortageStartDate;
+                
+                // 建議採購數量
+                const suggestedQty = Math.ceil(shortage * 1.1);
+                document.getElementById('delivery-qty').value = suggestedQty;
+                document.getElementById('delivery-qty').placeholder = `建議: ${suggestedQty}`;
+                
+                // 建議到貨日期（開始缺料需求日 - 3天）
+                if (shortageStartDate !== '-') {
+                    try {
+                        const demandDate = new Date(shortageStartDate);
+                        demandDate.setDate(demandDate.getDate() - 3);
+                        document.getElementById('delivery-date').value = demandDate.toISOString().split('T')[0];
+                    } catch (e) {
+                        // 忽略日期轉換錯誤
+                    }
+                }
+            } else {
+                document.getElementById('shortage-alert').style.display = 'none';
+            }
+            
+            // 🆕 載入現有交期資料
+            loadExistingDelivery(materialId);
+            
+            // 🆕 綁定交期表單事件
+            setupDeliveryFormEvents(materialId, data);
 
             // 顯示需求訂單
             let demandHTML = '<table><thead><tr><th>訂單號碼</th><th>未結數量</th><th>需求日期</th><th>預計剩餘庫存</th></tr></thead><tbody>';

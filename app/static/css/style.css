@@ -583,3 +583,144 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 .hidden {
     display: none !important;
 }
+
+/* 統計圖卡樣式 */
+.stats-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1em;
+    margin-bottom: 1em;
+}
+
+.stat-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1em;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-color: var(--pico-primary);
+}
+
+.stat-card.active {
+    border-color: var(--pico-primary);
+    border-width: 3px;
+    background: #e3f2fd;
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.stat-card.active::before {
+    content: '✓';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: var(--pico-primary);
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8em;
+}
+
+/* 優先級顏色 */
+.stat-card.priority-high {
+    border-left: 4px solid #f44336;
+}
+
+.stat-card.priority-high:hover {
+    border-left-color: #d32f2f;
+}
+
+.stat-card.priority-medium {
+    border-left: 4px solid #ff9800;
+}
+
+.stat-card.priority-medium:hover {
+    border-left-color: #f57c00;
+}
+
+.stat-card.priority-normal {
+    border-left: 4px solid #2196f3;
+}
+
+.stat-card.priority-low {
+    border-left: 4px solid #9e9e9e;
+}
+
+.stat-icon {
+    font-size: 2em;
+    margin-bottom: 0.3em;
+}
+
+.stat-number {
+    font-size: 2em;
+    font-weight: bold;
+    color: var(--pico-primary);
+    margin: 0.2em 0;
+}
+
+.stat-label {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.2em;
+}
+
+.stat-sublabel {
+    font-size: 0.8em;
+    color: #666;
+}
+
+/* 篩選徽章 */
+.badge {
+    display: inline-block;
+    padding: 0.5em 1em;
+    background: #e3f2fd;
+    border: 1px solid #2196f3;
+    border-radius: 20px;
+    font-size: 0.9em;
+}
+
+.badge button {
+    background: transparent;
+    border: none;
+    color: #d32f2f;
+    cursor: pointer;
+    font-size: 1em;
+    padding: 0.2em 0.5em;
+}
+
+.badge button:hover {
+    background: #ffebee;
+    border-radius: 4px;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .stats-cards-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .stat-card {
+        padding: 0.8em;
+    }
+    
+    .stat-icon {
+        font-size: 1.5em;
+    }
+    
+    .stat-number {
+        font-size: 1.5em;
+    }
+}

@@ -461,3 +461,155 @@ def api_status():
         "data_loaded": current_data is not None
     }
     return jsonify(status)
+
+@api_bp.route('/demand_details/all')
+@cache_required
+def get_all_demand_details():
+    """取得所有物料的需求詳情 用於計算最早需求日期"""
+    try:
+        current_data = cache_manager.get_current_data()
+        
+        if not current_data:
+            app_logger.error("get_all_demand_details: 資料尚未載入")
+            return jsonify({"error": "資料尚未載入"}), 500
+        
+        # 合併主儀表板和成品儀表板的需求詳情
+        demand_details_map = current_data.get("demand_details_map", {})
+        finished_demand_details_map = current_data.get("finished_demand_details_map", {})
+        
+        # 合併兩個 map
+        combined_map = {**demand_details_map}
+        for material_id, details in finished_demand_details_map.items():
+            if material_id in combined_map:
+                combined_map[material_id].extend(details)
+            else:
+                combined_map[material_id] = details
+        
+        return jsonify(combined_map)
+    
+    except Exception as e:
+        app_logger.error(f"取得需求詳情失敗: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/delivery/all')
+def get_all_deliveries():
+    """取得所有交期資料 用於統計"""
+    try:
+        import os
+        import json
+        
+        delivery_file = 'instance/delivery_schedules.json'
+        
+        if os.path.exists(delivery_file):
+            with open(delivery_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 簡化格式，只返回最新的交期
+            schedules = {}
+            for material_id, history in data.get('delivery_schedules', {}).items():
+                if history:
+                    schedules[material_id] = history[-1]  # 最新的交期
+            
+            return jsonify({
+                "schedules": schedules,
+                "total": len(schedules)
+            })
+        else:
+            return jsonify({
+                "schedules": {},
+                "total": 0
+            })
+    except Exception as e:
+        app_logger.error(f"取得所有交期失敗: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/delivery/<material_id>')
+def get_delivery(material_id):
+    """取得物料的交期資訊"""
+    try:
+        import os
+        import json
+        
+        delivery_file = 'instance/delivery_schedules.json'
+        
+        if os.path.exists(delivery_file):
+            with open(delivery_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            schedules = data.get('delivery_schedules', {}).get(material_id, [])
+            
+            # 取最新的交期
+            current_delivery = schedules[-1] if schedules else None
+            
+            return jsonify({
+                "delivery": current_delivery,
+                "history": schedules[:-1] if len(schedules) > 1 else []
+            })
+        else:
+            return jsonify({
+                "delivery": None,
+                "history": []
+            })
+    except Exception as e:
+        app_logger.error(f"取得交期失敗: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/delivery', methods=['POST'])
+def save_delivery():
+    """儲存交期資訊"""
+    try:
+        import os
+        import json
+        import time
+        from datetime import datetime
+        
+        form_data = request.get_json()
+        material_id = form_data.get('material_id')
+        
+        if not material_id:
+            return jsonify({"success": False, "error": "缺少物料編號"}), 400
+        
+        delivery_file = 'instance/delivery_schedules.json'
+        
+        # 載入現有資料
+        if os.path.exists(delivery_file):
+            with open(delivery_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            data = {"delivery_schedules": {}}
+        
+        if material_id not in data['delivery_schedules']:
+            data['delivery_schedules'][material_id] = []
+        
+        # 新增交期記錄
+        new_delivery = {
+            "id": f"DS-{int(time.time())}",
+            "expected_date": form_data.get('expected_date'),
+            "quantity": form_data.get('quantity'),
+            "po_number": form_data.get('po_number', ''),
+            "supplier": form_data.get('supplier', ''),
+            "notes": form_data.get('notes', ''),
+            "status": "pending",
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        data['delivery_schedules'][material_id].append(new_delivery)
+        
+        # 確保目錄存在
+        os.makedirs(os.path.dirname(delivery_file), exist_ok=True)
+        
+        # 儲存
+        with open(delivery_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        app_logger.info(f"已儲存物料 {material_id} 的交期: {new_delivery['expected_date']}")
+        
+        return jsonify({
+            "success": True,
+            "delivery": new_delivery
+        })
+        
+    except Exception as e:
+        app_logger.error(f"儲存交期失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500

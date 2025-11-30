@@ -8,8 +8,50 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* 系統狀態徽章 */
+        .system-status-badge {
+            position: fixed;
+            top: 1em;
+            right: 1em;
+            padding: 0.5em 1em;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 20px;
+            font-size: 0.85em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .status-indicator.loading {
+            background: #ff9800;
+        }
+        .status-indicator.error {
+            background: #f44336;
+            animation: none;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
 </head>
 <body>
+    <!-- 🆕 系統狀態徽章（右上角） -->
+    <div class="system-status-badge">
+        <span class="status-indicator loading"></span>
+        <span id="status-badge-text">檢查中...</span>
+    </div>
+
     <main class="container">
         <header>
             <h1>生產資訊中心</h1>
@@ -26,15 +68,80 @@
 
         <hr>
 
-        <section id="status-section">
-            <h2>系統狀態</h2>
-            <p id="status-text">正在檢查後端服務狀態...</p>
-        </section>
-
-        <hr>
-
         <section id="procurement-dashboard">
             <h2>採購缺料總覽儀表板(只顯示缺料或採購不足項目)</h2>
+            
+            <!-- 🆕 統計圖卡區域 -->
+            <section id="stats-cards-section" style="margin-bottom: 2em;">
+                <h3>📊 快速篩選</h3>
+                <div class="stats-cards-grid">
+                    <!-- 第一排：緊急項目 -->
+                    <div class="stat-card priority-high" data-filter="shortage-30-days">
+                        <div class="stat-icon">🟢</div>
+                        <div class="stat-number" id="stat-shortage-30">0</div>
+                        <div class="stat-label">30日內缺料</div>
+                        <div class="stat-sublabel">需優先處理</div>
+                    </div>
+
+                    <div class="stat-card priority-high" data-filter="no-delivery">
+                        <div class="stat-icon">🔴</div>
+                        <div class="stat-number" id="stat-no-delivery">0</div>
+                        <div class="stat-label">無交期項目</div>
+                        <div class="stat-sublabel">急需填寫</div>
+                    </div>
+
+                    <div class="stat-card priority-high" data-filter="delayed">
+                        <div class="stat-icon">🚨</div>
+                        <div class="stat-number" id="stat-delayed">0</div>
+                        <div class="stat-label">已延誤</div>
+                        <div class="stat-sublabel">超過交期</div>
+                    </div>
+
+                    <div class="stat-card priority-medium" data-filter="due-soon">
+                        <div class="stat-icon">🟡</div>
+                        <div class="stat-number" id="stat-due-soon">0</div>
+                        <div class="stat-label">即將到期</div>
+                        <div class="stat-sublabel">7日內到貨</div>
+                    </div>
+
+                    <!-- 第二排：一般統計 -->
+                    <div class="stat-card priority-normal" data-filter="all-shortage">
+                        <div class="stat-icon">📦</div>
+                        <div class="stat-number" id="stat-all-shortage">0</div>
+                        <div class="stat-label">總缺料項目</div>
+                        <div class="stat-sublabel">所有缺料</div>
+                    </div>
+
+                    <div class="stat-card priority-normal" data-filter="my-items">
+                        <div class="stat-icon">👤</div>
+                        <div class="stat-number" id="stat-my-items">0</div>
+                        <div class="stat-label">我的項目</div>
+                        <div class="stat-sublabel">我負責的</div>
+                    </div>
+
+                    <div class="stat-card priority-normal" data-filter="this-week">
+                        <div class="stat-icon">📅</div>
+                        <div class="stat-number" id="stat-this-week">0</div>
+                        <div class="stat-label">本週需求</div>
+                        <div class="stat-sublabel">本週要到貨</div>
+                    </div>
+
+                    <div class="stat-card priority-low" data-filter="sufficient">
+                        <div class="stat-icon">⚪</div>
+                        <div class="stat-number" id="stat-sufficient">0</div>
+                        <div class="stat-label">庫存充足</div>
+                        <div class="stat-sublabel">無需處理</div>
+                    </div>
+                </div>
+
+                <!-- 🆕 目前篩選狀態顯示 -->
+                <div id="current-filter-badge" style="margin-top: 1em; display: none;">
+                    <span class="badge">
+                        目前篩選: <strong id="current-filter-text">全部</strong>
+                        <button id="clear-stat-filter-btn" style="margin-left: 0.5em; padding: 0.2em 0.5em; font-size: 0.9em;">✖ 清除</button>
+                    </span>
+                </div>
+            </section>
             
             <!-- 搜尋與篩選區域 -->
             <div class="filter-controls">
@@ -90,6 +197,77 @@
                 <div id="substitute-section">
                     <!-- 替代品表格將會被動態插入這裡 -->
                 </div>
+                
+                <!-- 🆕 缺料警示 -->
+                <div id="shortage-alert" style="margin-top: 1em; padding: 0.8em; background: #fff3cd; border-left: 4px solid #ff9800; border-radius: 4px; display: none;">
+                    <p style="margin: 0.3em 0; font-weight: bold;">⚠️ 當前缺料: <strong id="current-shortage-qty" style="color: #d32f2f;">0</strong> 件</p>
+                    <p style="margin: 0.3em 0;">📅 開始缺料需求日: <strong id="earliest-demand-date">-</strong></p>
+                </div>
+                
+                <!-- 🆕 交期維護表單 -->
+                <div id="delivery-form-section" style="margin-top: 1.5em; padding: 1.2em; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+                    <h4 style="margin-bottom: 0.8em; color: var(--pico-primary); display: flex; align-items: center; gap: 0.5em;">
+                        📅 交期維護
+                    </h4>
+                    
+                    <form id="delivery-form">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em;">
+                            <div>
+                                <label for="delivery-date">
+                                    預計到貨日期 <span style="color: red;">*</span>
+                                </label>
+                                <input type="date" id="delivery-date" name="delivery_date" required>
+                            </div>
+                            
+                            <div>
+                                <label for="delivery-qty">
+                                    採購數量 <span style="color: red;">*</span>
+                                </label>
+                                <input type="number" id="delivery-qty" name="quantity" min="1" placeholder="數量" required>
+                            </div>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-top: 1em;">
+                            <div>
+                                <label for="po-number">採購單號</label>
+                                <input type="text" id="po-number" name="po_number" placeholder="PO-2024-001">
+                            </div>
+                            
+                            <div>
+                                <label for="supplier">供應商</label>
+                                <input type="text" id="supplier" name="supplier" placeholder="供應商名稱">
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 1em;">
+                            <label for="delivery-notes">備註</label>
+                            <textarea id="delivery-notes" name="notes" rows="2" placeholder="交期說明、特殊情況等..."></textarea>
+                        </div>
+                        
+                        <!-- 🆕 即時計算結果 -->
+                        <div id="delivery-calculation" style="margin-top: 1em; padding: 0.8em; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; display: none;">
+                            <p style="margin: 0.3em 0; color: #2e7d32; font-weight: bold;">
+                                ✅ 到貨後可用庫存: <strong id="calc-available-stock">0</strong> 件
+                            </p>
+                            <p style="margin: 0.3em 0; color: #2e7d32;">
+                                ✅ 能滿足至: <strong id="calc-satisfy-until">-</strong> 的需求
+                            </p>
+                        </div>
+                        
+                        <div style="margin-top: 1em; display: flex; gap: 0.5em;">
+                            <button type="button" id="save-delivery-btn" style="flex: 1;">💾 儲存交期</button>
+                            <button type="button" id="clear-delivery-btn" class="secondary" style="flex: 1;">🗑️ 清除</button>
+                        </div>
+                    </form>
+                    
+                    <!-- 🆕 交期歷史（可選） -->
+                    <details style="margin-top: 1em;">
+                        <summary style="cursor: pointer; font-weight: bold; color: #666;">📜 查看交期歷史</summary>
+                        <div id="delivery-history" style="margin-top: 0.5em; font-size: 0.9em; padding: 0.5em; background: white; border-radius: 4px;">
+                            <!-- 動態載入歷史記錄 -->
+                        </div>
+                    </details>
+                </div>
             </div>
 
             <!-- 分頁導覽 -->
@@ -116,6 +294,8 @@
         </article>
     </dialog>
 
+    <script src="{{ url_for('static', filename='js/stats-helper.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/delivery-helper.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

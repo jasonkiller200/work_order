@@ -8,8 +8,50 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* 系統狀態徽章 */
+        .system-status-badge {
+            position: fixed;
+            top: 1em;
+            right: 1em;
+            padding: 0.5em 1em;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 20px;
+            font-size: 0.85em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .status-indicator.loading {
+            background: #ff9800;
+        }
+        .status-indicator.error {
+            background: #f44336;
+            animation: none;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
 </head>
 <body>
+    <!-- 🆕 系統狀態徽章（右上角） -->
+    <div class="system-status-badge">
+        <span class="status-indicator loading"></span>
+        <span id="status-badge-text">檢查中...</span>
+    </div>
+
     <main class="container">
         <header>
             <h1>生產資訊中心</h1>
@@ -23,13 +65,6 @@
                 <li><a href="/admin_dashboard">後台管理</a></li>
             </ul>
         </nav>
-
-        <hr>
-
-        <section id="status-section">
-            <h2>系統狀態</h2>
-            <p id="status-text">正在檢查後端服務狀態...</p>
-        </section>
 
         <hr>
 
