@@ -220,7 +220,7 @@ function renderMaterialsTable() {
         <th data-sort-key="物料" class="sortable">物料 <span class="sort-icon"></span></th>
         <th data-sort-key="物料說明" class="sortable">物料說明 <span class="sort-icon"></span></th>
         <th data-sort-key="採購人員" class="sortable">採購人員 <span class="sort-icon"></span></th>
-        <th data-sort-key="earliest_demand_date" class="sortable">最早需求日 <span class="sort-icon"></span></th>
+        <th data-sort-key="delivery_date" class="sortable">預計交貨日 <span class="sort-icon"></span></th>
         <th data-sort-key="total_demand" class="sortable">總需求 <span class="sort-icon"></span></th>
         <th data-sort-key="unrestricted_stock" class="sortable">庫存 <span class="sort-icon"></span></th>
         <th data-sort-key="inspection_stock" class="sortable">品檢中 <span class="sort-icon"></span></th>
@@ -238,23 +238,23 @@ function renderMaterialsTable() {
             const shortage30Days = m.shortage_within_30_days || false;
             const rowClass = shortage30Days ? ' class="shortage-30-days"' : '';
             
-            // 🆕 格式化最早需求日期
-            let earliestDateStr = '-';
+            // 🆕 格式化預計交貨日期
+            let deliveryDateStr = '-';
             let dateClass = '';
-            if (m.earliest_demand_date) {
-                const date = new Date(m.earliest_demand_date);
+            if (m.delivery_date) {
+                const date = new Date(m.delivery_date);
                 const today = new Date();
                 const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
                 
-                earliestDateStr = date.toISOString().split('T')[0];
+                deliveryDateStr = date.toISOString().split('T')[0];
                 
                 // 根據天數設定顏色
                 if (diffDays < 0) {
-                    dateClass = ' style="color: #d32f2f; font-weight: bold;" title="已過期"';
+                    dateClass = ' style="color: #d32f2f; font-weight: bold;" title="已延誤"';
                 } else if (diffDays <= 7) {
-                    dateClass = ' style="color: #ff9800; font-weight: bold;" title="7日內需求"';
+                    dateClass = ' style="color: #ff9800; font-weight: bold;" title="7日內到貨"';
                 } else if (diffDays <= 30) {
-                    dateClass = ' style="color: #4caf50; font-weight: bold;" title="30日內需求"';
+                    dateClass = ' style="color: #4caf50; font-weight: bold;" title="30日內到貨"';
                 }
             }
             
@@ -263,7 +263,7 @@ function renderMaterialsTable() {
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
-                    <td${dateClass}>${earliestDateStr}</td>
+                    <td${dateClass}>${deliveryDateStr}</td>
                     <td>${m.total_demand.toFixed(0)}</td>
                     <td>${m.unrestricted_stock.toFixed(0)}</td>
                     <td>${m.inspection_stock.toFixed(0)}</td>
@@ -853,20 +853,25 @@ function setupDashboardTabs() {
         link.addEventListener('click', function(e) {
             e.preventDefault();
             const tabId = this.dataset.tab;
-            
+
             // 更新當前儀表板類型
             currentDashboardType = tabId === 'tab-main-dashboard' ? 'main' : 'finished';
-            
+
             // 重置分頁
             currentPage = 1;
-            
+
             // 切換頁籤樣式
             document.querySelectorAll('.dashboard-tab-link').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.dashboard-tab-content').forEach(c => c.classList.remove('active'));
-            
+
             this.classList.add('active');
             document.getElementById(tabId).classList.add('active');
-            
+
+            // 🆕 更新統計圖卡（根據當前頁籤）
+            if (typeof updateStatsCards === 'function') {
+                updateStatsCards();
+            }
+
             // 重新渲染表格
             renderMaterialsTable();
         });

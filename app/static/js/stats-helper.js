@@ -1,36 +1,18 @@
 // 統計圖卡和排序相關函數
 
-// 增強物料資料（加入最早需求日期和交期資訊）
+// 增強物料資料（加入預計交貨日期資訊）
 function enhanceMaterialsData(materialsData, demandDetailsData, deliveryData) {
     return materialsData.map(material => {
         const materialId = material['物料'];
-        const demandDetails = demandDetailsData[materialId] || [];
-        
-        // 找最早的需求日期
-        let earliestDate = null;
-        demandDetails.forEach(demand => {
-            if (demand['需求日期']) {
-                try {
-                    const demandDate = new Date(demand['需求日期']);
-                    if (!isNaN(demandDate.getTime())) {
-                        if (!earliestDate || demandDate < earliestDate) {
-                            earliestDate = demandDate;
-                        }
-                    }
-                } catch (e) {
-                    // 忽略無效日期
-                }
-            }
-        });
         
         // 取得交期資料
         const delivery = deliveryData[materialId];
         
         return {
             ...material,
-            earliest_demand_date: earliestDate ? earliestDate.toISOString() : null,
             delivery_date: delivery ? delivery.expected_date : null,
-            delivery_status: delivery ? delivery.status : null
+            delivery_status: delivery ? delivery.status : null,
+            delivery_qty: delivery ? delivery.qty : null
         };
     });
 }
@@ -257,7 +239,7 @@ function filterMaterialsByStats(materials) {
     });
 }
 
-// 排序物料資料（30日內缺料優先，然後按最早需求日期）
+// 排序物料資料（30日內缺料優先，然後按預計交貨日期）
 function sortMaterialsByPriority(materials) {
     return materials.sort((a, b) => {
         // 第一優先：30日內缺料排最前
@@ -267,16 +249,16 @@ function sortMaterialsByPriority(materials) {
         if (a30Days && !b30Days) return -1;
         if (!a30Days && b30Days) return 1;
         
-        // 第二優先：最早需求日期（越早越前面）
-        const aDate = a.earliest_demand_date ? new Date(a.earliest_demand_date) : null;
-        const bDate = b.earliest_demand_date ? new Date(b.earliest_demand_date) : null;
+        // 第二優先：預計交貨日期（越早越前面）
+        const aDate = a.delivery_date ? new Date(a.delivery_date) : null;
+        const bDate = b.delivery_date ? new Date(b.delivery_date) : null;
         
         if (aDate && bDate) {
             const dateCompare = aDate.getTime() - bDate.getTime();
             if (dateCompare !== 0) return dateCompare;
         }
         
-        // 如果其中一個沒有需求日期，有日期的排前面
+        // 如果其中一個沒有交貨日期，有日期的排前面
         if (aDate && !bDate) return -1;
         if (!aDate && bDate) return 1;
         
@@ -289,3 +271,4 @@ function sortMaterialsByPriority(materials) {
         return b.projected_shortage - a.projected_shortage;
     });
 }
+
