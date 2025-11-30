@@ -497,6 +497,7 @@ def get_all_deliveries():
     try:
         import os
         import json
+        from datetime import datetime
         
         delivery_file = 'instance/delivery_schedules.json'
         
@@ -504,11 +505,33 @@ def get_all_deliveries():
             with open(delivery_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # 簡化格式，只返回最新的交期
+            # 🔧 選擇距離今天最近且未過期的交期
             schedules = {}
+            today = datetime.now().date()
+            
             for material_id, history in data.get('delivery_schedules', {}).items():
                 if history:
-                    schedules[material_id] = history[-1]  # 最新的交期
+                    # 過濾出未過期的交期
+                    valid_schedules = []
+                    for schedule in history:
+                        try:
+                            delivery_date = datetime.fromisoformat(schedule['expected_date']).date()
+                            if delivery_date >= today:
+                                valid_schedules.append({
+                                    **schedule,
+                                    'date_obj': delivery_date
+                                })
+                        except (ValueError, KeyError):
+                            continue
+                    
+                    # 如果有未過期的交期，選擇最近的一筆
+                    if valid_schedules:
+                        nearest = min(valid_schedules, key=lambda x: x['date_obj'])
+                        del nearest['date_obj']  # 移除臨時欄位
+                        schedules[material_id] = nearest
+                    # 如果都過期了，取最新建立的那一筆（最後一筆）
+                    else:
+                        schedules[material_id] = history[-1]
             
             return jsonify({
                 "schedules": schedules,
@@ -529,6 +552,7 @@ def get_delivery(material_id):
     try:
         import os
         import json
+        from datetime import datetime
         
         delivery_file = 'instance/delivery_schedules.json'
         
@@ -538,12 +562,36 @@ def get_delivery(material_id):
             
             schedules = data.get('delivery_schedules', {}).get(material_id, [])
             
-            # 取最新的交期
-            current_delivery = schedules[-1] if schedules else None
+            # 🔧 選擇距離今天最近且未過期的交期
+            current_delivery = None
+            today = datetime.now().date()
+            
+            if schedules:
+                # 過濾出未過期的交期
+                valid_schedules = []
+                for schedule in schedules:
+                    try:
+                        delivery_date = datetime.fromisoformat(schedule['expected_date']).date()
+                        if delivery_date >= today:
+                            valid_schedules.append({
+                                **schedule,
+                                'date_obj': delivery_date
+                            })
+                    except (ValueError, KeyError):
+                        continue
+                
+                # 如果有未過期的交期，選擇最近的一筆
+                if valid_schedules:
+                    nearest = min(valid_schedules, key=lambda x: x['date_obj'])
+                    del nearest['date_obj']
+                    current_delivery = nearest
+                # 如果都過期了，取最新建立的那一筆
+                else:
+                    current_delivery = schedules[-1]
             
             return jsonify({
                 "delivery": current_delivery,
-                "history": schedules[:-1] if len(schedules) > 1 else []
+                "history": schedules
             })
         else:
             return jsonify({
