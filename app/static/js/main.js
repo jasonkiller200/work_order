@@ -475,13 +475,18 @@ function openDetailsModal(materialId) {
             }
             
             // 🆕 計算並顯示缺料警示
+            const shortageAlertEl = document.getElementById('shortage-alert');
             const totalAvailable = data.stock_summary.unrestricted + data.stock_summary.inspection + data.stock_summary.on_order;
             const totalDemand = data.demand_details.reduce((sum, d) => sum + d['未結數量 (EINHEIT)'], 0);
             const shortage = Math.max(0, totalDemand - totalAvailable);
             
-            if (shortage > 0) {
-                document.getElementById('shortage-alert').style.display = 'block';
-                document.getElementById('current-shortage-qty').textContent = shortage.toFixed(0);
+            if (shortageAlertEl && shortage > 0) {
+                shortageAlertEl.style.display = 'block';
+                
+                const shortageQtyEl = document.getElementById('current-shortage-qty');
+                if (shortageQtyEl) {
+                    shortageQtyEl.textContent = shortage.toFixed(0);
+                }
                 
                 // 🔧 找開始缺料的需求日（而不是最早需求日）
                 let shortageStartDate = '-';
@@ -501,32 +506,45 @@ function openDetailsModal(materialId) {
                     shortageStartDate = data.demand_details[0]['需求日期'];
                 }
                 
-                document.getElementById('earliest-demand-date').textContent = shortageStartDate;
+                const demandDateEl = document.getElementById('earliest-demand-date');
+                if (demandDateEl) {
+                    demandDateEl.textContent = shortageStartDate;
+                }
                 
                 // 建議採購數量
                 const suggestedQty = Math.ceil(shortage * 1.1);
-                document.getElementById('delivery-qty').value = suggestedQty;
-                document.getElementById('delivery-qty').placeholder = `建議: ${suggestedQty}`;
+                const deliveryQtyEl = document.getElementById('delivery-qty');
+                if (deliveryQtyEl) {
+                    deliveryQtyEl.value = suggestedQty;
+                    deliveryQtyEl.placeholder = `建議: ${suggestedQty}`;
+                }
                 
                 // 建議到貨日期（開始缺料需求日 - 3天）
                 if (shortageStartDate !== '-') {
                     try {
                         const demandDate = new Date(shortageStartDate);
                         demandDate.setDate(demandDate.getDate() - 3);
-                        document.getElementById('delivery-date').value = demandDate.toISOString().split('T')[0];
+                        const deliveryDateEl = document.getElementById('delivery-date');
+                        if (deliveryDateEl) {
+                            deliveryDateEl.value = demandDate.toISOString().split('T')[0];
+                        }
                     } catch (e) {
                         // 忽略日期轉換錯誤
                     }
                 }
-            } else {
-                document.getElementById('shortage-alert').style.display = 'none';
+            } else if (shortageAlertEl) {
+                shortageAlertEl.style.display = 'none';
             }
             
-            // 🆕 載入現有交期資料
-            loadExistingDelivery(materialId);
+            // 🆕 載入現有交期資料（只在元素存在時執行）
+            if (typeof loadExistingDelivery === 'function') {
+                loadExistingDelivery(materialId);
+            }
             
-            // 🆕 綁定交期表單事件
-            setupDeliveryFormEvents(materialId, data);
+            // 🆕 綁定交期表單事件（只在元素存在時執行）
+            if (typeof setupDeliveryFormEvents === 'function') {
+                setupDeliveryFormEvents(materialId, data);
+            }
 
             // 顯示需求訂單
             let demandHTML = '<table><thead><tr><th>訂單號碼</th><th>未結數量</th><th>需求日期</th><th>預計剩餘庫存</th></tr></thead><tbody>';
