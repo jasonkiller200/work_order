@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     checkApiStatus();
 
     if (window.location.pathname === '/procurement') {
@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setupProcurementFilter();
         setupDashboardTabs(); // 設定儀表板頁籤切換
         setupStatsCardEvents(); // 🆕 設定統計圖卡事件
+        setupItemsPerPageHandler(); // 🆕 設定每頁顯示數量選擇器的全域事件處理
     } else if (window.location.pathname === '/order_query') {
         setupOrderSearch();
         setupModal();
@@ -17,7 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function checkApiStatus() {
     const badge = document.querySelector('.status-indicator');
     const badgeText = document.getElementById('status-badge-text');
-    
+
     fetch('/api/status')
         .then(response => response.json())
         .then(data => {
@@ -54,9 +55,11 @@ let currentBuyerKeyword = ''; // 採購人員篩選關鍵字
 let currentStatFilter = 'all'; // 當前圖卡篩選狀態
 let allDeliveryData = {}; // 所有交期資料
 
-// 分頁相關變數
-let currentPage = 1;
-let itemsPerPage = 50; // 預設每頁顯示50筆
+// 分頁相關變數 - 為兩個儀表板各自維護獨立的分頁狀態
+let mainDashboardPage = 1;
+let mainDashboardItemsPerPage = 50;
+let finishedDashboardPage = 1;
+let finishedDashboardItemsPerPage = 50;
 
 // 當前顯示的儀表板類型
 let currentDashboardType = 'main'; // 'main' 或 'finished'
@@ -77,39 +80,35 @@ function loadProcurementDashboard() {
         fetch('/api/delivery/all').then(r => r.json()),
         fetch('/api/demand_details/all').then(r => r.json())
     ])
-    .then(([materialsData, finishedData, deliveryData, demandDetailsData]) => {
-        // 儲存資料
-        allDeliveryData = deliveryData.schedules || {};
-        
-        // 🆕 為每個物料加入最早需求日期和交期資訊
-        currentMaterialsData = enhanceMaterialsData(materialsData, demandDetailsData, allDeliveryData);
-        currentFinishedMaterialsData = enhanceMaterialsData(finishedData, demandDetailsData, allDeliveryData);
-        
-        // 🆕 計算並更新統計
-        updateStatsCards();
-        
-        // 填充採購人員下拉選單
-        populateBuyerFilter(currentMaterialsData);
-        
-        // 渲染當前儀表板
-        if (currentDashboardType === 'main') {
+        .then(([materialsData, finishedData, deliveryData, demandDetailsData]) => {
+            // 儲存資料
+            allDeliveryData = deliveryData.schedules || {};
+
+            // 🆕 為每個物料加入最早需求日期和交期資訊
+            currentMaterialsData = enhanceMaterialsData(materialsData, demandDetailsData, allDeliveryData);
+            currentFinishedMaterialsData = enhanceMaterialsData(finishedData, demandDetailsData, allDeliveryData);
+
+            // 🆕 計算並更新統計
+            updateStatsCards();
+
+            // 填充採購人員下拉選單
+            populateBuyerFilter(currentMaterialsData);
+
+            // 渲染當前儀表板
             renderMaterialsTable();
-        } else {
-            renderFinishedMaterialsTable();
-        }
-    })
-    .catch(error => {
-        console.error('Error loading dashboard data:', error);
-        document.getElementById('tab-main-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
-        document.getElementById('tab-finished-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
-    });
+        })
+        .catch(error => {
+            console.error('Error loading dashboard data:', error);
+            document.getElementById('tab-main-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
+            document.getElementById('tab-finished-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
+        });
 }
 
 // 填充採購人員下拉選單
 function populateBuyerFilter(data) {
     const buyerSelect = document.getElementById('buyer-filter-select');
     if (!buyerSelect) return;
-    
+
     // 收集所有不重複的採購人員
     const buyers = new Set();
     data.forEach(item => {
@@ -117,7 +116,7 @@ function populateBuyerFilter(data) {
             buyers.add(item['採購人員']);
         }
     });
-    
+
     // 排序並填充下拉選單
     const sortedBuyers = Array.from(buyers).sort();
     sortedBuyers.forEach(buyer => {
@@ -133,13 +132,24 @@ function renderMaterialsTable() {
     const containerId = currentDashboardType === 'main' ? 'tab-main-dashboard' : 'tab-finished-dashboard';
     const container = document.getElementById(containerId);
     const sourceData = currentDashboardType === 'main' ? currentMaterialsData : currentFinishedMaterialsData;
-    
+
+    console.log('=== renderMaterialsTable 被呼叫 ===');
+    console.log('當前儀表板類型:', currentDashboardType);
+    console.log('主儀表板分頁:', mainDashboardPage, '每頁:', mainDashboardItemsPerPage);
+    console.log('成品儀表板分頁:', finishedDashboardPage, '每頁:', finishedDashboardItemsPerPage);
+
+    // 🆕 根據當前儀表板類型選擇對應的分頁變數
+    const activePage = currentDashboardType === 'main' ? mainDashboardPage : finishedDashboardPage;
+    const activeItemsPerPage = currentDashboardType === 'main' ? mainDashboardItemsPerPage : finishedDashboardItemsPerPage;
+
+    console.log('使用的 activePage:', activePage, 'activeItemsPerPage:', activeItemsPerPage);
+
     let processedData = [...sourceData]; // 複製一份資料進行操作
 
     // 應用物料篩選
     if (currentFilterKeyword) {
         const keyword = currentFilterKeyword.toLowerCase();
-        processedData = processedData.filter(m => 
+        processedData = processedData.filter(m =>
             (m['物料'] && m['物料'].toLowerCase().includes(keyword)) ||
             (m['物料說明'] && m['物料說明'].toLowerCase().includes(keyword))
         );
@@ -148,7 +158,7 @@ function renderMaterialsTable() {
     // 應用採購人員篩選
     if (currentBuyerKeyword) {
         const buyerKeyword = currentBuyerKeyword.toLowerCase();
-        processedData = processedData.filter(m => 
+        processedData = processedData.filter(m =>
             m['採購人員'] && m['採購人員'].toLowerCase().includes(buyerKeyword)
         );
     }
@@ -182,18 +192,26 @@ function renderMaterialsTable() {
 
     // 計算分頁
     const totalItems = processedData.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    
-    // 確保當前頁在有效範圍內
-    if (currentPage > totalPages && totalPages > 0) {
-        currentPage = totalPages;
+    const totalPages = Math.ceil(totalItems / activeItemsPerPage);
+
+    // 確保當前頁在有效範圍內並更新對應的全域變數
+    let adjustedPage = activePage;
+    if (adjustedPage > totalPages && totalPages > 0) {
+        adjustedPage = totalPages;
     }
-    if (currentPage < 1) {
-        currentPage = 1;
+    if (adjustedPage < 1) {
+        adjustedPage = 1;
     }
-    
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+
+    // 更新對應儀表板的當前頁碼
+    if (currentDashboardType === 'main') {
+        mainDashboardPage = adjustedPage;
+    } else {
+        finishedDashboardPage = adjustedPage;
+    }
+
+    const startIndex = (adjustedPage - 1) * activeItemsPerPage;
+    const endIndex = Math.min(startIndex + activeItemsPerPage, totalItems);
     const paginatedData = processedData.slice(startIndex, endIndex);
 
     // 顯示項目數量和分頁控制
@@ -203,15 +221,13 @@ function renderMaterialsTable() {
                 顯示第 ${totalItems > 0 ? startIndex + 1 : 0} - ${endIndex} 項，共 ${totalItems} 項
             </div>
             <div class="pagination-controls">
-                <label>每頁顯示：
-                    <select id="items-per-page-select">
-                        <option value="20" ${itemsPerPage === 20 ? 'selected' : ''}>20</option>
-                        <option value="50" ${itemsPerPage === 50 ? 'selected' : ''}>50</option>
-                        <option value="100" ${itemsPerPage === 100 ? 'selected' : ''}>100</option>
-                        <option value="200" ${itemsPerPage === 200 ? 'selected' : ''}>200</option>
-                        <option value="${totalItems}" ${itemsPerPage >= totalItems ? 'selected' : ''}>全部</option>
-                    </select>
-                </label>
+                <label style="white-space: nowrap; display: inline-flex; align-items: center; gap: 0.3em;">每頁顯示：<select id="items-per-page-select">
+                        <option value="20" ${activeItemsPerPage === 20 ? 'selected' : ''}>20</option>
+                        <option value="50" ${activeItemsPerPage === 50 ? 'selected' : ''}>50</option>
+                        <option value="100" ${activeItemsPerPage === 100 ? 'selected' : ''}>100</option>
+                        <option value="200" ${activeItemsPerPage === 200 ? 'selected' : ''}>200</option>
+                        <option value="${totalItems}" ${activeItemsPerPage >= totalItems ? 'selected' : ''}>全部</option>
+                    </select></label>
             </div>
         </div>
     `;
@@ -237,7 +253,7 @@ function renderMaterialsTable() {
             // 檢查是否在30日內有缺料需求
             const shortage30Days = m.shortage_within_30_days || false;
             const rowClass = shortage30Days ? ' class="shortage-30-days"' : '';
-            
+
             // 🆕 格式化預計交貨日期
             let deliveryDateStr = '-';
             let dateClass = '';
@@ -245,9 +261,9 @@ function renderMaterialsTable() {
                 const date = new Date(m.delivery_date);
                 const today = new Date();
                 const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
-                
+
                 deliveryDateStr = date.toISOString().split('T')[0];
-                
+
                 // 根據天數設定顏色
                 if (diffDays < 0) {
                     dateClass = ' style="color: #d32f2f; font-weight: bold;" title="已延誤"';
@@ -257,7 +273,7 @@ function renderMaterialsTable() {
                     dateClass = ' style="color: #4caf50; font-weight: bold;" title="30日內到貨"';
                 }
             }
-            
+
             tableHTML += `
                 <tr${rowClass}>
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
@@ -280,51 +296,43 @@ function renderMaterialsTable() {
     let paginationHTML = '';
     if (totalPages > 1) {
         paginationHTML = '<div class="pagination-wrapper"><div class="pagination">';
-        
+
         // 上一頁按鈕
-        paginationHTML += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">上一頁</button>`;
-        
+        paginationHTML += `<button ${adjustedPage === 1 ? 'disabled' : ''} onclick="changePage(${adjustedPage - 1})">上一頁</button>`;
+
         // 頁碼按鈕
         const maxVisiblePages = 5;
-        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let startPage = Math.max(1, adjustedPage - Math.floor(maxVisiblePages / 2));
         let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-        
+
         if (endPage - startPage < maxVisiblePages - 1) {
             startPage = Math.max(1, endPage - maxVisiblePages + 1);
         }
-        
+
         if (startPage > 1) {
             paginationHTML += `<button onclick="changePage(1)">1</button>`;
             if (startPage > 2) paginationHTML += `<span>...</span>`;
         }
-        
+
         for (let i = startPage; i <= endPage; i++) {
-            paginationHTML += `<button class="${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+            paginationHTML += `<button class="${i === adjustedPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
         }
-        
+
         if (endPage < totalPages) {
             if (endPage < totalPages - 1) paginationHTML += `<span>...</span>`;
             paginationHTML += `<button onclick="changePage(${totalPages})">${totalPages}</button>`;
         }
-        
+
         // 下一頁按鈕
-        paginationHTML += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">下一頁</button>`;
-        
+        paginationHTML += `<button ${adjustedPage === totalPages ? 'disabled' : ''} onclick="changePage(${adjustedPage + 1})">下一頁</button>`;
+
         paginationHTML += '</div></div>';
     }
 
     container.innerHTML = controlsHTML + tableHTML + paginationHTML;
-    
-    // 綁定每頁顯示數量選擇器
-    const itemsPerPageSelect = document.getElementById('items-per-page-select');
-    if (itemsPerPageSelect) {
-        itemsPerPageSelect.addEventListener('change', function() {
-            itemsPerPage = parseInt(this.value);
-            currentPage = 1; // 重置到第一頁
-            renderMaterialsTable();
-        });
-    }
-    
+
+    // 不再在這裡綁定事件,改為使用全域事件委派
+
     addSortEventListeners(); // 添加排序事件監聽
     addMaterialLinkListeners(); // 添加物料連結事件監聽
     addBuyerCellListeners(); // 添加採購人員點擊事件監聽
@@ -333,7 +341,12 @@ function renderMaterialsTable() {
 
 // 切換頁面函數
 function changePage(page) {
-    currentPage = page;
+    // 🆕 根據當前儀表板類型更新對應的分頁變數
+    if (currentDashboardType === 'main') {
+        mainDashboardPage = page;
+    } else {
+        finishedDashboardPage = page;
+    }
     renderMaterialsTable();
     // 滾動到頂部
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -341,7 +354,7 @@ function changePage(page) {
 
 function addSortEventListeners() {
     document.querySelectorAll('.sortable').forEach(header => {
-        header.addEventListener('click', function() {
+        header.addEventListener('click', function () {
             const sortKey = this.dataset.sortKey;
             if (currentSortColumn === sortKey) {
                 currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
@@ -366,7 +379,7 @@ function updateSortIcons() {
 
 function addMaterialLinkListeners() {
     document.querySelectorAll('.material-link').forEach(link => {
-        link.addEventListener('click', function(e) {
+        link.addEventListener('click', function (e) {
             e.stopPropagation();
             const materialId = this.dataset.materialId;
             openDetailsModal(materialId);
@@ -376,7 +389,7 @@ function addMaterialLinkListeners() {
 
 function addBuyerCellListeners() {
     document.querySelectorAll('.buyer-cell').forEach(cell => {
-        cell.addEventListener('click', function(e) {
+        cell.addEventListener('click', function (e) {
             e.stopPropagation();
             const materialId = this.dataset.materialId;
             openBuyerReferenceModal(materialId);
@@ -394,7 +407,7 @@ function setupModal() {
     closeLink.addEventListener('click', (e) => { e.preventDefault(); closeModal(); });
 
     modal.querySelectorAll('.tab-link').forEach(link => {
-        link.addEventListener('click', function(e) {
+        link.addEventListener('click', function (e) {
             e.preventDefault();
             const tabId = this.dataset.tab;
             modal.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
@@ -408,18 +421,18 @@ function setupModal() {
 function openDetailsModal(materialId) {
     const modal = document.getElementById('details-modal');
     document.getElementById('modal-title').textContent = `物料詳情: ${materialId}`;
-    
+
     document.getElementById('stock-summary-section').style.display = 'block';
     document.getElementById('unrestricted-stock').textContent = '載入中...';
     document.getElementById('inspection-stock').textContent = '載入中...';
     document.getElementById('on-order-stock').textContent = '載入中...';
-    
+
     // 清空替代品區域
     const substituteSection = document.getElementById('substitute-section');
     if (substituteSection) {
         substituteSection.innerHTML = '<p>載入中...</p>';
     }
-    
+
     document.getElementById('tab-demand').innerHTML = '<p>載入中...</p>';
 
     // 隱藏替代版本分頁，只保留需求訂單分頁
@@ -451,7 +464,7 @@ function openDetailsModal(materialId) {
             if (data.error) {
                 throw new Error(data.error);
             }
-            
+
             // 更新庫存總覽
             document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
             document.getElementById('inspection-stock').textContent = data.stock_summary.inspection.toFixed(0);
@@ -468,30 +481,30 @@ function openDetailsModal(materialId) {
             } else {
                 subHTML += '<p style="font-size: 0.9em; color: var(--pico-muted-color);">沒有找到可用的替代版本。</p>';
             }
-            
+
             const substituteSection = document.getElementById('substitute-section');
             if (substituteSection) {
                 substituteSection.innerHTML = subHTML;
             }
-            
+
             // 🆕 計算並顯示缺料警示
             const shortageAlertEl = document.getElementById('shortage-alert');
             const totalAvailable = data.stock_summary.unrestricted + data.stock_summary.inspection + data.stock_summary.on_order;
             const totalDemand = data.demand_details.reduce((sum, d) => sum + d['未結數量 (EINHEIT)'], 0);
             const shortage = Math.max(0, totalDemand - totalAvailable);
-            
+
             if (shortageAlertEl && shortage > 0) {
                 shortageAlertEl.style.display = 'block';
-                
+
                 const shortageQtyEl = document.getElementById('current-shortage-qty');
                 if (shortageQtyEl) {
                     shortageQtyEl.textContent = shortage.toFixed(0);
                 }
-                
+
                 // 🔧 找開始缺料的需求日（而不是最早需求日）
                 let shortageStartDate = '-';
                 let runningStock = totalAvailable;
-                
+
                 for (const demand of data.demand_details) {
                     runningStock -= demand['未結數量 (EINHEIT)'];
                     if (runningStock < 0 && shortageStartDate === '-') {
@@ -500,17 +513,17 @@ function openDetailsModal(materialId) {
                         break;
                     }
                 }
-                
+
                 // 如果都會缺料，就用第一筆需求日
                 if (shortageStartDate === '-' && data.demand_details.length > 0) {
                     shortageStartDate = data.demand_details[0]['需求日期'];
                 }
-                
+
                 const demandDateEl = document.getElementById('earliest-demand-date');
                 if (demandDateEl) {
                     demandDateEl.textContent = shortageStartDate;
                 }
-                
+
                 // 建議採購數量
                 const suggestedQty = Math.ceil(shortage * 1.1);
                 const deliveryQtyEl = document.getElementById('delivery-qty');
@@ -518,7 +531,7 @@ function openDetailsModal(materialId) {
                     deliveryQtyEl.value = suggestedQty;
                     deliveryQtyEl.placeholder = `建議: ${suggestedQty}`;
                 }
-                
+
                 // 建議到貨日期（開始缺料需求日 - 3天）
                 if (shortageStartDate !== '-') {
                     try {
@@ -535,12 +548,12 @@ function openDetailsModal(materialId) {
             } else if (shortageAlertEl) {
                 shortageAlertEl.style.display = 'none';
             }
-            
+
             // 🆕 載入現有交期資料（只在元素存在時執行）
             if (typeof loadExistingDelivery === 'function') {
                 loadExistingDelivery(materialId);
             }
-            
+
             // 🆕 綁定交期表單事件（只在元素存在時執行）
             if (typeof setupDeliveryFormEvents === 'function') {
                 setupDeliveryFormEvents(materialId, data);
@@ -570,12 +583,12 @@ function openDetailsModal(materialId) {
             document.getElementById('unrestricted-stock').textContent = '-';
             document.getElementById('inspection-stock').textContent = '-';
             document.getElementById('on-order-stock').textContent = '-';
-            
+
             const substituteSection = document.getElementById('substitute-section');
             if (substituteSection) {
                 substituteSection.innerHTML = '<p style="color:red;">載入替代版本時發生錯誤。</p>';
             }
-            
+
             document.getElementById('tab-demand').innerHTML = `<p style="color:red;">載入需求時發生錯誤: ${errorMsg}</p>`;
         });
 }
@@ -583,21 +596,21 @@ function openDetailsModal(materialId) {
 function openBuyerReferenceModal(materialId) {
     const modal = document.getElementById('details-modal');
     document.getElementById('modal-title').textContent = `採購人員參考清單: ${materialId}`;
-    
+
     document.getElementById('stock-summary-section').style.display = 'none';
     document.getElementById('tab-demand').innerHTML = '<p>載入中...</p>';
     document.getElementById('tab-substitute').innerHTML = '';
-    
+
     modal.querySelectorAll('.tab-link').forEach(l => l.classList.add('hidden'));
     document.querySelector('.tab-link[data-tab="tab-demand"]').classList.remove('hidden');
     modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.getElementById('tab-demand').classList.add('active');
-    
+
     modal.showModal();
-    
+
     // 取得當前儀表板類型
     const dashboardType = currentDashboardType;
-    
+
     fetch(`/api/material/${materialId}/buyer_reference?type=${dashboardType}`)
         .then(response => response.json())
         .then(data => {
@@ -607,13 +620,13 @@ function openBuyerReferenceModal(materialId) {
                 .then(buyersData => {
                     let buyerHTML = '<h4>該物料上下25筆採購人員參考（點擊下拉選單可修改採購人員）</h4>';
                     buyerHTML += '<table><thead><tr><th>物料</th><th>物料說明</th><th>採購人員</th></tr></thead><tbody>';
-                    
+
                     if (data.reference_list && data.reference_list.length > 0) {
                         data.reference_list.forEach(item => {
                             const isCurrentMaterial = item['物料'] === materialId;
                             const rowStyle = isCurrentMaterial ? ' style="background-color: #fff3cd; font-weight: bold;"' : '';
                             const currentBuyer = item['採購人員'] || '';
-                            
+
                             // 建立採購人員下拉選單
                             let buyerSelect = `<select class="buyer-select" data-material-id="${item['物料']}" data-dashboard-type="${dashboardType}">`;
                             buyerSelect += `<option value="">未指定</option>`;
@@ -622,7 +635,7 @@ function openBuyerReferenceModal(materialId) {
                                 buyerSelect += `<option value="${buyer}" ${selected}>${buyer}</option>`;
                             });
                             buyerSelect += `</select>`;
-                            
+
                             buyerHTML += `<tr${rowStyle}>
                                 <td>${item['物料']}</td>
                                 <td>${item['物料說明']}</td>
@@ -632,10 +645,10 @@ function openBuyerReferenceModal(materialId) {
                     } else {
                         buyerHTML += '<tr><td colspan="3">沒有找到相關的採購人員資料。</td></tr>';
                     }
-                    
+
                     buyerHTML += '</tbody></table>';
                     document.getElementById('tab-demand').innerHTML = buyerHTML;
-                    
+
                     // 綁定下拉選單變更事件
                     bindBuyerSelectEvents();
                 })
@@ -643,7 +656,7 @@ function openBuyerReferenceModal(materialId) {
                     console.error('Error fetching buyers list:', error);
                     let buyerHTML = '<h4>該物料上下25筆採購人員參考</h4>';
                     buyerHTML += '<table><thead><tr><th>物料</th><th>物料說明</th><th>採購人員</th></tr></thead><tbody>';
-                    
+
                     if (data.reference_list && data.reference_list.length > 0) {
                         data.reference_list.forEach(item => {
                             const isCurrentMaterial = item['物料'] === materialId;
@@ -655,7 +668,7 @@ function openBuyerReferenceModal(materialId) {
                             </tr>`;
                         });
                     }
-                    
+
                     buyerHTML += '</tbody></table>';
                     buyerHTML += '<p style="color: orange;">無法載入採購人員清單，顯示為唯讀模式。</p>';
                     document.getElementById('tab-demand').innerHTML = buyerHTML;
@@ -669,16 +682,16 @@ function openBuyerReferenceModal(materialId) {
 
 function bindBuyerSelectEvents() {
     document.querySelectorAll('.buyer-select').forEach(select => {
-        select.addEventListener('change', function() {
+        select.addEventListener('change', function () {
             const materialId = this.dataset.materialId;
             const newBuyer = this.value;
             const dashboardType = this.dataset.dashboardType;
             const originalValue = this.getAttribute('data-original-value') || '';
-            
+
             // 暫時禁用選單
             this.disabled = true;
             this.style.opacity = '0.6';
-            
+
             // 儲存採購人員變更
             fetch('/api/update_buyer', {
                 method: 'POST',
@@ -691,50 +704,50 @@ function bindBuyerSelectEvents() {
                     dashboard_type: dashboardType
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // 顯示成功訊息
-                    this.style.backgroundColor = '#d4edda';
-                    this.style.borderColor = '#c3e6cb';
-                    setTimeout(() => {
-                        this.style.backgroundColor = '';
-                        this.style.borderColor = '';
-                    }, 1500);
-                    
-                    // 更新快取資料
-                    if (dashboardType === 'finished') {
-                        const material = currentFinishedMaterialsData.find(m => m['物料'] === materialId);
-                        if (material) {
-                            material['採購人員'] = newBuyer;
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 顯示成功訊息
+                        this.style.backgroundColor = '#d4edda';
+                        this.style.borderColor = '#c3e6cb';
+                        setTimeout(() => {
+                            this.style.backgroundColor = '';
+                            this.style.borderColor = '';
+                        }, 1500);
+
+                        // 更新快取資料
+                        if (dashboardType === 'finished') {
+                            const material = currentFinishedMaterialsData.find(m => m['物料'] === materialId);
+                            if (material) {
+                                material['採購人員'] = newBuyer;
+                            }
+                        } else {
+                            const material = currentMaterialsData.find(m => m['物料'] === materialId);
+                            if (material) {
+                                material['採購人員'] = newBuyer;
+                            }
                         }
+
+                        // 重新渲染表格以反映變更
+                        renderMaterialsTable();
                     } else {
-                        const material = currentMaterialsData.find(m => m['物料'] === materialId);
-                        if (material) {
-                            material['採購人員'] = newBuyer;
-                        }
+                        // 顯示錯誤訊息
+                        alert('儲存失敗: ' + (data.error || '未知錯誤'));
+                        this.value = originalValue;
                     }
-                    
-                    // 重新渲染表格以反映變更
-                    renderMaterialsTable();
-                } else {
-                    // 顯示錯誤訊息
-                    alert('儲存失敗: ' + (data.error || '未知錯誤'));
+                })
+                .catch(error => {
+                    console.error('Error updating buyer:', error);
+                    alert('儲存採購人員時發生錯誤');
                     this.value = originalValue;
-                }
-            })
-            .catch(error => {
-                console.error('Error updating buyer:', error);
-                alert('儲存採購人員時發生錯誤');
-                this.value = originalValue;
-            })
-            .finally(() => {
-                // 重新啟用選單
-                this.disabled = false;
-                this.style.opacity = '1';
-            });
+                })
+                .finally(() => {
+                    // 重新啟用選單
+                    this.disabled = false;
+                    this.style.opacity = '1';
+                });
         });
-        
+
         // 儲存原始值
         select.setAttribute('data-original-value', select.value);
     });
@@ -743,10 +756,10 @@ function bindBuyerSelectEvents() {
 // 設定訂單頁籤切換
 function setupOrderTabs() {
     const downloadSpecsBtn = document.getElementById('download-specs-btn');
-    
+
     // 綁定下載按鈕
     if (downloadSpecsBtn) {
-        downloadSpecsBtn.addEventListener('click', function() {
+        downloadSpecsBtn.addEventListener('click', function () {
             if (currentOrderId) {
                 window.location.href = `/api/download_specs/${currentOrderId}`;
             } else {
@@ -754,17 +767,17 @@ function setupOrderTabs() {
             }
         });
     }
-    
+
     // 綁定頁籤切換事件
     document.querySelectorAll('.order-tab-link').forEach(link => {
-        link.addEventListener('click', function(e) {
+        link.addEventListener('click', function (e) {
             e.preventDefault();
             const tabId = this.dataset.tab;
-            
+
             // 切換頁籤樣式
             document.querySelectorAll('.order-tab-link').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.order-tab-content').forEach(c => c.classList.remove('active'));
-            
+
             this.classList.add('active');
             document.getElementById(tabId).classList.add('active');
         });
@@ -781,7 +794,7 @@ function setupOrderSearch() {
     const orderDetailsContainer = document.getElementById('order-details-container');
 
     searchInput.value = '10000'; // 將輸入框預設值設為 '10000'
-    searchBtn.addEventListener('click', function() {
+    searchBtn.addEventListener('click', function () {
         const orderId = searchInput.value.trim();
         if (orderId.length < 9) {
             orderDetailsContainer.innerHTML = '<p style="color: red;">料號至少需要輸入9碼。</p>';
@@ -794,7 +807,7 @@ function setupOrderSearch() {
         }
     });
 
-    searchInput.addEventListener('keypress', function(e) {
+    searchInput.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             searchBtn.click();
         }
@@ -809,34 +822,34 @@ function setupProcurementFilter() {
 
     if (applyFilterBtn && filterInput) {
         // 應用物料篩選
-        const applyMaterialFilter = function() {
+        const applyMaterialFilter = function () {
             currentFilterKeyword = filterInput.value.trim();
             currentPage = 1; // 重置到第一頁
             renderMaterialsTable();
         };
-        
+
         applyFilterBtn.addEventListener('click', applyMaterialFilter);
 
         // 允許按 Enter 鍵觸發物料查詢
-        filterInput.addEventListener('keypress', function(e) {
+        filterInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 applyMaterialFilter();
             }
         });
     }
-    
+
     // 採購人員下拉選單直接觸發篩選
     if (buyerFilterSelect) {
-        buyerFilterSelect.addEventListener('change', function() {
+        buyerFilterSelect.addEventListener('change', function () {
             currentBuyerKeyword = this.value;
             currentPage = 1; // 重置到第一頁
             renderMaterialsTable();
         });
     }
-    
+
     // 清除搜尋
     if (clearFilterBtn) {
-        clearFilterBtn.addEventListener('click', function() {
+        clearFilterBtn.addEventListener('click', function () {
             if (filterInput) filterInput.value = '';
             if (buyerFilterSelect) buyerFilterSelect.value = '';
             currentFilterKeyword = '';
@@ -850,15 +863,12 @@ function setupProcurementFilter() {
 // 設定儀表板頁籤切換
 function setupDashboardTabs() {
     document.querySelectorAll('.dashboard-tab-link').forEach(link => {
-        link.addEventListener('click', function(e) {
+        link.addEventListener('click', function (e) {
             e.preventDefault();
             const tabId = this.dataset.tab;
 
             // 更新當前儀表板類型
             currentDashboardType = tabId === 'tab-main-dashboard' ? 'main' : 'finished';
-
-            // 重置分頁
-            currentPage = 1;
 
             // 切換頁籤樣式
             document.querySelectorAll('.dashboard-tab-link').forEach(l => l.classList.remove('active'));
@@ -876,6 +886,39 @@ function setupDashboardTabs() {
             renderMaterialsTable();
         });
     });
+}
+
+// 🆕 設定每頁顯示數量選擇器的全域事件處理(使用事件委派)
+function setupItemsPerPageHandler() {
+    console.log('=== setupItemsPerPageHandler 被呼叫 ===');
+
+    // 使用事件委派,在 document 層級監聽
+    document.addEventListener('change', function (e) {
+        // 檢查是否是我們的選擇器
+        if (e.target && e.target.id === 'items-per-page-select') {
+            const newValue = parseInt(e.target.value);
+
+            console.log('=== 選擇器 change 事件觸發 (事件委派) ===');
+            console.log('新值:', newValue);
+            console.log('當前儀表板類型:', currentDashboardType);
+            console.log('修改前 - 主儀表板:', mainDashboardItemsPerPage, '成品儀表板:', finishedDashboardItemsPerPage);
+
+            // 根據當前儀表板類型更新對應的全域變數
+            if (currentDashboardType === 'main') {
+                mainDashboardItemsPerPage = newValue;
+                mainDashboardPage = 1; // 重置到第一頁
+            } else {
+                finishedDashboardItemsPerPage = newValue;
+                finishedDashboardPage = 1; // 重置到第一頁
+            }
+
+            console.log('修改後 - 主儀表板:', mainDashboardItemsPerPage, '成品儀表板:', finishedDashboardItemsPerPage);
+            console.log('準備重新渲染...');
+            renderMaterialsTable();
+        }
+    });
+
+    console.log('每頁顯示數量選擇器事件委派設定完成');
 }
 
 function fetchOrderDetails(orderId) {
@@ -982,7 +1025,7 @@ function fetchOrderDetails(orderId) {
             } else {
                 specsHtmlContent += '<p>沒有找到該訂單的規格資訊。</p>';
             }
-            
+
             // 將內容寫入規格頁籤
             tabOrderSpecs.innerHTML = noteHtmlContent + summaryHtmlContent + specsHtmlContent;
 
@@ -993,7 +1036,7 @@ function fetchOrderDetails(orderId) {
             } else {
                 tabOrderMaterials.innerHTML = `<h3>訂單 ${orderId} 的物料需求</h3><p>沒有找到該訂單的物料需求。</p>`;
             }
-            
+
             // 重置到規格頁籤
             document.querySelectorAll('.order-tab-link').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.order-tab-content').forEach(c => c.classList.remove('active'));
@@ -1051,7 +1094,7 @@ function renderOrderMaterialsTable() {
                 </thead>
                 <tbody>
     `;
-    
+
     if (processedData.length === 0) {
         tableHTML += '<tr><td colspan="9">沒有找到該訂單的物料需求。</td></tr>';
     } else {
@@ -1072,13 +1115,13 @@ function renderOrderMaterialsTable() {
             `;
         });
     }
-    
+
     tableHTML += `
                 </tbody>
             </table>
         </figure>
     `;
-    
+
     container.innerHTML = tableHTML;
     addOrderMaterialsSortEventListeners();
     updateOrderMaterialsSortIcons();
@@ -1087,7 +1130,7 @@ function renderOrderMaterialsTable() {
 
 function addOrderMaterialsTableEventListeners() {
     document.querySelectorAll('.clickable-material').forEach(cell => {
-        cell.addEventListener('click', function() {
+        cell.addEventListener('click', function () {
             const materialId = this.dataset.materialId;
             openDetailsModal(materialId);
         });
@@ -1096,7 +1139,7 @@ function addOrderMaterialsTableEventListeners() {
 
 function addOrderMaterialsSortEventListeners() {
     document.querySelectorAll('.sortable-order-materials').forEach(header => {
-        header.addEventListener('click', function() {
+        header.addEventListener('click', function () {
             const sortKey = this.dataset.sortKey;
             if (orderMaterialsSortColumn === sortKey) {
                 orderMaterialsSortOrder = orderMaterialsSortOrder === 'asc' ? 'desc' : 'asc';
