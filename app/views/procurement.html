@@ -1,6 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +8,9 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- ExcelJS for Excel export with full styling support -->
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <style>
         /* 系統狀態徽章 */
         .system-status-badge {
@@ -19,12 +22,13 @@
             border: 1px solid #e0e0e0;
             border-radius: 20px;
             font-size: 0.85em;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             z-index: 1000;
             display: flex;
             align-items: center;
             gap: 0.5em;
         }
+
         .status-indicator {
             width: 8px;
             height: 8px;
@@ -32,19 +36,30 @@
             background: #4caf50;
             animation: pulse 2s ease-in-out infinite;
         }
+
         .status-indicator.loading {
             background: #ff9800;
         }
+
         .status-indicator.error {
             background: #f44336;
             animation: none;
         }
+
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
         }
     </style>
 </head>
+
 <body>
     <!-- 🆕 系統狀態徽章（右上角） -->
     <div class="system-status-badge">
@@ -57,7 +72,7 @@
             <h1>生產資訊中心</h1>
             <p>一個整合工單料況、庫存與規格的查詢系統</p>
         </header>
-        
+
         <nav>
             <ul>
                 <li><a href="/procurement" class="active">採購儀表板</a></li>
@@ -70,7 +85,7 @@
 
         <section id="procurement-dashboard">
             <h2>採購缺料總覽儀表板(只顯示缺料或採購不足項目)</h2>
-            
+
             <!-- 🆕 統計圖卡區域 -->
             <section id="stats-cards-section" style="margin-bottom: 2em;">
                 <h3>📊 快速篩選</h3>
@@ -138,25 +153,29 @@
                 <div id="current-filter-badge" style="margin-top: 1em; display: none;">
                     <span class="badge">
                         目前篩選: <strong id="current-filter-text">全部</strong>
-                        <button id="clear-stat-filter-btn" style="margin-left: 0.5em; padding: 0.2em 0.5em; font-size: 0.9em;">✖ 清除</button>
+                        <button id="clear-stat-filter-btn"
+                            style="margin-left: 0.5em; padding: 0.2em 0.5em; font-size: 0.9em;">✖ 清除</button>
                     </span>
                 </div>
             </section>
-            
+
             <!-- 搜尋與篩選區域 -->
             <div class="filter-controls">
                 <div class="filter-row">
                     <input type="text" id="material-filter-input" placeholder="輸入物料編號或物料說明進行搜尋">
                     <button id="apply-filter-btn">搜尋</button>
                     <button id="clear-filter-btn" class="secondary">清除搜尋</button>
-                    
+
                     <label for="buyer-filter-select" style="margin-left: 1em;">採購人員：</label>
                     <select id="buyer-filter-select">
                         <option value="">全部</option>
                     </select>
+
+                    <button id="export-excel-btn"
+                        style="margin-left: 1em; background-color: #28a745; border-color: #28a745;">📊 匯出 Excel</button>
                 </div>
             </div>
-            
+
             <!-- 頁籤導覽 -->
             <nav id="dashboard-tabs-nav">
                 <ul>
@@ -164,7 +183,7 @@
                     <li><a href="#" class="dashboard-tab-link" data-tab="tab-finished-dashboard">成品儀表板</a></li>
                 </ul>
             </nav>
-            
+
             <!-- 頁籤內容 -->
             <div id="dashboard-tabs-content">
                 <div id="tab-main-dashboard" class="dashboard-tab-content active">
@@ -185,31 +204,35 @@
                 <a href="#close" aria-label="Close" class="close"></a>
                 <h3 id="modal-title">物料詳情</h3>
             </header>
-            
+
             <!-- 庫存總覽區塊 -->
             <div id="stock-summary-section">
                 <h4>庫存總覽</h4>
                 <p>未限制庫存: <span id="unrestricted-stock"></span></p>
                 <p>品質檢驗中: <span id="inspection-stock"></span></p>
                 <p>已訂未入: <span id="on-order-stock"></span></p>
-                
+
                 <!-- 替代品資訊區域 -->
                 <div id="substitute-section">
                     <!-- 替代品表格將會被動態插入這裡 -->
                 </div>
-                
+
                 <!-- 🆕 缺料警示 -->
-                <div id="shortage-alert" style="margin-top: 1em; padding: 0.8em; background: #fff3cd; border-left: 4px solid #ff9800; border-radius: 4px; display: none;">
-                    <p style="margin: 0.3em 0; font-weight: bold;">⚠️ 當前缺料: <strong id="current-shortage-qty" style="color: #d32f2f;">0</strong> 件</p>
+                <div id="shortage-alert"
+                    style="margin-top: 1em; padding: 0.8em; background: #fff3cd; border-left: 4px solid #ff9800; border-radius: 4px; display: none;">
+                    <p style="margin: 0.3em 0; font-weight: bold;">⚠️ 當前缺料: <strong id="current-shortage-qty"
+                            style="color: #d32f2f;">0</strong> 件</p>
                     <p style="margin: 0.3em 0;">📅 開始缺料需求日: <strong id="earliest-demand-date">-</strong></p>
                 </div>
-                
+
                 <!-- 🆕 交期維護表單 -->
-                <div id="delivery-form-section" style="margin-top: 1.5em; padding: 1.2em; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
-                    <h4 style="margin-bottom: 0.8em; color: var(--pico-primary); display: flex; align-items: center; gap: 0.5em;">
+                <div id="delivery-form-section"
+                    style="margin-top: 1.5em; padding: 1.2em; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+                    <h4
+                        style="margin-bottom: 0.8em; color: var(--pico-primary); display: flex; align-items: center; gap: 0.5em;">
                         📅 交期維護
                     </h4>
-                    
+
                     <form id="delivery-form">
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em;">
                             <div>
@@ -218,34 +241,36 @@
                                 </label>
                                 <input type="date" id="delivery-date" name="delivery_date" required>
                             </div>
-                            
+
                             <div>
                                 <label for="delivery-qty">
                                     採購數量 <span style="color: red;">*</span>
                                 </label>
-                                <input type="number" id="delivery-qty" name="quantity" min="1" placeholder="數量" required>
+                                <input type="number" id="delivery-qty" name="quantity" min="1" placeholder="數量"
+                                    required>
                             </div>
                         </div>
-                        
+
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-top: 1em;">
                             <div>
                                 <label for="po-number">採購單號</label>
                                 <input type="text" id="po-number" name="po_number" placeholder="PO-2024-001">
                             </div>
-                            
+
                             <div>
                                 <label for="supplier">供應商</label>
                                 <input type="text" id="supplier" name="supplier" placeholder="供應商名稱">
                             </div>
                         </div>
-                        
+
                         <div style="margin-top: 1em;">
                             <label for="delivery-notes">備註</label>
                             <textarea id="delivery-notes" name="notes" rows="2" placeholder="交期說明、特殊情況等..."></textarea>
                         </div>
-                        
+
                         <!-- 🆕 即時計算結果 -->
-                        <div id="delivery-calculation" style="margin-top: 1em; padding: 0.8em; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; display: none;">
+                        <div id="delivery-calculation"
+                            style="margin-top: 1em; padding: 0.8em; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; display: none;">
                             <p style="margin: 0.3em 0; color: #2e7d32; font-weight: bold;">
                                 ✅ 到貨後可用庫存: <strong id="calc-available-stock">0</strong> 件
                             </p>
@@ -253,17 +278,19 @@
                                 ✅ 能滿足至: <strong id="calc-satisfy-until">-</strong> 的需求
                             </p>
                         </div>
-                        
+
                         <div style="margin-top: 1em; display: flex; gap: 0.5em;">
                             <button type="button" id="save-delivery-btn" style="flex: 1;">💾 儲存交期</button>
-                            <button type="button" id="clear-delivery-btn" class="secondary" style="flex: 1;">🗑️ 清除</button>
+                            <button type="button" id="clear-delivery-btn" class="secondary" style="flex: 1;">🗑️
+                                清除</button>
                         </div>
                     </form>
-                    
+
                     <!-- 🆕 交期歷史（可選） -->
                     <details style="margin-top: 1em;">
                         <summary style="cursor: pointer; font-weight: bold; color: #666;">📜 查看交期歷史</summary>
-                        <div id="delivery-history" style="margin-top: 0.5em; font-size: 0.9em; padding: 0.5em; background: white; border-radius: 4px;">
+                        <div id="delivery-history"
+                            style="margin-top: 0.5em; font-size: 0.9em; padding: 0.5em; background: white; border-radius: 4px;">
                             <!-- 動態載入歷史記錄 -->
                         </div>
                     </details>
@@ -298,4 +325,5 @@
     <script src="{{ url_for('static', filename='js/delivery-helper.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
+
 </html>

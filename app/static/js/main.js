@@ -858,6 +858,14 @@ function setupProcurementFilter() {
             renderMaterialsTable();
         });
     }
+
+    // 🆕 Excel 匯出按鈕
+    const exportExcelBtn = document.getElementById('export-excel-btn');
+    if (exportExcelBtn) {
+        exportExcelBtn.addEventListener('click', function () {
+            exportToExcel();
+        });
+    }
 }
 
 // 設定儀表板頁籤切換
@@ -1163,4 +1171,208 @@ function updateOrderMaterialsSortIcons() {
             sortIcon.textContent = orderMaterialsSortOrder === 'asc' ? ' ▲' : ' ▼';
         }
     });
+}
+
+// ==================== Excel 匯出功能 ====================
+
+/**
+ * 匯出當前儀表板資料到 Excel (使用 ExcelJS)
+ */
+async function exportToExcel() {
+    // 檢查 ExcelJS 是否已載入
+    if (typeof ExcelJS === 'undefined') {
+        alert('Excel 匯出功能載入失敗,請重新整理頁面後再試。');
+        return;
+    }
+
+    // 根據當前儀表板類型選擇資料源
+    const sourceData = currentDashboardType === 'main' ? currentMaterialsData : currentFinishedMaterialsData;
+    const dashboardName = currentDashboardType === 'main' ? '主儀表板' : '成品儀表板';
+
+    // 複製資料並應用篩選條件
+    let processedData = [...sourceData];
+
+    // 應用物料篩選
+    if (currentFilterKeyword) {
+        const keyword = currentFilterKeyword.toLowerCase();
+        processedData = processedData.filter(m =>
+            (m['物料'] && m['物料'].toLowerCase().includes(keyword)) ||
+            (m['物料說明'] && m['物料說明'].toLowerCase().includes(keyword))
+        );
+    }
+
+    // 應用採購人員篩選
+    if (currentBuyerKeyword) {
+        const buyerKeyword = currentBuyerKeyword.toLowerCase();
+        processedData = processedData.filter(m =>
+            m['採購人員'] && m['採購人員'].toLowerCase().includes(buyerKeyword)
+        );
+    }
+
+    // 應用過濾 (只顯示有目前缺料或預計缺料的項目)
+    processedData = processedData.filter(m => m.current_shortage > 0 || m.projected_shortage > 0);
+
+    // 應用統計圖卡篩選
+    if (typeof filterMaterialsByStats === 'function') {
+        processedData = filterMaterialsByStats(processedData);
+    }
+
+    // 智慧排序
+    if (typeof sortMaterialsByPriority === 'function') {
+        processedData = sortMaterialsByPriority(processedData);
+    }
+
+    // 檢查是否有資料
+    if (processedData.length === 0) {
+        alert('目前沒有符合條件的資料可以匯出。');
+        return;
+    }
+
+    try {
+        // 建立新的工作簿
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet(dashboardName);
+
+        // 定義欄位
+        worksheet.columns = [
+            { header: '物料', key: 'material', width: 15 },
+            { header: '物料說明', key: 'description', width: 30 },
+            { header: '採購人員', key: 'buyer', width: 12 },
+            { header: '預計交貨日', key: 'delivery_date', width: 12 },
+            { header: '總需求', key: 'total_demand', width: 10 },
+            { header: '庫存', key: 'stock', width: 10 },
+            { header: '品檢中', key: 'inspection', width: 10 },
+            { header: '已訂未入', key: 'on_order', width: 10 },
+            { header: '目前缺料', key: 'current_shortage', width: 10 },
+            { header: '預計缺料', key: 'projected_shortage', width: 10 }
+        ];
+
+        // 設定標題列樣式
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        // 添加資料列
+        processedData.forEach((m) => {
+            // 格式化預計交貨日期
+            let deliveryDateStr = '';
+            if (m.delivery_date) {
+                const date = new Date(m.delivery_date);
+                deliveryDateStr = date.toISOString().split('T')[0];
+            }
+
+            const row = worksheet.addRow({
+                material: m['物料'] || '',
+                description: m['物料說明'] || '',
+                buyer: m['採購人員'] || '',
+                delivery_date: deliveryDateStr,
+                total_demand: m.total_demand ? parseFloat(m.total_demand.toFixed(0)) : 0,
+                stock: m.unrestricted_stock ? parseFloat(m.unrestricted_stock.toFixed(0)) : 0,
+                inspection: m.inspection_stock ? parseFloat(m.inspection_stock.toFixed(0)) : 0,
+                on_order: m.on_order_stock ? parseFloat(m.on_order_stock.toFixed(0)) : 0,
+                current_shortage: m.current_shortage ? parseFloat(m.current_shortage.toFixed(0)) : 0,
+                projected_shortage: m.projected_shortage ? parseFloat(m.projected_shortage.toFixed(0)) : 0
+            });
+
+            // 🆕 如果是 30 日內缺料項目,設定綠色背景
+            if (m.shortage_within_30_days) {
+                row.eachCell((cell) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFC8E6C9' } // 淡綠色背景
+                    };
+                });
+            }
+        });
+
+        // 自動調整欄位寬度(根據內容)
+        worksheet.columns.forEach((column, index) => {
+            let maxLength = column.header.length;
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber > 1) { // 跳過標題列
+                    const cell = row.getCell(index + 1);
+                    const cellValue = cell.value ? cell.value.toString() : '';
+                    // 計算字元寬度 (中文字元算2個單位)
+                    let length = 0;
+                    for (let i = 0; i < cellValue.length; i++) {
+                        length += cellValue.charCodeAt(i) > 127 ? 2 : 1;
+                    }
+                    maxLength = Math.max(maxLength, length);
+                }
+            });
+            column.width = Math.min(maxLength + 2, 50); // 設定最大寬度為 50
+        });
+
+        // 生成檔案名稱
+        const today = new Date();
+        const dateStr = today.toISOString().split('T')[0];
+        const fileName = `採購儀表板_${dashboardName}_${dateStr}.xlsx`;
+
+        // 生成 Excel 檔案並下載
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+        // 使用 FileSaver.js 下載檔案
+        if (typeof saveAs !== 'undefined') {
+            saveAs(blob, fileName);
+        } else {
+            // 備用方案:使用原生下載
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        console.log(`Excel 檔案已匯出: ${fileName}`);
+    } catch (error) {
+        console.error('匯出 Excel 時發生錯誤:', error);
+        alert('匯出 Excel 時發生錯誤,請稍後再試。');
+    }
+}
+
+/**
+ * 計算每個欄位的最佳寬度
+ * @param {Array} data - 二維陣列資料 (包含標題列)
+ * @returns {Array} - 欄位寬度設定陣列
+ */
+function calculateColumnWidths(data) {
+    const columnWidths = [];
+
+    // 取得欄位數量
+    const numCols = data[0].length;
+
+    // 為每個欄位計算最大寬度
+    for (let col = 0; col < numCols; col++) {
+        let maxWidth = 10; // 最小寬度
+
+        for (let row = 0; row < data.length; row++) {
+            const cellValue = data[row][col];
+            if (cellValue) {
+                const cellStr = String(cellValue);
+                // 計算字元寬度 (中文字元算2個單位,英文算1個單位)
+                let width = 0;
+                for (let i = 0; i < cellStr.length; i++) {
+                    const char = cellStr.charCodeAt(i);
+                    // 判斷是否為中文字元 (簡單判斷)
+                    if (char > 127) {
+                        width += 2;
+                    } else {
+                        width += 1;
+                    }
+                }
+                maxWidth = Math.max(maxWidth, width);
+            }
+        }
+
+        // 設定欄位寬度 (加一點緩衝空間)
+        columnWidths.push({ wch: maxWidth + 2 });
+    }
+
+    return columnWidths;
 }
