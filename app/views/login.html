@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body>
     <main class="container">
         <header>
@@ -19,15 +21,15 @@
         <section>
             <h2>登入</h2>
             {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    <div class="flash-messages">
-                        {% for category, message in messages %}
-                            <p class="{{ category }}">{{ message }}</p>
-                        {% endfor %}
-                    </div>
-                {% endif %}
+            {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                <p class="{{ category }}">{{ message }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
             {% endwith %}
-            <form action="{{ url_for('login') }}" method="post">
+            <form action="{{ url_for('auth.login') }}" method="post">
                 <label for="username">用戶名:</label>
                 <input type="text" id="username" name="username" required>
 
@@ -39,4 +41,5 @@
         </section>
     </main>
 </body>
+
 </html>
