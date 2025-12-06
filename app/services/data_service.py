@@ -78,10 +78,18 @@ class DataService:
                 app_logger.error(f"讀取物料採購人員對應失敗: {e}")
             
             # --- 新增邏輯：成品撥料分流 ---
-            # 計算 base_material_id
+            # 1. 取得撥料.XLSX 的所有物料前10碼
+            wip_base_ids = set(df_wip_parts['物料'].astype(str).str[:10])
+            app_logger.info(f"撥料.XLSX 包含 {len(wip_base_ids)} 個不同的前10碼")
+            
+            # 2. 合併撥料前10碼和組件需求前10碼
+            valid_base_ids = valid_base_ids | wip_base_ids
+            app_logger.info(f"合併後的有效前10碼: {len(valid_base_ids)} 個")
+            
+            # 3. 計算成品撥料的 base_material_id
             df_finished_parts['base_material_id'] = df_finished_parts['物料'].astype(str).str[:10]
             
-            # 分流：符合組件需求的 vs 不符合的
+            # 4. 分流：符合條件的 vs 不符合的
             mask_valid = df_finished_parts['base_material_id'].isin(valid_base_ids)
             df_finished_parts_valid = df_finished_parts[mask_valid].copy()
             df_finished_parts_invalid = df_finished_parts[~mask_valid].copy()
