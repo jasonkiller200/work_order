@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 import os
 from datetime import datetime
-from app.models.database import db, ComponentRequirement, Material, User
+from app.models.database import db, ComponentRequirement, Material, User, PurchaseOrder
 from sqlalchemy.orm import joinedload
 
 from app.config import FilePaths
@@ -51,14 +51,28 @@ class DataService:
             except Exception as e:
                 app_logger.error(f"讀取組件需求明細失敗: {e}")
 
-            # 2. 讀取物料與採購人員對應（使用前10碼）
+            # 2. 讀取採購人員名稱對應
+            buyer_id_to_name_map = {}
+            try:
+                buyers = User.query.filter_by(role='buyer').all()
+                buyer_id_to_name_map = {buyer.id: buyer.full_name for buyer in buyers}
+                app_logger.info(f"已載入 {len(buyer_id_to_name_map)} 筆採購人員資料")
+            except Exception as e:
+                app_logger.error(f"讀取採購人員資料失敗: {e}")
+
+            # 3. 讀取物料與採購人員對應（使用前10碼）
             material_buyer_map = {}
             try:
-                materials = Material.query.options(joinedload(Material.buyer)).filter(Material.buyer_id.isnot(None)).all()
+                materials = Material.query.filter(Material.buyer_id.isnot(None)).all()
                 for m in materials:
-                    if m.buyer and m.base_material_id:
-                        # 使用前10碼作為 key
-                        material_buyer_map[m.base_material_id] = m.buyer.full_name
+                    if m.buyer_id and m.base_material_id:
+                        # 使用前10碼作為 key，值為採購人員姓名
+                        buyer_name = buyer_id_to_name_map.get(m.buyer_id)
+                        if buyer_name:
+                            material_buyer_map[m.base_material_id] = buyer_name
+                        else:
+                             # 如果在 User 表中找不到對應的採購人員，直接使用資料庫中的 ID
+                             material_buyer_map[m.base_material_id] = m.buyer_id
                 app_logger.info(f"已載入 {len(material_buyer_map)} 筆物料採購人員對應 (使用前10碼)")
             except Exception as e:
                 app_logger.error(f"讀取物料採購人員對應失敗: {e}")
@@ -186,14 +200,25 @@ class DataService:
     
     @staticmethod
     def _load_on_order_data():
-        """載入已訂未交資料"""
+        """載入已訂未交資料並同步到資料庫"""
         on_order_path = FilePaths.ON_ORDER_FILE
         
-        if os.path.exists(on_order_path):
-            return pd.read_excel(on_order_path)
-        else:
-            app_logger.warning("警告：找不到 '已訂未交.XLSX' 檔案。在途數量將全部視為 0。")
+        if not os.path.exists(on_order_path):
+            app_logger.warning("警告：找不到 '已訂未交.XLSX' 檔案。")
             return pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
+        
+        # 讀取 Excel 檔案
+        df_on_order = pd.read_excel(on_order_path)
+        app_logger.info(f"已讀取 {len(df_on_order)} 筆採購單資料")
+        
+        # 同步到資料庫
+        try:
+            DataService._sync_purchase_orders_to_db(df_on_order)
+            app_logger.info("採購單同步完成")
+        except Exception as e:
+            app_logger.error(f"採購單同步失敗: {e}", exc_info=True)
+        
+        return df_on_order
     
     @staticmethod
     def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None, demand_details_map=None):
@@ -366,18 +391,22 @@ class DataService:
                     description = str(row['物料說明']) if pd.notna(row['物料說明']) else ''
                     base_material_id = material_id[:10] if len(material_id) >= 10 else material_id
                     
-                    # 檢查物料是否已存在
-                    existing_material = Material.query.filter_by(material_id=material_id).first()
+                    # 檢查前10碼是否已存在（任何版本）
+                    existing_material = Material.query.filter_by(base_material_id=base_material_id).first()
                     
                     if existing_material:
                         skip_count += 1
-                        continue
+                        continue  # 前10碼已存在，跳過
                     
                     # 查找採購人員
                     buyer = None
-                    buyer_name = material_buyer_map.get(base_material_id)
-                    if buyer_name:
-                        buyer = User.query.filter_by(full_name=buyer_name, role='buyer').first()
+                    buyer_value = material_buyer_map.get(base_material_id)
+                    if buyer_value:
+                        # 先嘗試用 full_name 查找
+                        buyer = User.query.filter_by(full_name=buyer_value, role='buyer').first()
+                        # 如果找不到，再嘗試用 id 查找
+                        if not buyer:
+                            buyer = User.query.filter_by(id=buyer_value, role='buyer').first()
                     
                     # 建立新物料記錄
                     new_material = Material(
@@ -461,3 +490,232 @@ class DataService:
             shortage_flags.append(has_shortage)
         
         return pd.Series(shortage_flags, index=df_materials.index)
+    
+    @staticmethod
+    def _sync_purchase_orders_to_db(df_on_order):
+        """
+        同步採購單到資料庫
+        
+        功能：
+        1. 更新/建立 purchase_orders 表
+        2. 同步物料的 buyer_id（前10碼匹配）
+        3. 智慧判斷已刪除採購單的狀態
+        """
+        from datetime import timedelta
+        
+        # 建立 Excel 中的採購單號集合
+        excel_po_numbers = set()
+        
+        # 建立物料 -> 採購群組的對應表（用於同步 buyer_id）
+        material_buyer_map = {}
+        
+        success_count = 0
+        error_count = 0
+        
+        for index, row in df_on_order.iterrows():
+            try:
+                # 建立唯一的採購單號
+                po_number = f"{row['採購文件']}-{row['項目']}"
+                excel_po_numbers.add(po_number)
+                
+                material_id = str(row['物料']).strip()
+                base_material_id = material_id[:10] if len(material_id) >= 10 else material_id
+                
+                # 處理採購群組（補零到3位數）
+                purchase_group = DataService._process_purchase_group(row.get('採購群組'))
+                
+                # 記錄物料的採購群組（用於後續同步）
+                if purchase_group:
+                    material_buyer_map[material_id] = {
+                        'base_material_id': base_material_id,
+                        'purchase_group': purchase_group
+                    }
+                
+                # 確保物料存在
+                DataService._ensure_material_exists(
+                    material_id, 
+                    base_material_id, 
+                    purchase_group,
+                    str(row.get('短文', ''))
+                )
+                
+                # 更新/建立採購單
+                DataService._update_or_create_purchase_order(row, po_number, material_id, purchase_group)
+                
+                success_count += 1
+                
+                # 每 100 筆提交一次
+                if success_count % 100 == 0:
+                    db.session.commit()
+                    app_logger.info(f"已處理 {success_count} 筆採購單...")
+            
+            except Exception as e:
+                error_count += 1
+                app_logger.error(f"處理採購單失敗: {e}")
+                continue
+        
+        # 最後提交
+        db.session.commit()
+        
+        # 智慧判斷已刪除的採購單
+        DataService._handle_deleted_purchase_orders(excel_po_numbers)
+        
+        # 同步物料的 buyer_id（前10碼匹配）
+        DataService._sync_materials_buyer_id(material_buyer_map)
+        
+        app_logger.info(f"採購單同步完成: 成功 {success_count} 筆, 失敗 {error_count} 筆")
+    
+    @staticmethod
+    def _process_purchase_group(pg_value):
+        """處理採購群組，補零到3位數"""
+        if pd.isna(pg_value):
+            return None
+        
+        if isinstance(pg_value, (int, float)):
+            return str(int(pg_value)).zfill(3)
+        else:
+            pg_str = str(pg_value).strip()
+            if pg_str.isdigit():
+                return pg_str.zfill(3)
+            else:
+                return pg_str
+    
+    @staticmethod
+    def _ensure_material_exists(material_id, base_material_id, buyer_id, description):
+        """確保物料存在，不存在則建立（以前10碼為基準）"""
+        # 檢查前10碼是否已存在（任何版本）
+        existing = Material.query.filter_by(base_material_id=base_material_id).first()
+        
+        if not existing:
+            # 只在前10碼不存在時才建立新物料
+            material = Material(
+                material_id=material_id,
+                base_material_id=base_material_id,
+                buyer_id=buyer_id,
+                description=description if pd.notna(description) else None,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.session.add(material)
+            app_logger.info(f"建立新物料（前10碼）: {base_material_id} (使用版本: {material_id})")
+    
+    @staticmethod
+    def _update_or_create_purchase_order(row, po_number, material_id, purchase_group):
+        """更新或建立採購單記錄"""
+        po = PurchaseOrder.query.filter_by(po_number=po_number).first()
+        
+        if not po:
+            po = PurchaseOrder()
+            po.po_number = po_number
+        
+        # 更新所有欄位
+        po.material_id = material_id
+        po.supplier = str(row['供應商/供應工廠']) if pd.notna(row.get('供應商/供應工廠')) else None
+        po.item_number = int(row['項目']) if pd.notna(row.get('項目')) else None
+        po.description = str(row['短文']) if pd.notna(row.get('短文')) else None
+        
+        if pd.notna(row.get('文件日期')):
+            po.document_date = pd.to_datetime(row['文件日期']).date()
+        
+        po.document_type = str(row['採購文件類型']) if pd.notna(row.get('採購文件類型')) else None
+        po.purchase_group = purchase_group
+        po.plant = str(row['工廠']) if pd.notna(row.get('工廠')) else None
+        
+        if pd.notna(row.get('儲存地點')):
+            po.storage_location = str(int(row['儲存地點']))
+        
+        # 數量
+        po.ordered_quantity = float(row['採購單數量']) if pd.notna(row.get('採購單數量')) else 0
+        po.outstanding_quantity = float(row['仍待交貨〈數量〉']) if pd.notna(row.get('仍待交貨〈數量〉')) else 0
+        po.received_quantity = po.ordered_quantity - po.outstanding_quantity
+        
+        # 狀態計算
+        if po.outstanding_quantity == 0:
+            po.status = 'completed'
+        elif po.received_quantity > 0:
+            po.status = 'partial'
+        else:
+            po.status = 'pending'
+        
+        if not PurchaseOrder.query.filter_by(po_number=po_number).first():
+            db.session.add(po)
+    
+    @staticmethod
+    def _handle_deleted_purchase_orders(excel_po_numbers):
+        """
+        智慧判斷已刪除的採購單狀態
+        
+        邏輯：
+        1. 如果待交數量為 0 → 已完成
+        2. 如果超過 90 天未更新 → 假設已結案
+        3. 其他情況 → 標記為取消
+        """
+        from datetime import timedelta
+        
+        # 查詢資料庫中所有未完成的採購單
+        all_db_pos = PurchaseOrder.query.filter(
+            PurchaseOrder.status.in_(['pending', 'partial'])
+        ).all()
+        
+        updated_count = 0
+        
+        for po in all_db_pos:
+            # 如果採購單在 Excel 中，跳過（不是已刪除）
+            if po.po_number in excel_po_numbers:
+                continue
+            
+            # 已刪除的採購單，進行智慧判斷
+            if po.outstanding_quantity <= 0:
+                # 待交數量為 0，肯定已交貨
+                po.status = 'completed'
+                po.actual_delivery_date = datetime.now().date()
+                po.received_quantity = po.ordered_quantity
+                updated_count += 1
+                app_logger.info(f"採購單 {po.po_number} 待交數量為0，標記為已完成")
+            
+            elif po.updated_at and po.updated_at < (datetime.utcnow() - timedelta(days=90)):
+                # 超過 90 天未更新，假設已結案
+                po.status = 'completed'
+                po.actual_delivery_date = datetime.now().date()
+                po.received_quantity = po.ordered_quantity
+                po.outstanding_quantity = 0
+                updated_count += 1
+                app_logger.info(f"採購單 {po.po_number} 超過90天未更新，標記為已完成")
+            
+            else:
+                # 其他情況標記為取消
+                po.status = 'cancelled'
+                updated_count += 1
+                app_logger.info(f"採購單 {po.po_number} 從 Excel 中刪除，標記為已取消")
+        
+        if updated_count > 0:
+            db.session.commit()
+            app_logger.info(f"已更新 {updated_count} 個已刪除採購單的狀態")
+    
+    @staticmethod
+    def _sync_materials_buyer_id(material_buyer_map):
+        """
+        同步物料的 buyer_id（前10碼匹配）
+        
+        策略：
+        以 Excel 為準，更新所有相同前10碼的物料的 buyer_id（無論原本是否有值）
+        """
+        updated_count = 0
+        
+        for material_id, info in material_buyer_map.items():
+            base_material_id = info['base_material_id']
+            purchase_group = info['purchase_group']
+            
+            # 更新所有相同前10碼的物料（以 Excel 為準）
+            related_materials = Material.query.filter(
+                Material.base_material_id == base_material_id
+            ).all()
+            
+            for material in related_materials:
+                material.buyer_id = purchase_group
+                material.updated_at = datetime.utcnow()
+                updated_count += 1
+        
+        if updated_count > 0:
+            db.session.commit()
+            app_logger.info(f"已更新 {updated_count} 個物料的採購人員資訊（前10碼匹配）")

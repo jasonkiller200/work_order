@@ -10,7 +10,7 @@ class User(db.Model):
     """使用者（採購人員）"""
     __tablename__ = 'users'
     
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(10), primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255))
     full_name = db.Column(db.String(100))
@@ -40,7 +40,7 @@ class Material(db.Model):
     base_unit = db.Column(db.String(20))
     
     # 採購資訊
-    buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    buyer_id = db.Column(db.String(10), db.ForeignKey('users.id'))
     lead_time_days = db.Column(db.Integer, default=0)
     
     # 系統欄位
@@ -131,10 +131,25 @@ class PurchaseOrder(db.Model):
     po_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
     material_id = db.Column(db.String(50), db.ForeignKey('materials.material_id'), nullable=False, index=True)
     
+    # 🆕 採購單詳細資訊
+    supplier = db.Column(db.String(200))  # 供應商/供應工廠
+    item_number = db.Column(db.Integer)  # 項目編號
+    description = db.Column(db.String(500))  # 短文(物料說明)
+    document_date = db.Column(db.Date)  # 文件日期
+    document_type = db.Column(db.String(20))  # 採購文件類型
+    purchase_group = db.Column(db.String(10))  # 採購群組 (字串以保留前導零)
+    plant = db.Column(db.String(10))  # 工廠
+    storage_location = db.Column(db.String(10))  # 儲存地點
+    
     # 採購資訊
     ordered_quantity = db.Column(db.Numeric(15, 3), nullable=False)
     received_quantity = db.Column(db.Numeric(15, 3), default=0)
     outstanding_quantity = db.Column(db.Numeric(15, 3), nullable=False)
+    
+    # 🆕 價格資訊
+    unit_price = db.Column(db.Numeric(15, 2))  # 淨價
+    currency = db.Column(db.String(10))  # 幣別
+    total_value = db.Column(db.Numeric(15, 2))  # 仍待交貨值
     
     # 交期資訊
     original_delivery_date = db.Column(db.Date)
@@ -142,7 +157,7 @@ class PurchaseOrder(db.Model):
     actual_delivery_date = db.Column(db.Date)
     
     # 採購人員
-    buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    buyer_id = db.Column(db.String(10), db.ForeignKey('users.id'))
     
     # 狀態
     status = db.Column(db.String(20), default='pending')  # pending, partial, completed, cancelled
@@ -194,7 +209,7 @@ class DeliveryUpdate(db.Model):
     update_reason = db.Column(db.Text)
     
     # 更新人員
-    updated_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    updated_by = db.Column(db.String(10), db.ForeignKey('users.id'))
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
