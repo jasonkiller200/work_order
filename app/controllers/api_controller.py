@@ -12,7 +12,7 @@ from app.services.traffic_service import TrafficService
 from app.models.material import MaterialDAO
 from app.models.order import OrderDAO
 from app.models.traffic import TrafficDAO
-from app.models.database import db, User, Material
+from app.models.database import db, User, Material, PurchaseOrder
 from app.utils.decorators import cache_required
 from app.utils.helpers import format_date
 
@@ -641,10 +641,29 @@ def save_delivery():
         
         form_data = request.get_json()
         material_id = form_data.get('material_id')
+        po_number = form_data.get('po_number')
         
         if not material_id:
             return jsonify({"success": False, "error": "缺少物料編號"}), 400
         
+        # 如果有提供採購單號，更新採購單資料庫
+        if po_number:
+            try:
+                po = PurchaseOrder.query.filter_by(po_number=po_number).first()
+                if po:
+                    new_date_str = form_data.get('expected_date')
+                    if new_date_str:
+                        po.updated_delivery_date = datetime.strptime(new_date_str, '%Y-%m-%d').date()
+                        po.status = 'updated' # 標記為已更新
+                        db.session.commit()
+                        app_logger.info(f"已更新採購單 {po_number} 的交期為 {new_date_str}")
+                else:
+                    app_logger.warning(f"找不到採購單 {po_number}，無法更新資料庫")
+            except Exception as db_error:
+                app_logger.error(f"更新採購單資料庫失敗: {db_error}", exc_info=True)
+                db.session.rollback()
+        
+        # 繼續執行原有的 JSON 檔案儲存邏輯 (作為備份或歷史記錄)
         delivery_file = 'instance/delivery_schedules.json'
         
         # 載入現有資料
@@ -689,3 +708,67 @@ def save_delivery():
     except Exception as e:
         app_logger.error(f"儲存交期失敗: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route('/purchase_orders/<material_id>')
+@cache_required
+def get_purchase_orders_by_material(material_id):
+    """
+    根據物料編號查詢相關的採購單
+    """
+    try:
+        # 查詢該物料的所有採購單，並按交貨日期排序
+        purchase_orders = PurchaseOrder.query.filter_by(material_id=material_id).order_by(PurchaseOrder.original_delivery_date).all()
+        
+        result = []
+        for po in purchase_orders:
+            result.append({
+                'po_number': po.po_number,
+                'supplier': po.supplier,
+                'ordered_quantity': float(po.ordered_quantity),
+                'received_quantity': float(po.received_quantity),
+                'outstanding_quantity': float(po.outstanding_quantity),
+                'original_delivery_date': po.original_delivery_date.strftime('%Y-%m-%d') if po.original_delivery_date else '',
+                'updated_delivery_date': po.updated_delivery_date.strftime('%Y-%m-%d') if po.updated_delivery_date else '',
+                'status': po.status,
+                'purchase_group': po.purchase_group,
+                'description': po.description
+            })
+            
+        return jsonify(result)
+        
+    except Exception as e:
+        app_logger.error(f"查詢物料 {material_id} 的採購單失敗: {e}", exc_info=True)
+        return jsonify({"error": "查詢採購單失敗"}), 500
+
+@api_bp.route('/purchase_order/<po_number>')
+@cache_required
+def get_purchase_order_detail(po_number):
+    """
+    根據採購單號查詢詳細資訊
+    """
+    try:
+        po = PurchaseOrder.query.filter_by(po_number=po_number).first()
+        
+        if not po:
+            return jsonify({"error": "找不到該採購單"}), 404
+            
+        return jsonify({
+            'po_number': po.po_number,
+            'material_id': po.material_id,
+            'supplier': po.supplier,
+            'ordered_quantity': float(po.ordered_quantity),
+            'received_quantity': float(po.received_quantity),
+            'outstanding_quantity': float(po.outstanding_quantity),
+            'original_delivery_date': po.original_delivery_date.strftime('%Y-%m-%d') if po.original_delivery_date else '',
+            'updated_delivery_date': po.updated_delivery_date.strftime('%Y-%m-%d') if po.updated_delivery_date else '',
+            'status': po.status,
+            'purchase_group': po.purchase_group,
+            'description': po.description,
+            'item_number': po.item_number,
+            'plant': po.plant,
+            'storage_location': po.storage_location
+        })
+        
+    except Exception as e:
+        app_logger.error(f"查詢採購單 {po_number} 失敗: {e}", exc_info=True)
+        return jsonify({"error": "查詢採購單詳情失敗"}), 500

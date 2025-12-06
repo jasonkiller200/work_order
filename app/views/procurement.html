@@ -225,6 +225,28 @@
                     <p style="margin: 0.3em 0;">📅 開始缺料需求日: <strong id="earliest-demand-date">-</strong></p>
                 </div>
 
+                <!-- 🆕 相關採購單區塊 -->
+                <div id="purchase-orders-section" style="margin-top: 1em; display: none;">
+                    <h4 style="margin-bottom: 0.5em; color: var(--pico-primary);">📋 相關採購單</h4>
+                    <div style="overflow-x: auto;">
+                        <table style="font-size: 0.9em; width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>採購單號</th>
+                                    <th>供應商</th>
+                                    <th>數量</th>
+                                    <th>預計交期</th>
+                                    <th>狀態</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="purchase-orders-tbody">
+                                <!-- 動態載入 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- 🆕 交期維護表單 -->
                 <div id="delivery-form-section"
                     style="margin-top: 1.5em; padding: 1.2em; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
@@ -234,6 +256,15 @@
                     </h4>
 
                     <form id="delivery-form">
+                        <!-- 🆕 採購單選擇器 -->
+                        <div style="margin-bottom: 1em;">
+                            <label for="po-select">關聯採購單 (可選)</label>
+                            <select id="po-select">
+                                <option value="">-- 新建交期記錄 (不關聯採購單) --</option>
+                                <!-- 動態載入 -->
+                            </select>
+                        </div>
+
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em;">
                             <div>
                                 <label for="delivery-date">
