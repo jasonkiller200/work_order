@@ -1161,10 +1161,8 @@ function addOrderMaterialsSortEventListeners() {
                 orderMaterialsSortColumn = sortKey;
                 orderMaterialsSortOrder = 'asc';
             }
-            const orderId = document.getElementById('order-id-input').value.trim();
-            if (orderId) {
-                fetchOrderDetails(orderId); // 重新載入並渲染以應用排序
-            }
+            // 只重新渲染表格，不重新載入訂單
+            renderOrderMaterialsTable();
         });
     });
 }
