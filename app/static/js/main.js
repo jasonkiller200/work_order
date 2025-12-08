@@ -155,11 +155,11 @@ function renderMaterialsTable() {
         );
     }
 
-    // 應用採購人員篩選
+    // 應用採購人員篩選 (完全匹配)
     if (currentBuyerKeyword) {
         const buyerKeyword = currentBuyerKeyword.toLowerCase();
         processedData = processedData.filter(m =>
-            m['採購人員'] && m['採購人員'].toLowerCase().includes(buyerKeyword)
+            m['採購人員'] && m['採購人員'].toLowerCase() === buyerKeyword
         );
     }
 
@@ -348,8 +348,14 @@ function changePage(page) {
         finishedDashboardPage = page;
     }
     renderMaterialsTable();
-    // 滾動到頂部
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // 🆕 滾動到表格清單位置
+    setTimeout(() => {
+        const tabContent = document.getElementById('dashboard-tabs-content');
+        if (tabContent) {
+            tabContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, 100);
 }
 
 function addSortEventListeners() {
@@ -629,7 +635,7 @@ function openBuyerReferenceModal(materialId) {
                     if (data.reference_list && data.reference_list.length > 0) {
                         data.reference_list.forEach(item => {
                             const isCurrentMaterial = item['物料'] === materialId;
-                            const rowStyle = isCurrentMaterial ? ' style="background-color: #fff3cd; font-weight: bold;"' : '';
+                            const rowClass = isCurrentMaterial ? ' class="current-material-row"' : '';
                             const currentBuyer = item['採購人員'] || '';
 
                             // 建立採購人員下拉選單
@@ -641,7 +647,7 @@ function openBuyerReferenceModal(materialId) {
                             });
                             buyerSelect += `</select>`;
 
-                            buyerHTML += `<tr${rowStyle}>
+                            buyerHTML += `<tr${rowClass}>
                                 <td>${item['物料']}</td>
                                 <td>${item['物料說明']}</td>
                                 <td>${buyerSelect}</td>
@@ -665,8 +671,8 @@ function openBuyerReferenceModal(materialId) {
                     if (data.reference_list && data.reference_list.length > 0) {
                         data.reference_list.forEach(item => {
                             const isCurrentMaterial = item['物料'] === materialId;
-                            const rowStyle = isCurrentMaterial ? ' style="background-color: #fff3cd; font-weight: bold;"' : '';
-                            buyerHTML += `<tr${rowStyle}>
+                            const rowClass = isCurrentMaterial ? ' class="current-material-row"' : '';
+                            buyerHTML += `<tr${rowClass}>
                                 <td>${item['物料']}</td>
                                 <td>${item['物料說明']}</td>
                                 <td>${item['採購人員'] || '-'}</td>
@@ -1205,11 +1211,11 @@ async function exportToExcel() {
         );
     }
 
-    // 應用採購人員篩選
+    // 應用採購人員篩選 (完全匹配)
     if (currentBuyerKeyword) {
         const buyerKeyword = currentBuyerKeyword.toLowerCase();
         processedData = processedData.filter(m =>
-            m['採購人員'] && m['採購人員'].toLowerCase().includes(buyerKeyword)
+            m['採購人員'] && m['採購人員'].toLowerCase() === buyerKeyword
         );
     }
 

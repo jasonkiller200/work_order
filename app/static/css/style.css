@@ -1041,3 +1041,13 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 [data-theme="dark"] td {
     border-color: var(--border-default);
 }
+
+/* 當前物料高亮行 (用於採購人員變更視窗) */
+.current-material-row {
+    background-color: var(--bg-warning) !important;
+    font-weight: bold;
+}
+
+[data-theme="dark"] .current-material-row {
+    background-color: #3d2f1f !important; /* 暗黑模式下的深橘黃色 */
+}
