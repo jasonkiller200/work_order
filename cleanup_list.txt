@@ -1,0 +1,27 @@
+# 臨時腳本清理清單
+
+## 可以刪除的臨時腳本（已完成任務）
+check_buyer_field.py
+check_db_buyer.py  
+check_material_buyer.py
+check_specific_buyer.py
+check_tables.py
+check_purchase_order_file.py
+test_buyer_display.py
+test_data_loading.py
+fix_purchase_group_column.py
+consolidate_specifications_backup.py
+app_backup.py
+
+## 保留的腳本（有用途）
+clean_duplicate_materials.py - 清理重複資料（可能需要再次使用）
+test_optimized_materials.py - 測試腳本（驗證功能）
+test_purchase_order_sync.py - 測試腳本（驗證功能）
+fix_purchase_group_data.py - 修正資料腳本（記錄用）
+clear_materials_table_only.py - 清空表格工具（保留）
+import_component_requirements.py - 匯入組件需求（保留）
+import_materials_from_excel.py - 匯入物料（保留）
+migrate_purchase_orders.py - 資料庫遷移（保留）
+verify_integration.py - 驗證整合（保留）
+consolidate_specifications.py - 規格彙總（使用中）
+check_foreign_keys.py - 檢查外鍵（工具）

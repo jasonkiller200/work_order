@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="dark">
 
 <head>
     <meta charset="UTF-8">
@@ -8,56 +8,9 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <!-- ExcelJS for Excel export with full styling support -->
-    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
-    <style>
-        /* 系統狀態徽章 */
-        .system-status-badge {
-            position: fixed;
-            top: 1em;
-            right: 1em;
-            padding: 0.5em 1em;
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 20px;
-            font-size: 0.85em;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            gap: 0.5em;
-        }
-
-        .status-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #4caf50;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .status-indicator.loading {
-            background: #ff9800;
-        }
-
-        .status-indicator.error {
-            background: #f44336;
-            animation: none;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.5;
-            }
-        }
-    </style>
+    <!-- ExcelJS for Excel export with full styling support (本地版本) -->
+    <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
 </head>
 
 <body>
@@ -218,16 +171,15 @@
                 </div>
 
                 <!-- 🆕 缺料警示 -->
-                <div id="shortage-alert"
-                    style="margin-top: 1em; padding: 0.8em; background: #fff3cd; border-left: 4px solid #ff9800; border-radius: 4px; display: none;">
+                <div id="shortage-alert" class="shortage-alert" style="display: none;">
                     <p style="margin: 0.3em 0; font-weight: bold;">⚠️ 當前缺料: <strong id="current-shortage-qty"
-                            style="color: #d32f2f;">0</strong> 件</p>
+                            class="shortage-alert-count">0</strong> 件</p>
                     <p style="margin: 0.3em 0;">📅 開始缺料需求日: <strong id="earliest-demand-date">-</strong></p>
                 </div>
 
                 <!-- 🆕 相關採購單區塊 -->
                 <div id="purchase-orders-section" style="margin-top: 1em; display: none;">
-                    <h4 style="margin-bottom: 0.5em; color: var(--pico-primary);">📋 相關採購單</h4>
+                    <h4 class="purchase-orders-title">📋 相關採購單</h4>
                     <div style="overflow-x: auto;">
                         <table style="font-size: 0.9em; width: 100%;">
                             <thead>
@@ -248,10 +200,8 @@
                 </div>
 
                 <!-- 🆕 交期維護表單 -->
-                <div id="delivery-form-section"
-                    style="margin-top: 1.5em; padding: 1.2em; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
-                    <h4
-                        style="margin-bottom: 0.8em; color: var(--pico-primary); display: flex; align-items: center; gap: 0.5em;">
+                <div id="delivery-form-section" class="delivery-form-section">
+                    <h4 class="delivery-form-title">
                         📅 交期維護
                     </h4>
 
@@ -268,14 +218,14 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em;">
                             <div>
                                 <label for="delivery-date">
-                                    預計到貨日期 <span style="color: red;">*</span>
+                                    預計到貨日期 <span class="required-mark">*</span>
                                 </label>
                                 <input type="date" id="delivery-date" name="delivery_date" required>
                             </div>
 
                             <div>
                                 <label for="delivery-qty">
-                                    採購數量 <span style="color: red;">*</span>
+                                    採購數量 <span class="required-mark">*</span>
                                 </label>
                                 <input type="number" id="delivery-qty" name="quantity" min="1" placeholder="數量"
                                     required>
@@ -300,12 +250,11 @@
                         </div>
 
                         <!-- 🆕 即時計算結果 -->
-                        <div id="delivery-calculation"
-                            style="margin-top: 1em; padding: 0.8em; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; display: none;">
-                            <p style="margin: 0.3em 0; color: #2e7d32; font-weight: bold;">
+                        <div id="delivery-calculation" class="success-message" style="display: none;">
+                            <p class="success-message-detail">
                                 ✅ 到貨後可用庫存: <strong id="calc-available-stock">0</strong> 件
                             </p>
-                            <p style="margin: 0.3em 0; color: #2e7d32;">
+                            <p class="success-message-detail">
                                 ✅ 能滿足至: <strong id="calc-satisfy-until">-</strong> 的需求
                             </p>
                         </div>
@@ -319,9 +268,8 @@
 
                     <!-- 🆕 交期歷史（可選） -->
                     <details style="margin-top: 1em;">
-                        <summary style="cursor: pointer; font-weight: bold; color: #666;">📜 查看交期歷史</summary>
-                        <div id="delivery-history"
-                            style="margin-top: 0.5em; font-size: 0.9em; padding: 0.5em; background: white; border-radius: 4px;">
+                        <summary class="delivery-history-summary">📜 查看交期歷史</summary>
+                        <div id="delivery-history" class="delivery-history-content">
                             <!-- 動態載入歷史記錄 -->
                         </div>
                     </details>
