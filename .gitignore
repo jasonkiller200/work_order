@@ -9,6 +9,7 @@ _*_backup_*/
 
 # 臨時檔案
 page_views.json
+工單總表*.xls
 
 # Python
 __pycache__/
