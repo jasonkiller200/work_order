@@ -109,6 +109,14 @@ def get_material_details(material_id):
             app_logger.error(f"get_material_details: 找不到物料 {material_id} (type={dashboard_type})")
             return jsonify({"error": f"找不到該物料 ({material_id})"}), 404
         
+        # 🆕 取得物料說明（支援多種欄位名）
+        material_description = (
+            material_info.get('物料說明') or 
+            material_info.get('description') or 
+            material_info.get('短文') or 
+            ''
+        )
+        
         # 處理庫存資料 - 支援中英文欄位名
         # inventory_data 使用中文欄位名，materials_dashboard 使用英文欄位名
         unrestricted_stock = material_info.get('unrestricted_stock') or material_info.get('未限制', 0)
@@ -171,14 +179,21 @@ def get_material_details(material_id):
                     sub_unrestricted = 0
                     sub_inspection = 0
                 
+                # 🆕 計算替代品的總需求數
+                sub_material_id = item.get('物料', '')
+                sub_demand_details = demand_map.get(sub_material_id, [])
+                total_demand = sum(d.get('未結數量 (EINHEIT)', 0) for d in sub_demand_details if d.get('未結數量 (EINHEIT)', 0) > 0)
+                
                 substitute_inventory.append({
-                    '物料': item.get('物料', ''),
+                    '物料': sub_material_id,
                     '物料說明': item.get('物料說明', ''),
                     'unrestricted_stock': sub_unrestricted,
-                    'inspection_stock': sub_inspection
+                    'inspection_stock': sub_inspection,
+                    'total_demand': total_demand
                 })
         
         return jsonify({
+            "material_description": material_description,
             "stock_summary": {
                 "unrestricted": unrestricted_stock,
                 "inspection": inspection_stock,

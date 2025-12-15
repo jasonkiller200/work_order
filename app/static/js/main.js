@@ -114,6 +114,36 @@ function loadProcurementDashboard() {
         });
 }
 
+// 🆕 切換替代用料通知
+function toggleSubstituteNotify(materialId) {
+    const isChecked = event.target.checked;
+    if (isChecked) {
+        localStorage.setItem(`notify_${materialId}`, 'true');
+    } else {
+        localStorage.removeItem(`notify_${materialId}`);
+    }
+    // 重新計算統計
+    if (typeof updateStatsCards === 'function') {
+        updateStatsCards();
+    }
+}
+
+// 🆕 取得所有已通知的替代用料
+function getNotifiedSubstitutes() {
+    const notified = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('notify_') && localStorage.getItem(key) === 'true') {
+            notified.push(key.replace('notify_', ''));
+        }
+    }
+    return notified;
+}
+
+// 將函數暴露到全域
+window.toggleSubstituteNotify = toggleSubstituteNotify;
+window.getNotifiedSubstitutes = getNotifiedSubstitutes;
+
 // 填充採購人員下拉選單
 function populateBuyerFilter(data) {
     const buyerSelect = document.getElementById('buyer-filter-select');
@@ -436,6 +466,8 @@ function setupModal() {
 
 function openDetailsModal(materialId) {
     const modal = document.getElementById('details-modal');
+    
+    // 🆕 先設定基本標題，後續從API取得詳細資訊後再更新
     document.getElementById('modal-title').textContent = `物料詳情: ${materialId}`;
 
     document.getElementById('stock-summary-section').style.display = 'block';
@@ -486,6 +518,10 @@ function openDetailsModal(materialId) {
                 throw new Error(data.error);
             }
 
+            // 🆕 更新標題，顯示物料說明
+            const description = data.material_description || '無說明';
+            document.getElementById('modal-title').textContent = `物料詳情: ${materialId} - ${description}`;
+
             // 更新庫存總覽
             document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
             document.getElementById('inspection-stock').textContent = data.stock_summary.inspection.toFixed(0);
@@ -494,9 +530,19 @@ function openDetailsModal(materialId) {
             // 顯示替代品資訊在庫存總覽下方
             let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
             if (data.substitute_inventory && data.substitute_inventory.length > 0) {
-                subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th></tr></thead><tbody>';
+                subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>通知</th><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th><th>總需求數</th></tr></thead><tbody>';
                 data.substitute_inventory.forEach(s => {
-                    subHTML += `<tr><td>${s['物料']}</td><td>${s['物料說明']}</td><td>${s.unrestricted_stock.toFixed(0)}</td><td>${s.inspection_stock.toFixed(0)}</td></tr>`;
+                    const totalDemand = s.total_demand || 0;
+                    const isNotified = localStorage.getItem(`notify_${s['物料']}`) === 'true';
+                    const checkedAttr = isNotified ? 'checked' : '';
+                    subHTML += `<tr>
+                        <td><input type="checkbox" ${checkedAttr} onchange="toggleSubstituteNotify('${s['物料']}')"></td>
+                        <td>${s['物料']}</td>
+                        <td>${s['物料說明']}</td>
+                        <td>${s.unrestricted_stock.toFixed(0)}</td>
+                        <td>${s.inspection_stock.toFixed(0)}</td>
+                        <td>${totalDemand.toFixed(0)}</td>
+                    </tr>`;
                 });
                 subHTML += '</tbody></table>';
             } else {
@@ -1422,12 +1468,12 @@ function loadPurchaseOrders(materialId) {
                 poTbody.innerHTML = `
                     <tr>
                         <td colspan="6" style="text-align: center; padding: 2em;">
-                            <div style="color: var(--pico-muted-color);">
+                            <div style="background: var(--pico-card-background-color, #1a1f36); padding: 1.5em; border-radius: 8px; border: 1px solid var(--pico-muted-border-color);">
                                 <div style="font-size: 2em; margin-bottom: 0.5em;">📋</div>
-                                <div style="font-weight: bold; margin-bottom: 0.5em;">此物料目前無採購單記錄</div>
-                                <div style="font-size: 0.9em;">
+                                <div style="font-weight: bold; margin-bottom: 0.5em; color: var(--pico-primary, #3b82f6); font-size: 1.1em;">此物料目前無採購單記錄</div>
+                                <div style="font-size: 0.9em; color: var(--pico-color, #d1d5db);">
                                     您可以在下方「📅 交期維護」中直接填寫預計交期<br>
-                                    <small style="color: var(--pico-muted-color);">
+                                    <small style="color: var(--pico-muted-color, #9ca3af); margin-top: 0.3em; display: inline-block;">
                                         ※ 採購單號可留空，或填寫預計採購單號（例如：預採-20251215-001）
                                     </small>
                                 </div>
@@ -1543,23 +1589,24 @@ function addNoPurchaseOrderHint() {
     const hint = document.createElement('div');
     hint.className = 'no-po-hint';
     hint.style.cssText = `
-        padding: 1em;
+        padding: 1.2em;
         margin-bottom: 1em;
-        background: #e3f2fd;
-        border-left: 4px solid #2196f3;
-        border-radius: 4px;
+        background: var(--pico-card-background-color, #1e293b);
+        border-left: 4px solid var(--pico-primary, #3b82f6);
+        border-radius: 6px;
         font-size: 0.9em;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     `;
     hint.innerHTML = `
-        <div style="display: flex; align-items: start; gap: 0.5em;">
+        <div style="display: flex; align-items: start; gap: 0.8em;">
             <div style="font-size: 1.5em;">💡</div>
-            <div>
-                <div style="font-weight: bold; margin-bottom: 0.3em; color: #1976d2;">此物料目前無採購單記錄</div>
-                <div style="color: #555;">
+            <div style="flex: 1;">
+                <div style="font-weight: bold; margin-bottom: 0.5em; color: var(--pico-primary, #3b82f6); font-size: 1.05em;">此物料目前無採購單記錄</div>
+                <div style="color: var(--pico-color, #cbd5e1); line-height: 1.6;">
                     您可以直接填寫預計交期，系統會自動記錄：
-                    <ul style="margin: 0.5em 0 0 1.5em; padding: 0;">
-                        <li>採購單號可留空，或填寫預計單號（例如：預採-20251215-001）</li>
-                        <li>供應商可填寫預計供應商名稱</li>
+                    <ul style="margin: 0.8em 0 0 1.5em; padding: 0; color: var(--pico-muted-color, #94a3b8);">
+                        <li style="margin-bottom: 0.3em;">採購單號可留空，或填寫預計單號（例如：預採-20251215-001）</li>
+                        <li style="margin-bottom: 0.3em;">供應商可填寫預計供應商名稱</li>
                         <li>之後有正式採購單時，可隨時更新</li>
                     </ul>
                 </div>

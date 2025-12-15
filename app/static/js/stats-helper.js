@@ -122,7 +122,8 @@ function calculateStats(materials, deliveryData) {
         allShortage: 0,
         myItems: 0,
         thisWeek: 0,
-        sufficient: 0
+        sufficient: 0,
+        substituteNotify: 0
     };
     
     materials.forEach(m => {
@@ -168,6 +169,18 @@ function calculateStats(materials, deliveryData) {
         if (!hasShortage) {
             stats.sufficient++;
         }
+        
+        // 🆕 替代用料通知（檢查是否有已勾選的替代用料）
+        const materialBase = m['物料'] ? m['物料'].substring(0, 10) : '';
+        if (materialBase) {
+            const notifiedSubstitutes = typeof getNotifiedSubstitutes === 'function' ? getNotifiedSubstitutes() : [];
+            const hasNotifiedSubstitute = notifiedSubstitutes.some(notifiedId => 
+                notifiedId.substring(0, 10) === materialBase && notifiedId !== m['物料']
+            );
+            if (hasNotifiedSubstitute) {
+                stats.substituteNotify++;
+            }
+        }
     });
     
     return stats;
@@ -186,7 +199,8 @@ function updateStatsCards() {
         'stat-all-shortage': stats.allShortage,
         'stat-my-items': stats.myItems,
         'stat-this-week': stats.thisWeek,
-        'stat-sufficient': stats.sufficient
+        'stat-sufficient': stats.sufficient,
+        'stat-substitute-notify': stats.substituteNotify
     };
     
     Object.keys(elements).forEach(id => {
@@ -241,6 +255,14 @@ function filterMaterialsByStats(materials) {
             
             case 'sufficient':
                 return !hasShortage;
+            
+            case 'substitute-notify':
+                const materialBase = m['物料'] ? m['物料'].substring(0, 10) : '';
+                if (!materialBase) return false;
+                const notifiedSubstitutes = typeof getNotifiedSubstitutes === 'function' ? getNotifiedSubstitutes() : [];
+                return notifiedSubstitutes.some(notifiedId => 
+                    notifiedId.substring(0, 10) === materialBase && notifiedId !== m['物料']
+                );
             
             default:
                 return true;
