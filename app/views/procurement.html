@@ -129,6 +129,24 @@
                 </div>
             </div>
 
+            <!-- 🆕 批量操作欄 -->
+            <div id="batch-actions-bar" style="display: none; padding: 1em; margin: 1em 0; background: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <strong>⚠️ 已延誤交期處理</strong>
+                        <span id="delayed-count" style="margin-left: 1em; color: #d32f2f;"></span>
+                    </div>
+                    <div>
+                        <button id="batch-clear-overdue-btn" class="secondary" onclick="batchClearOverdueDeliveries()">
+                            🗑️ 批量清除所有過期交期
+                        </button>
+                        <button id="auto-clear-overdue-btn" class="outline" onclick="toggleAutoClearOverdue()" style="margin-left: 0.5em;">
+                            ⚡ 啟用自動清理
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 頁籤導覽 -->
             <nav id="dashboard-tabs-nav">
                 <ul>
@@ -208,7 +226,12 @@
                     <form id="delivery-form">
                         <!-- 🆕 採購單選擇器 -->
                         <div style="margin-bottom: 1em;">
-                            <label for="po-select">關聯採購單 (可選)</label>
+                            <label for="po-select">
+                                關聯採購單 (可選)
+                                <small style="color: var(--pico-muted-color); font-weight: normal;">
+                                    <br>※ 可直接新建交期，不需關聯採購單
+                                </small>
+                            </label>
                             <select id="po-select">
                                 <option value="">-- 新建交期記錄 (不關聯採購單) --</option>
                                 <!-- 動態載入 -->
@@ -234,13 +257,23 @@
 
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-top: 1em;">
                             <div>
-                                <label for="po-number">採購單號</label>
-                                <input type="text" id="po-number" name="po_number" placeholder="PO-2024-001">
+                                <label for="po-number">
+                                    採購單號 (選填)
+                                    <small style="color: var(--pico-muted-color); font-weight: normal;">
+                                        <br>※ 無採購單可留空或填寫預計單號
+                                    </small>
+                                </label>
+                                <input type="text" id="po-number" name="po_number" placeholder="例如：預採-20251215-001 或留空">
                             </div>
 
                             <div>
-                                <label for="supplier">供應商</label>
-                                <input type="text" id="supplier" name="supplier" placeholder="供應商名稱">
+                                <label for="supplier">
+                                    供應商 (選填)
+                                    <small style="color: var(--pico-muted-color); font-weight: normal;">
+                                        <br>※ 可填寫預計供應商
+                                    </small>
+                                </label>
+                                <input type="text" id="supplier" name="supplier" placeholder="供應商名稱或預計供應商">
                             </div>
                         </div>
 

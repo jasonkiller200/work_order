@@ -73,6 +73,16 @@ let orderMaterialsSortOrder = 'asc'; // 'asc' 或 'desc'
 let currentOrderId = null;
 
 function loadProcurementDashboard() {
+    // 🆕 初始化自動清理按鈕狀態
+    if (typeof initAutoClearButton === 'function') {
+        initAutoClearButton();
+    }
+    
+    // 🆕 檢查並執行自動清理
+    if (typeof checkAndAutoClearOverdue === 'function') {
+        checkAndAutoClearOverdue();
+    }
+    
     // 同時載入主儀表板、成品儀表板、交期資料
     Promise.all([
         fetch('/api/materials').then(r => r.json()),
@@ -1408,11 +1418,30 @@ function loadPurchaseOrders(materialId) {
             }
 
             if (data.length === 0) {
-                poTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">沒有相關的採購單。</td></tr>';
+                // 🆕 友善的無採購單提示
+                poTbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 2em;">
+                            <div style="color: var(--pico-muted-color);">
+                                <div style="font-size: 2em; margin-bottom: 0.5em;">📋</div>
+                                <div style="font-weight: bold; margin-bottom: 0.5em;">此物料目前無採購單記錄</div>
+                                <div style="font-size: 0.9em;">
+                                    您可以在下方「📅 交期維護」中直接填寫預計交期<br>
+                                    <small style="color: var(--pico-muted-color);">
+                                        ※ 採購單號可留空，或填寫預計採購單號（例如：預採-20251215-001）
+                                    </small>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
                 // 清空並重置選擇器
                 if (poSelect) {
                     poSelect.innerHTML = '<option value="">-- 新建交期記錄 (不關聯採購單) --</option>';
                 }
+                
+                // 🆕 在交期維護表單上方加入提示
+                addNoPurchaseOrderHint();
                 return;
             }
 
@@ -1436,12 +1465,16 @@ function renderPurchaseOrdersTable(purchaseOrders) {
     let html = '';
     purchaseOrders.forEach(po => {
         const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '-';
+        // 🆕 完整的狀態映射
         const statusMap = {
-            'open': '<span style="color: green;">未結案</span>',
-            'closed': '<span style="color: gray;">已結案</span>',
-            'updated': '<span style="color: blue;">已更新</span>'
+            'pending': '<span style="color: orange;">待交貨</span>',
+            'partial': '<span style="color: blue;">部分交貨</span>',
+            'completed': '<span style="color: gray;">已完成</span>',
+            'cancelled': '<span style="color: red;">已取消</span>',
+            'planned': '<span style="color: purple;">計畫中</span>',
+            'updated': '<span style="color: green;">已更新</span>'
         };
-        const status = statusMap[po.status] || po.status;
+        const status = statusMap[po.status] || `<span>${po.status}</span>`;
 
         html += `
             <tr>
@@ -1475,10 +1508,8 @@ function populatePOSelect(purchaseOrders) {
 
     let html = '<option value="">-- 新建交期記錄 (不關聯採購單) --</option>';
 
-    // 只顯示未結案或有未交數量的採購單
-    const activePOs = purchaseOrders.filter(po => po.outstanding_quantity > 0 || po.status !== 'closed');
-
-    activePOs.forEach(po => {
+    // 🆕 所有未結案的採購單都會顯示（API已過濾completed和cancelled）
+    purchaseOrders.forEach(po => {
         const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '未定';
         html += `<option value="${po.po_number}">
             ${po.po_number} - ${po.supplier || '未知供應商'} (未交: ${po.outstanding_quantity}, 交期: ${deliveryDate})
@@ -1498,3 +1529,55 @@ window.fillDeliveryFormFromPO = function (poNumber) {
         poSelect.dispatchEvent(event);
     }
 };
+
+// 🆕 在交期維護表單上方加入「無採購單」的友善提示
+function addNoPurchaseOrderHint() {
+    const deliveryFormSection = document.getElementById('delivery-form-section');
+    if (!deliveryFormSection) return;
+    
+    // 移除舊的提示（如果有）
+    const oldHint = deliveryFormSection.querySelector('.no-po-hint');
+    if (oldHint) oldHint.remove();
+    
+    // 新增提示訊息
+    const hint = document.createElement('div');
+    hint.className = 'no-po-hint';
+    hint.style.cssText = `
+        padding: 1em;
+        margin-bottom: 1em;
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        border-radius: 4px;
+        font-size: 0.9em;
+    `;
+    hint.innerHTML = `
+        <div style="display: flex; align-items: start; gap: 0.5em;">
+            <div style="font-size: 1.5em;">💡</div>
+            <div>
+                <div style="font-weight: bold; margin-bottom: 0.3em; color: #1976d2;">此物料目前無採購單記錄</div>
+                <div style="color: #555;">
+                    您可以直接填寫預計交期，系統會自動記錄：
+                    <ul style="margin: 0.5em 0 0 1.5em; padding: 0;">
+                        <li>採購單號可留空，或填寫預計單號（例如：預採-20251215-001）</li>
+                        <li>供應商可填寫預計供應商名稱</li>
+                        <li>之後有正式採購單時，可隨時更新</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 插入到表單標題之後
+    const formTitle = deliveryFormSection.querySelector('.delivery-form-title');
+    if (formTitle && formTitle.nextSibling) {
+        deliveryFormSection.insertBefore(hint, formTitle.nextSibling);
+    } else {
+        deliveryFormSection.insertBefore(hint, deliveryFormSection.firstChild);
+    }
+}
+
+// 🆕 移除「無採購單」提示（當有採購單時）
+function removeNoPurchaseOrderHint() {
+    const hint = document.querySelector('.no-po-hint');
+    if (hint) hint.remove();
+}

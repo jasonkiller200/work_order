@@ -612,6 +612,10 @@ class DataService:
         """更新或建立採購單記錄"""
         po = PurchaseOrder.query.filter_by(po_number=po_number).first()
         
+        # 🆕 記錄之前的狀態，用於檢測狀態變化
+        old_status = po.status if po else None
+        old_received_qty = po.received_quantity if po else 0
+        
         if not po:
             po = PurchaseOrder()
             po.po_number = po_number
@@ -638,12 +642,20 @@ class DataService:
         po.received_quantity = po.ordered_quantity - po.outstanding_quantity
         
         # 狀態計算
+        new_status = None
         if po.outstanding_quantity == 0:
-            po.status = 'completed'
+            new_status = 'completed'
         elif po.received_quantity > 0:
-            po.status = 'partial'
+            new_status = 'partial'
         else:
-            po.status = 'pending'
+            new_status = 'pending'
+        
+        po.status = new_status
+        
+        # 🆕 檢測部分交貨：狀態變成 partial 且有新的收貨數量
+        if new_status == 'partial' and (old_status != 'partial' or po.received_quantity > old_received_qty):
+            # 標記該物料的手動交期需要更新
+            DataService._mark_delivery_for_partial_receipt(material_id, po_number, po.received_quantity, po.outstanding_quantity)
         
         if not PurchaseOrder.query.filter_by(po_number=po_number).first():
             db.session.add(po)
@@ -651,54 +663,92 @@ class DataService:
     @staticmethod
     def _handle_deleted_purchase_orders(excel_po_numbers):
         """
-        智慧判斷已刪除的採購單狀態
+        處理已刪除的採購單狀態
         
-        邏輯：
-        1. 如果待交數量為 0 → 已完成
-        2. 如果超過 90 天未更新 → 假設已結案
-        3. 其他情況 → 標記為取消
+        簡化邏輯：從 Excel 消失 = 已完成交貨
         """
-        from datetime import timedelta
-        
         # 查詢資料庫中所有未完成的採購單
         all_db_pos = PurchaseOrder.query.filter(
             PurchaseOrder.status.in_(['pending', 'partial'])
         ).all()
         
         updated_count = 0
+        today = datetime.now().date()
         
         for po in all_db_pos:
             # 如果採購單在 Excel 中，跳過（不是已刪除）
             if po.po_number in excel_po_numbers:
                 continue
             
-            # 已刪除的採購單，進行智慧判斷
-            if po.outstanding_quantity <= 0:
-                # 待交數量為 0，肯定已交貨
-                po.status = 'completed'
-                po.actual_delivery_date = datetime.now().date()
-                po.received_quantity = po.ordered_quantity
-                updated_count += 1
-                app_logger.info(f"採購單 {po.po_number} 待交數量為0，標記為已完成")
-            
-            elif po.updated_at and po.updated_at < (datetime.utcnow() - timedelta(days=90)):
-                # 超過 90 天未更新，假設已結案
-                po.status = 'completed'
-                po.actual_delivery_date = datetime.now().date()
-                po.received_quantity = po.ordered_quantity
-                po.outstanding_quantity = 0
-                updated_count += 1
-                app_logger.info(f"採購單 {po.po_number} 超過90天未更新，標記為已完成")
-            
-            else:
-                # 其他情況標記為取消
-                po.status = 'cancelled'
-                updated_count += 1
-                app_logger.info(f"採購單 {po.po_number} 從 Excel 中刪除，標記為已取消")
+            # 從 Excel 消失 = 已完成交貨
+            po.status = 'completed'
+            po.actual_delivery_date = today
+            po.received_quantity = po.ordered_quantity
+            po.outstanding_quantity = 0
+            updated_count += 1
+            app_logger.info(f"採購單 {po.po_number} 已從已訂未交清單中移除，標記為已完成")
         
         if updated_count > 0:
             db.session.commit()
-            app_logger.info(f"已更新 {updated_count} 個已刪除採購單的狀態")
+            app_logger.info(f"已更新 {updated_count} 個採購單狀態為已完成")
+    
+    @staticmethod
+    def _mark_delivery_for_partial_receipt(material_id, po_number, received_qty, outstanding_qty):
+        """
+        標記部分交貨的交期需要更新
+        
+        當採購單部分交貨時：
+        1. 檢查是否有手動維護的交期
+        2. 如果交期未到或剛好到，標記為需要確認
+        3. 加上註記說明已部分到貨
+        """
+        try:
+            import os
+            import json
+            from datetime import datetime, timedelta
+            
+            delivery_file = 'instance/delivery_schedules.json'
+            
+            if not os.path.exists(delivery_file):
+                return
+            
+            with open(delivery_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            schedules = data.get('delivery_schedules', {}).get(material_id, [])
+            
+            if not schedules:
+                return
+            
+            # 檢查是否有關聯到這個採購單的交期
+            today = datetime.now().date()
+            updated = False
+            
+            for schedule in schedules:
+                # 如果交期關聯到這個採購單
+                if schedule.get('po_number') == po_number:
+                    try:
+                        delivery_date = datetime.fromisoformat(schedule['expected_date']).date()
+                        
+                        # 如果交期未到或剛好到（今天或未來）
+                        if delivery_date >= today:
+                            # 🆕 標記為部分到貨
+                            schedule['status'] = 'partial_received'
+                            schedule['partial_note'] = f"已部分到貨 {received_qty} 件，剩餘 {outstanding_qty} 件待交"
+                            schedule['partial_date'] = datetime.now().isoformat()
+                            schedule['needs_update'] = True
+                            updated = True
+                            app_logger.info(f"物料 {material_id} 的採購單 {po_number} 已部分到貨，交期標記為需更新")
+                    except (ValueError, KeyError):
+                        continue
+            
+            # 儲存更新
+            if updated:
+                with open(delivery_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    
+        except Exception as e:
+            app_logger.error(f"標記部分交貨交期失敗: {e}", exc_info=True)
     
     @staticmethod
     def _sync_materials_buyer_id(material_buyer_map):

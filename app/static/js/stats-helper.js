@@ -73,6 +73,9 @@ function applyStatFilter(filterType) {
         filterBadge.style.display = 'block';
     }
     
+    // 🆕 顯示/隱藏批量操作欄
+    toggleBatchActionsBar(filterType);
+    
     // 重新渲染表格
     renderMaterialsTable();
 }
@@ -90,6 +93,12 @@ function clearStatFilter() {
     const filterBadge = document.getElementById('current-filter-badge');
     if (filterBadge) {
         filterBadge.style.display = 'none';
+    }
+    
+    // 🆕 隱藏批量操作欄
+    const batchBar = document.getElementById('batch-actions-bar');
+    if (batchBar) {
+        batchBar.style.display = 'none';
     }
     
     // 重新渲染表格
@@ -272,3 +281,21 @@ function sortMaterialsByPriority(materials) {
     });
 }
 
+// 🆕 顯示/隱藏批量操作欄
+function toggleBatchActionsBar(filterType) {
+    const bar = document.getElementById('batch-actions-bar');
+    const countElem = document.getElementById('delayed-count');
+    
+    if (!bar || !countElem) return;
+    
+    if (filterType === 'delayed') {
+        // 計算過期交期數量
+        const materials = currentDashboardType === 'main' ? currentMaterialsData : currentFinishedMaterialsData;
+        const stats = calculateStats(materials, allDeliveryData);
+        
+        bar.style.display = 'block';
+        countElem.textContent = `共 ${stats.delayed} 個物料有過期交期`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
