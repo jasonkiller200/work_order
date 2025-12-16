@@ -40,7 +40,7 @@
             <h2>採購缺料總覽儀表板(只顯示缺料或採購不足項目)</h2>
 
             <!-- 🆕 統計圖卡區域 -->
-            <section id="stats-cards-section" style="margin-bottom: 2em;">
+            <section id="stats-cards-section" style="margin-bottom: 2em; overflow: visible; min-height: auto;">
                 <h3>📊 快速篩選</h3>
                 <div class="stats-cards-grid">
                     <!-- 第一排：緊急項目 -->
@@ -106,6 +106,13 @@
                         <div class="stat-number" id="stat-substitute-notify">0</div>
                         <div class="stat-label">替代用料通知</div>
                         <div class="stat-sublabel">已勾選項目</div>
+                    </div>
+
+                    <div class="stat-card priority-normal" data-filter="in-inspection">
+                        <div class="stat-icon">🔬</div>
+                        <div class="stat-number" id="stat-in-inspection">0</div>
+                        <div class="stat-label">品檢中</div>
+                        <div class="stat-sublabel">待驗收</div>
                     </div>
                 </div>
 

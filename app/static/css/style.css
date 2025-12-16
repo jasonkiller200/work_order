@@ -759,6 +759,8 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 1em;
     margin-bottom: 1em;
+    width: 100%;
+    overflow: visible;
 }
 
 .stat-card {

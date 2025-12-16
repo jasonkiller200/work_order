@@ -203,11 +203,13 @@ function renderMaterialsTable() {
         );
     }
 
-    // 應用過濾 (只顯示有目前缺料或預計缺料的項目)
-    processedData = processedData.filter(m => m.current_shortage > 0 || m.projected_shortage > 0);
-
     // 🆕 應用統計圖卡篩選
     processedData = filterMaterialsByStats(processedData);
+
+    // 應用過濾 (只顯示有目前缺料或預計缺料的項目) - 僅在預設篩選時套用
+    if (currentStatFilter === 'all') {
+        processedData = processedData.filter(m => m.current_shortage > 0 || m.projected_shortage > 0);
+    }
 
     // 🆕 智慧排序（30日內缺料優先，然後按最早需求日期）
     processedData = sortMaterialsByPriority(processedData);
@@ -518,9 +520,13 @@ function openDetailsModal(materialId) {
                 throw new Error(data.error);
             }
 
-            // 🆕 更新標題，顯示物料說明
+            // 🆕 更新標題，顯示物料說明（分兩行顯示）
             const description = data.material_description || '無說明';
-            document.getElementById('modal-title').textContent = `物料詳情: ${materialId} - ${description}`;
+            const modalTitle = document.getElementById('modal-title');
+            modalTitle.innerHTML = `
+                <div>物料詳情: ${materialId}</div>
+                <div style="font-size: 0.85em; font-weight: normal; color: var(--pico-muted-color); margin-top: 0.3em;">${description}</div>
+            `;
 
             // 更新庫存總覽
             document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
