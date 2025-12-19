@@ -676,7 +676,7 @@ function openBuyerReferenceModal(materialId) {
     // 取得當前儀表板類型
     const dashboardType = currentDashboardType;
 
-    fetch(`/api/material/${materialId}/buyer_reference?type=${dashboardType}`)
+    apiService.getBuyerReference(materialId, dashboardType)
         .then(data => {
             // 先取得所有採購人員清單
             apiService.getBuyersList()
@@ -997,8 +997,7 @@ function fetchOrderDetails(orderId) {
     downloadSpecsBtn.disabled = true;
     currentOrderId = null;
 
-    fetch(`/api/order/${orderId}`)
-        .then(response => response.json())
+    apiService.getOrder(orderId)
         .then(data => {
             if (data.error) {
                 orderDetailsContainer.innerHTML = `<p style="color: red;">${data.error}</p>`;
@@ -1440,8 +1439,7 @@ function loadPurchaseOrders(materialId) {
     poSection.style.display = 'block';
     poTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">載入中...</td></tr>';
 
-    fetch(`/api/purchase_orders/${materialId}`)
-        .then(response => response.json())
+    apiService.getPurchaseOrders(materialId)
         .then(data => {
             if (data.error) {
                 poTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">${data.error}</td></tr>`;

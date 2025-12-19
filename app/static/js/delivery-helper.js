@@ -2,8 +2,7 @@
 
 // 載入現有交期資料
 function loadExistingDelivery(materialId) {
-    fetch(`/api/delivery/${materialId}`)
-        .then(response => response.json())
+    apiService.getDelivery(materialId)
         .then(data => {
             // 🆕 檢查是否有過期的交期
             let deliveryToShow = data.delivery;
@@ -197,7 +196,7 @@ function setupDeliveryFormEvents(materialId, materialData) {
                 updateCalculation();
 
                 // 提示
-                showToast('✅ 已自動填入採購單資料', 'info');
+                notificationService.info('✅ 已自動填入採購單資料');
             }
         });
     }
@@ -214,7 +213,7 @@ function setupDeliveryFormEvents(materialId, materialData) {
         };
 
         if (!formData.expected_date || !formData.quantity || isNaN(formData.quantity)) {
-            showToast('❌ 請填寫必填欄位（預計到貨日期和採購數量）', 'error');
+            notificationService.error('❌ 請填寫必填欄位（預計到貨日期和採購數量）');
             return;
         }
 
@@ -238,28 +237,21 @@ function saveDelivery(formData) {
     saveBtn.textContent = '⏳ 儲存中...';
     saveBtn.disabled = true;
 
-    fetch('/api/delivery', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-    })
-        .then(response => response.json())
+    apiService.saveDelivery(formData)
         .then(data => {
             if (data.success) {
-                showToast('✅ 交期已成功儲存', 'success');
+                notificationService.success('✅ 交期已成功儲存');
                 // 重新載入交期資料
                 loadExistingDelivery(formData.material_id);
                 // 重新載入儀錶板以更新統計
                 loadProcurementDashboard();
             } else {
-                showToast('❌ 儲存失敗: ' + (data.error || '未知錯誤'), 'error');
+                notificationService.error('❌ 儲存失敗: ' + (data.error || '未知錯誤'));
             }
         })
         .catch(error => {
             console.error('儲存交期失敗:', error);
-            showToast('❌ 儲存失敗，請稍後再試', 'error');
+            notificationService.error('❌ 儲存失敗，請稍後再試');
         })
         .finally(() => {
             saveBtn.textContent = originalText;
@@ -267,7 +259,7 @@ function saveDelivery(formData) {
         });
 }
 
-// Toast 提示函數
+// Toast 提示函數（已被 notificationService 替代，保留為向後兼容）
 function showToast(message, type = 'info') {
     // 檢查是否已有 toast
     const existingToast = document.querySelector('.toast-notification');
@@ -350,28 +342,22 @@ function clearOverdueDelivery(materialId) {
     
     // 這裡可以呼叫 API 清除過期交期，或直接重新載入
     // 暫時簡化處理：清空表單並重新載入
-    fetch(`/api/delivery/${materialId}/clear_overdue`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('✅ 已清除過期交期', 'success');
-            loadExistingDelivery(materialId);
-            loadProcurementDashboard();
-        } else {
-            showToast('❌ 清除失敗', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('清除過期交期失敗:', error);
-        // 降級處理：直接清空表單
-        document.getElementById('delivery-form').reset();
-        showToast('⚠️ 表單已清空，請填寫新的交期', 'warning');
-    });
+    apiService.clearOverdueDelivery(materialId)
+        .then(data => {
+            if (data.success) {
+                notificationService.success('✅ 已清除過期交期');
+                loadExistingDelivery(materialId);
+                loadProcurementDashboard();
+            } else {
+                notificationService.error('❌ 清除失敗');
+            }
+        })
+        .catch(error => {
+            console.error('清除過期交期失敗:', error);
+            // 降級處理：直接清空表單
+            document.getElementById('delivery-form').reset();
+            notificationService.warning('⚠️ 表單已清空，請填寫新的交期');
+        });
 }
 
 // 🆕 確認並清除部分到貨標記
@@ -387,7 +373,7 @@ function clearPartialDelivery(materialId) {
     const hint = document.querySelector('.delivery-source-hint');
     if (hint) hint.remove();
     
-    showToast('請填寫剩餘數量的新交期', 'info');
+    notificationService.info('請填寫剩餘數量的新交期');
     
     // 聚焦到交期日期欄位
     document.getElementById('delivery-date').focus();
@@ -405,33 +391,27 @@ function batchClearOverdueDeliveries() {
     btn.disabled = true;
     btn.textContent = '⏳ 處理中...';
     
-    fetch('/api/delivery/batch-clear-overdue', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-        
-        if (data.success) {
-            showToast(`✅ 已批量清除 ${data.cleared_count} 個過期交期`, 'success');
-            // 重新載入儀表板
-            loadProcurementDashboard();
-            // 隱藏批量操作欄
-            document.getElementById('batch-actions-bar').style.display = 'none';
-        } else {
-            showToast('❌ 批量清除失敗: ' + (data.message || '未知錯誤'), 'error');
-        }
-    })
-    .catch(error => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-        console.error('批量清除過期交期失敗:', error);
-        showToast('❌ 批量清除失敗', 'error');
-    });
+    apiService.batchClearOverdueDeliveries()
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            
+            if (data.success) {
+                notificationService.success(`✅ 已批量清除 ${data.cleared_count} 個過期交期`);
+                // 重新載入儀表板
+                loadProcurementDashboard();
+                // 隱藏批量操作欄
+                document.getElementById('batch-actions-bar').style.display = 'none';
+            } else {
+                notificationService.error('❌ 批量清除失敗: ' + (data.message || '未知錯誤'));
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            console.error('批量清除過期交期失敗:', error);
+            notificationService.error('❌ 批量清除失敗');
+        });
 }
 
 // 🆕 切換自動清理過期交期
@@ -444,7 +424,7 @@ function toggleAutoClearOverdue() {
             localStorage.setItem('autoClearOverdue', 'true');
             btn.textContent = '✅ 自動清理已啟用';
             btn.classList.remove('outline');
-            showToast('✅ 自動清理已啟用', 'success');
+            notificationService.success('✅ 自動清理已啟用');
             // 立即執行一次
             batchClearOverdueDeliveries();
         }
@@ -452,7 +432,7 @@ function toggleAutoClearOverdue() {
         localStorage.setItem('autoClearOverdue', 'false');
         btn.textContent = '⚡ 啟用自動清理';
         btn.classList.add('outline');
-        showToast('已停用自動清理', 'info');
+        notificationService.info('已停用自動清理');
     }
 }
 
@@ -461,21 +441,15 @@ function checkAndAutoClearOverdue() {
     const isEnabled = localStorage.getItem('autoClearOverdue') === 'true';
     if (isEnabled) {
         // 靜默執行，不顯示確認對話框
-        fetch('/api/delivery/batch-clear-overdue', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.cleared_count > 0) {
-                showToast(`🤖 自動清理: 已清除 ${data.cleared_count} 個過期交期`, 'info');
-            }
-        })
-        .catch(error => {
-            console.error('自動清理失敗:', error);
-        });
+        apiService.batchClearOverdueDeliveries()
+            .then(data => {
+                if (data.success && data.cleared_count > 0) {
+                    notificationService.info(`🤖 自動清理: 已清除 ${data.cleared_count} 個過期交期`);
+                }
+            })
+            .catch(error => {
+                console.error('自動清理失敗:', error);
+            });
     }
 }
 
