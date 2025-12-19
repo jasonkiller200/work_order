@@ -15,32 +15,30 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-function checkApiStatus() {
+async function checkApiStatus() {
     const badge = document.querySelector('.status-indicator');
     const badgeText = document.getElementById('status-badge-text');
 
-    fetch('/api/status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.service_status === 'online' && data.data_loaded) {
-                // 正常狀態 - 綠色
-                badge.className = 'status-indicator';
-                badgeText.textContent = `✅ 快取: ${data.live_cache}`;
-            } else if (data.service_status === 'online' && !data.data_loaded) {
-                // 服務正常但資料未載入 - 橙色
-                badge.className = 'status-indicator loading';
-                badgeText.textContent = '⚠️ 資料載入中';
-            } else {
-                // 服務異常 - 紅色
-                badge.className = 'status-indicator error';
-                badgeText.textContent = '❌ 服務異常';
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching status:', error);
+    try {
+        const data = await apiService.checkStatus();
+        if (data.service_status === 'online' && data.data_loaded) {
+            // 正常狀態 - 綠色
+            badge.className = 'status-indicator';
+            badgeText.textContent = `✅ 快取: ${data.live_cache}`;
+        } else if (data.service_status === 'online' && !data.data_loaded) {
+            // 服務正常但資料未載入 - 橙色
+            badge.className = 'status-indicator loading';
+            badgeText.textContent = '⚠️ 資料載入中';
+        } else {
+            // 服務異常 - 紅色
             badge.className = 'status-indicator error';
-            badgeText.textContent = '❌ 連線失敗';
-        });
+            badgeText.textContent = '❌ 服務異常';
+        }
+    } catch (error) {
+        console.error('Error fetching status:', error);
+        badge.className = 'status-indicator error';
+        badgeText.textContent = '❌ 連線失敗';
+    }
 }
 
 // 全局變數來儲存原始資料、排序狀態和篩選關鍵字
@@ -85,10 +83,10 @@ function loadProcurementDashboard() {
     
     // 同時載入主儀表板、成品儀表板、交期資料
     Promise.all([
-        fetch('/api/materials').then(r => r.json()),
-        fetch('/api/finished_materials').then(r => r.json()),
-        fetch('/api/delivery/all').then(r => r.json()),
-        fetch('/api/demand_details/all').then(r => r.json())
+        apiService.getMaterials(),
+        apiService.getFinishedMaterials(),
+        apiService.getAllDeliveries(),
+        apiService.getAllDemandDetails()
     ])
         .then(([materialsData, finishedData, deliveryData, demandDetailsData]) => {
             // 儲存資料
@@ -508,13 +506,7 @@ function openDetailsModal(materialId) {
 
     // 根據當前儀表板類型傳遞參數
     const dashboardType = currentDashboardType;
-    fetch(`/api/material/${materialId}/details?type=${dashboardType}`)
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(err => Promise.reject(err));
-            }
-            return response.json();
-        })
+    apiService.getMaterialDetails(materialId, dashboardType)
         .then(data => {
             if (data.error) {
                 throw new Error(data.error);
@@ -685,11 +677,9 @@ function openBuyerReferenceModal(materialId) {
     const dashboardType = currentDashboardType;
 
     fetch(`/api/material/${materialId}/buyer_reference?type=${dashboardType}`)
-        .then(response => response.json())
         .then(data => {
             // 先取得所有採購人員清單
-            fetch('/api/buyers_list')
-                .then(response => response.json())
+            apiService.getBuyersList()
                 .then(buyersData => {
                     let buyerHTML = '<h4>該物料上下25筆採購人員參考（點擊下拉選單可修改採購人員）</h4>';
                     buyerHTML += '<table><thead><tr><th>物料</th><th>物料說明</th><th>採購人員</th></tr></thead><tbody>';
