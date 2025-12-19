@@ -34,13 +34,16 @@ const StatsManager = {
         today.setHours(0, 0, 0, 0);
 
         materials.forEach(material => {
-            const demand = material['total_demand'] || 0;
-            const stock = material['unrestricted_stock'] || 0;
-            const onOrder = material['on_order_stock'] || 0;
-            const shortage = CalcUtils.calculateShortage(demand, stock, onOrder);
+            // 使用實際資料欄位（支援多種欄位名稱）
+            const currentShortage = material.current_shortage || 0;
+            const projectedShortage = material.projected_shortage || 0;
+            const hasShortage = currentShortage > 0 || projectedShortage > 0;
+            const shortage30 = material.shortage_within_30_days || false;
+            const hasDelivery = material.delivery_date ? true : false;
 
             // 分類統計
-            if (shortage < 0) {
+            if (hasShortage) {
+                const onOrder = material['on_order_stock'] || 0;
                 if (onOrder > 0) {
                     stats.partial++;
                 } else {
@@ -50,18 +53,14 @@ const StatsManager = {
                 stats.sufficient++;
             }
 
-            // 無交期統計
-            if (!material.earliest_demand_date) {
+            // 無交期統計（有缺料但無交期）
+            if (hasShortage && !hasDelivery) {
                 stats.noDelivery++;
             }
 
-            // 30 日內需求
-            if (material.earliest_demand_date) {
-                const demandDate = new Date(material.earliest_demand_date);
-                const diffDays = DateUtils.daysDifference(demandDate, today);
-                if (diffDays >= 0 && diffDays <= 30 && shortage < 0) {
-                    stats.within30Days++;
-                }
+            // 30 日內缺料
+            if (shortage30) {
+                stats.within30Days++;
             }
         });
 
