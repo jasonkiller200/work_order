@@ -65,7 +65,9 @@ function applyStatFilter(filterType) {
         'all-shortage': '總缺料項目',
         'my-items': '我的項目',
         'this-week': '本週需求',
-        'sufficient': '庫存充足'
+        'sufficient': '庫存充足',
+        'substitute-notify': '替代用料通知',
+        'in-inspection': '品檢中'
     };
     
     if (filterText && filterBadge) {
@@ -123,7 +125,8 @@ function calculateStats(materials, deliveryData) {
         myItems: 0,
         thisWeek: 0,
         sufficient: 0,
-        substituteNotify: 0
+        substituteNotify: 0,
+        inInspection: 0
     };
     
     materials.forEach(m => {
@@ -181,6 +184,12 @@ function calculateStats(materials, deliveryData) {
                 stats.substituteNotify++;
             }
         }
+        
+        // 🆕 品檢中（品檢中數量 > 0）
+        const inspectionStock = m.inspection_stock || m['品質檢驗中'] || 0;
+        if (inspectionStock > 0) {
+            stats.inInspection++;
+        }
     });
     
     return stats;
@@ -200,7 +209,8 @@ function updateStatsCards() {
         'stat-my-items': stats.myItems,
         'stat-this-week': stats.thisWeek,
         'stat-sufficient': stats.sufficient,
-        'stat-substitute-notify': stats.substituteNotify
+        'stat-substitute-notify': stats.substituteNotify,
+        'stat-in-inspection': stats.inInspection
     };
     
     Object.keys(elements).forEach(id => {
@@ -225,7 +235,10 @@ function filterMaterialsByStats(materials) {
     weekEnd.setDate(weekStart.getDate() + 6);
     
     return materials.filter(m => {
-        const hasShortage = m.current_shortage > 0 || m.projected_shortage > 0;
+        // 確保數值正確處理，避免 undefined 或 null
+        const currentShortage = m.current_shortage || 0;
+        const projectedShortage = m.projected_shortage || 0;
+        const hasShortage = currentShortage > 0 || projectedShortage > 0;
         const shortage30 = m.shortage_within_30_days || false;
         const delivery = m.delivery_date ? new Date(m.delivery_date) : null;
         const earliestDemand = m.earliest_demand_date ? new Date(m.earliest_demand_date) : null;
@@ -263,6 +276,10 @@ function filterMaterialsByStats(materials) {
                 return notifiedSubstitutes.some(notifiedId => 
                     notifiedId.substring(0, 10) === materialBase && notifiedId !== m['物料']
                 );
+            
+            case 'in-inspection':
+                const inspectionStock = m.inspection_stock || m['品質檢驗中'] || 0;
+                return inspectionStock > 0;
             
             default:
                 return true;

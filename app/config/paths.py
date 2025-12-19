@@ -11,6 +11,7 @@ class FilePaths:
     PREP_SEMI_FINISHED_FILE = r'P:\\F004\\MPS維護\\預備半品用料.xlsx'
     SPECS_FILE = r'P:\\F004\\MPS維護\\工單規格總表.xlsx'
     ON_ORDER_FILE = r'P:\\F004\\MPS維護\\已訂未交.XLSX'
+    RECEIPT_FILE = r'P:\\F004\\MPS維護\\今日入庫.xlsx'
     
     # 工單總表
     WORK_ORDER_SUMMARY_FILE = '工單總表2025.xls'
