@@ -214,20 +214,7 @@ function renderMaterialsTable() {
 
     // 如果有手動排序，在智慧排序後再套用
     if (currentSortColumn) {
-        processedData.sort((a, b) => {
-            let valA = a[currentSortColumn];
-            let valB = b[currentSortColumn];
-
-            // 處理數字排序
-            if (typeof valA === 'number' && typeof valB === 'number') {
-                return currentSortOrder === 'asc' ? valA - valB : valB - valA;
-            }
-            // 處理字串排序
-            if (typeof valA === 'string' && typeof valB === 'string') {
-                return currentSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-            }
-            return 0;
-        });
+        processedData = TableManager.sortData(processedData, currentSortColumn, currentSortOrder);
     }
 
     // 計算分頁
@@ -1117,22 +1104,9 @@ function renderOrderMaterialsTable() {
     const container = document.getElementById('tab-order-materials');
     let processedData = [...materials];
 
-    // 應用排序
+    // 應用排序（使用 TableManager）
     if (orderMaterialsSortColumn) {
-        processedData.sort((a, b) => {
-            let valA = a[orderMaterialsSortColumn];
-            let valB = b[orderMaterialsSortColumn];
-
-            // 處理數字排序
-            if (typeof valA === 'number' && typeof valB === 'number') {
-                return orderMaterialsSortOrder === 'asc' ? valA - valB : valB - valA;
-            }
-            // 處理字串排序
-            if (typeof valA === 'string' && typeof valB === 'string') {
-                return orderMaterialsSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-            }
-            return 0;
-        });
+        processedData = TableManager.sortData(processedData, orderMaterialsSortColumn, orderMaterialsSortOrder);
     }
 
     let tableHTML = `
