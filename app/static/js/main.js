@@ -756,18 +756,7 @@ function bindBuyerSelectEvents() {
             this.style.opacity = '0.6';
 
             // 儲存採購人員變更
-            fetch('/api/update_buyer', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    material_id: materialId,
-                    buyer: newBuyer,
-                    dashboard_type: dashboardType
-                })
-            })
-                .then(response => response.json())
+            apiService.updateBuyer(materialId, newBuyer, dashboardType)
                 .then(data => {
                     if (data.success) {
                         // 顯示成功訊息
@@ -795,13 +784,13 @@ function bindBuyerSelectEvents() {
                         renderMaterialsTable();
                     } else {
                         // 顯示錯誤訊息
-                        alert('儲存失敗: ' + (data.error || '未知錯誤'));
+                        notificationService.error('儲存失敗: ' + (data.error || '未知錯誤'));
                         this.value = originalValue;
                     }
                 })
                 .catch(error => {
                     console.error('Error updating buyer:', error);
-                    alert('儲存採購人員時發生錯誤');
+                    notificationService.error('儲存採購人員時發生錯誤');
                     this.value = originalValue;
                 })
                 .finally(() => {
