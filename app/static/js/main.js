@@ -281,15 +281,12 @@ function renderMaterialsTable() {
             const shortage30Days = m.shortage_within_30_days || false;
             const rowClass = shortage30Days ? ' class="shortage-30-days"' : '';
 
-            // 🆕 格式化預計交貨日期
+            // 🆕 格式化預計交貨日期（使用 DateUtils）
             let deliveryDateStr = '-';
             let dateClass = '';
             if (m.delivery_date) {
-                const date = new Date(m.delivery_date);
-                const today = new Date();
-                const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
-
-                deliveryDateStr = date.toISOString().split('T')[0];
+                const diffDays = DateUtils.daysDifference(new Date(m.delivery_date), new Date());
+                deliveryDateStr = DateUtils.formatDate(m.delivery_date);
 
                 // 根據天數設定顏色
                 if (diffDays < 0) {
@@ -307,54 +304,20 @@ function renderMaterialsTable() {
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
                     <td${dateClass}>${deliveryDateStr}</td>
-                    <td>${m.total_demand.toFixed(0)}</td>
-                    <td>${m.unrestricted_stock.toFixed(0)}</td>
-                    <td>${m.inspection_stock.toFixed(0)}</td>
-                    <td>${m.on_order_stock.toFixed(0)}</td>
-                    <td class="shortage-cell">${m.current_shortage > 0 ? `<strong>${m.current_shortage.toFixed(0)}</strong>` : '0'}</td>
-                    <td class="shortage-cell">${m.projected_shortage > 0 ? `<strong>${m.projected_shortage.toFixed(0)}</strong>` : '0'}</td>
+                    <td>${FormatUtils.formatNumber(m.total_demand)}</td>
+                    <td>${FormatUtils.formatNumber(m.unrestricted_stock)}</td>
+                    <td>${FormatUtils.formatNumber(m.inspection_stock)}</td>
+                    <td>${FormatUtils.formatNumber(m.on_order_stock)}</td>
+                    <td class="shortage-cell">${m.current_shortage > 0 ? `<strong>${FormatUtils.formatNumber(m.current_shortage)}</strong>` : '0'}</td>
+                    <td class="shortage-cell">${m.projected_shortage > 0 ? `<strong>${FormatUtils.formatNumber(m.projected_shortage)}</strong>` : '0'}</td>
                 </tr>
             `;
         });
     }
     tableHTML += `</tbody></table></figure>`;
 
-    // 分頁按鈕 - 放在右下角
-    let paginationHTML = '';
-    if (totalPages > 1) {
-        paginationHTML = '<div class="pagination-wrapper"><div class="pagination">';
-
-        // 上一頁按鈕
-        paginationHTML += `<button ${adjustedPage === 1 ? 'disabled' : ''} onclick="changePage(${adjustedPage - 1})">上一頁</button>`;
-
-        // 頁碼按鈕
-        const maxVisiblePages = 5;
-        let startPage = Math.max(1, adjustedPage - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-        if (endPage - startPage < maxVisiblePages - 1) {
-            startPage = Math.max(1, endPage - maxVisiblePages + 1);
-        }
-
-        if (startPage > 1) {
-            paginationHTML += `<button onclick="changePage(1)">1</button>`;
-            if (startPage > 2) paginationHTML += `<span>...</span>`;
-        }
-
-        for (let i = startPage; i <= endPage; i++) {
-            paginationHTML += `<button class="${i === adjustedPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
-        }
-
-        if (endPage < totalPages) {
-            if (endPage < totalPages - 1) paginationHTML += `<span>...</span>`;
-            paginationHTML += `<button onclick="changePage(${totalPages})">${totalPages}</button>`;
-        }
-
-        // 下一頁按鈕
-        paginationHTML += `<button ${adjustedPage === totalPages ? 'disabled' : ''} onclick="changePage(${adjustedPage + 1})">下一頁</button>`;
-
-        paginationHTML += '</div></div>';
-    }
+    // 分頁按鈕（使用 TableManager）
+    const paginationHTML = TableManager.createPaginationHTML(adjustedPage, totalPages, 'changePage');
 
     container.innerHTML = controlsHTML + tableHTML + paginationHTML;
 
@@ -507,10 +470,10 @@ function openDetailsModal(materialId) {
                 <div style="font-size: 0.85em; font-weight: normal; color: var(--pico-muted-color); margin-top: 0.3em;">${description}</div>
             `;
 
-            // 更新庫存總覽
-            document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
-            document.getElementById('inspection-stock').textContent = data.stock_summary.inspection.toFixed(0);
-            document.getElementById('on-order-stock').textContent = data.stock_summary.on_order.toFixed(0);
+            // 更新庫存總覽（使用 FormatUtils）
+            document.getElementById('unrestricted-stock').textContent = FormatUtils.formatNumber(data.stock_summary.unrestricted);
+            document.getElementById('inspection-stock').textContent = FormatUtils.formatNumber(data.stock_summary.inspection);
+            document.getElementById('on-order-stock').textContent = FormatUtils.formatNumber(data.stock_summary.on_order);
 
             // 顯示替代品資訊在庫存總覽下方
             let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
@@ -524,9 +487,9 @@ function openDetailsModal(materialId) {
                         <td><input type="checkbox" ${checkedAttr} onchange="toggleSubstituteNotify('${s['物料']}')"></td>
                         <td>${s['物料']}</td>
                         <td>${s['物料說明']}</td>
-                        <td>${s.unrestricted_stock.toFixed(0)}</td>
-                        <td>${s.inspection_stock.toFixed(0)}</td>
-                        <td>${totalDemand.toFixed(0)}</td>
+                        <td>${FormatUtils.formatNumber(s.unrestricted_stock)}</td>
+                        <td>${FormatUtils.formatNumber(s.inspection_stock)}</td>
+                        <td>${FormatUtils.formatNumber(totalDemand)}</td>
                     </tr>`;
                 });
                 subHTML += '</tbody></table>';
@@ -550,7 +513,7 @@ function openDetailsModal(materialId) {
 
                 const shortageQtyEl = document.getElementById('current-shortage-qty');
                 if (shortageQtyEl) {
-                    shortageQtyEl.textContent = shortage.toFixed(0);
+                    shortageQtyEl.textContent = FormatUtils.formatNumber(shortage);
                 }
 
                 // 🔧 找開始缺料的需求日（而不是最早需求日）
@@ -618,9 +581,9 @@ function openDetailsModal(materialId) {
                     const shortageClass = d.is_shortage_point ? ' class="shortage-warning"' : '';
                     demandHTML += `<tr>
                         <td>${d['訂單']}</td>
-                        <td${shortageClass}>${d['未結數量 (EINHEIT)'].toFixed(0)}</td>
+                        <td${shortageClass}>${FormatUtils.formatNumber(d['未結數量 (EINHEIT)'])}</td>
                         <td>${d['需求日期']}</td>
-                        <td>${d.remaining_stock.toFixed(0)}</td>
+                        <td>${FormatUtils.formatNumber(d.remaining_stock)}</td>
                     </tr>`;
                 });
             } else {
@@ -1138,12 +1101,12 @@ function renderOrderMaterialsTable() {
                 <tr>
                     <td class="clickable-material" data-material-id="${m['物料']}">${m['物料']}</td>
                     <td>${m['物料說明']}</td>
-                    <td>${m['需求數量 (EINHEIT)'].toFixed(0)}</td>
-                    <td>${m['領料數量 (EINHEIT)'].toFixed(0)}</td>
-                    <td${shortageClass}>${m['未結數量 (EINHEIT)'].toFixed(0)}</td>
-                    <td>${m.unrestricted_stock.toFixed(0)}</td>
-                    <td>${m.inspection_stock.toFixed(0)}</td>
-                    <td${shortageClass}>${m.order_shortage.toFixed(0)}</td>
+                    <td>${FormatUtils.formatNumber(m['需求數量 (EINHEIT)'])}</td>
+                    <td>${FormatUtils.formatNumber(m['領料數量 (EINHEIT)'])}</td>
+                    <td${shortageClass}>${FormatUtils.formatNumber(m['未結數量 (EINHEIT)'])}</td>
+                    <td>${FormatUtils.formatNumber(m.unrestricted_stock)}</td>
+                    <td>${FormatUtils.formatNumber(m.inspection_stock)}</td>
+                    <td${shortageClass}>${FormatUtils.formatNumber(m.order_shortage)}</td>
                     <td>${m['需求日期']}</td>
                 </tr>
             `;
