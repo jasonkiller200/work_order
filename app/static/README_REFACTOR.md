@@ -80,12 +80,14 @@ apiService.updateBuyer(id, buyer)
 
 ## 📋 下一階段計劃
 
-### 第二階段：CSS 元件化
-- [ ] components/buttons.css
-- [ ] components/tables.css
-- [ ] components/modals.css
-- [ ] components/cards.css
-- [ ] components/forms.css
+### 第二階段：CSS 元件化 ✅ 已完成
+- [x] components/buttons.css   (151 行)
+- [x] components/tables.css    (158 行)
+- [x] components/modals.css    (98 行)
+- [x] components/cards.css     (220 行)
+- [x] components/forms.css     (138 行)
+- [x] layout/base.css          (160 行)
+- [x] main.css                 (主入口檔案)
 
 ### 第三階段：JS 模組化
 - [ ] modules/procurement/dashboard.js
