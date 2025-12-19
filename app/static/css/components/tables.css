@@ -1,0 +1,148 @@
+/* ========================================
+   表格元件樣式
+   ======================================== */
+
+/* === 基礎表格 === */
+figure {
+    overflow-x: auto;
+    margin: 0;
+}
+
+table {
+    width: 100%;
+    font-size: 0.95em;
+}
+
+th, td {
+    padding: 0.5em 0.75em;
+    white-space: nowrap;
+}
+
+/* 物料說明欄位可以換行 */
+td:nth-child(2) {
+    white-space: normal;
+    max-width: 300px;
+}
+
+/* === 表格狀態樣式 === */
+
+/* 缺料顯示 */
+.shortage {
+    color: var(--status-shortage);
+    font-weight: bold;
+}
+
+.shortage-cell strong {
+    color: var(--status-shortage);
+    font-size: 1.1em;
+}
+
+/* 30日內缺料項目標示 */
+.shortage-30-days {
+    background-color: var(--status-warning-30days) !important;
+}
+
+.shortage-30-days:hover {
+    background-color: var(--status-warning-30days-hover) !important;
+}
+
+/* === 可點擊的表格行 === */
+.clickable-row,
+.clickable-material {
+    cursor: pointer;
+}
+
+.clickable-row:hover,
+.clickable-material:hover {
+    background-color: var(--pico-muted-background-color);
+}
+
+/* 查詢結果高亮 */
+.highlighted-row {
+    background-color: var(--status-highlight);
+    color: var(--pico-primary-inverse);
+    transition: background-color 0.3s ease;
+}
+
+/* 當前物料高亮行 (用於採購人員變更視窗) */
+.current-material-row {
+    background-color: var(--bg-warning) !important;
+    font-weight: bold;
+}
+
+[data-theme="dark"] .current-material-row {
+    background-color: #3d2f1f !important;
+}
+
+/* === 排序功能 === */
+th.sortable,
+th.sortable-order-materials {
+    cursor: pointer;
+    position: relative;
+    padding-right: 1.5em;
+}
+
+.sort-icon {
+    position: absolute;
+    right: 0.5em;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8em;
+    color: var(--pico-secondary);
+}
+
+/* 針對訂單物料表格的特定欄位寬度調整 */
+th.sortable-order-materials[data-sort-key="物料"],
+th.sortable-order-materials[data-sort-key="物料說明"] {
+    min-width: 100px;
+}
+
+th.sortable-order-materials[data-sort-key="需求數量 (EINHEIT)"],
+th.sortable-order-materials[data-sort-key="領料數量 (EINHEIT)"],
+th.sortable-order-materials[data-sort-key="未結數量 (EINHEIT)"],
+th.sortable-order-materials[data-sort-key="unrestricted_stock"],
+th.sortable-order-materials[data-sort-key="inspection_stock"],
+th.sortable-order-materials[data-sort-key="order_shortage"] {
+    min-width: 80px;
+}
+
+th.sortable-order-materials[data-sort-key="需求日期"] {
+    min-width: 90px;
+}
+
+/* === 表格控制區域 === */
+.table-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1em;
+    padding: 0.5em 0;
+    flex-wrap: wrap;
+    gap: 1em;
+}
+
+.items-info {
+    font-size: 0.9em;
+    color: var(--pico-muted-color);
+}
+
+.pagination-controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 0.9em;
+}
+
+.pagination-controls select {
+    padding: 0.3em 0.5em;
+    font-size: 0.9em;
+    min-width: 80px;
+}
+
+/* === 響應式設計 === */
+@media (max-width: 768px) {
+    .table-controls {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

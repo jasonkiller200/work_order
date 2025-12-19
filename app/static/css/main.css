@@ -1,0 +1,26 @@
+/* ========================================
+   主樣式入口檔案
+   統一引入所有模組化的 CSS 檔案
+   ======================================== */
+
+/* 1. 基礎層 - CSS 變數系統 */
+@import 'base/variables.css';
+
+/* 2. 布局層 - 基礎布局 */
+@import 'layout/base.css';
+
+/* 3. 元件層 - 按字母順序排列 */
+@import 'components/buttons.css';
+@import 'components/cards.css';
+@import 'components/forms.css';
+@import 'components/modals.css';
+@import 'components/tables.css';
+
+/* ========================================
+   使用說明：
+   在 HTML 中只需引入此檔案即可：
+   <link rel="stylesheet" href="css/main.css">
+   
+   如需單獨引入某個元件，可以：
+   <link rel="stylesheet" href="css/components/buttons.css">
+   ======================================== */

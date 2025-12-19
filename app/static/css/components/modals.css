@@ -1,0 +1,101 @@
+/* ========================================
+   彈窗（Modal）元件樣式
+   ======================================== */
+
+/* === 基礎彈窗樣式 === */
+#details-modal article {
+    width: 80%;
+    max-width: 900px;
+}
+
+/* === 分頁樣式 === */
+.tab-link.active {
+    background-color: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+}
+
+.tab-content {
+    display: none;
+    padding: 1em 0;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* === 訂單查詢頁籤樣式 === */
+.order-tab-link {
+    display: inline-block;
+    padding: 0.5em 1em;
+    text-decoration: none;
+    color: var(--pico-color);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.order-tab-link:hover {
+    background-color: var(--pico-muted-background-color);
+}
+
+.order-tab-link.active {
+    color: var(--pico-primary);
+    border-bottom-color: var(--pico-primary);
+    font-weight: bold;
+}
+
+.order-tab-content {
+    display: none;
+    padding: 1em 0;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.order-tab-content.active {
+    display: block;
+}
+
+/* === 儀表板頁籤樣式 === */
+.dashboard-tab-link {
+    display: inline-block;
+    padding: 0.5em 1em;
+    text-decoration: none;
+    color: var(--pico-color);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.dashboard-tab-link:hover {
+    background-color: var(--pico-muted-background-color);
+}
+
+.dashboard-tab-link.active {
+    color: var(--pico-primary);
+    border-bottom-color: var(--pico-primary);
+    font-weight: bold;
+}
+
+.dashboard-tab-content {
+    display: none;
+    padding: 1em 0;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.dashboard-tab-content.active {
+    display: block;
+}
+
+/* === 淡入動畫 === */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* === 隱藏元素 === */
+.hidden {
+    display: none !important;
+}

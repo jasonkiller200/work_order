@@ -1,0 +1,157 @@
+/* ========================================
+   按鈕元件樣式
+   ======================================== */
+
+/* === 客製化按鈕顏色 === */
+
+/* 查詢訂單按鈕 (主操作) - 藍色 */
+#search-order-btn {
+    background-color: var(--btn-primary);
+    border-color: var(--btn-primary);
+    color: var(--text-on-primary);
+}
+
+/* 下載規格表按鈕 (次要操作) - 綠色 */
+#download-specs-btn {
+    background-color: var(--btn-success);
+    border-color: var(--btn-success);
+    color: var(--text-on-primary);
+}
+
+/* 跳轉到物料清單按鈕 (導覽操作) - 橘色 */
+#scroll-to-materials-btn {
+    background-color: var(--btn-warning);
+    border-color: var(--btn-warning);
+    color: var(--text-on-primary);
+}
+
+/* 跳轉到規格資訊按鈕 (導覽操作) - 淺黃色 */
+#scroll-to-specs-btn {
+    background-color: var(--btn-info);
+    border-color: var(--btn-info);
+    color: var(--btn-info-text);
+}
+
+/* 禁用時的按鈕樣式 */
+#download-specs-btn:disabled,
+#scroll-to-materials-btn:disabled,
+#scroll-to-specs-btn:disabled {
+    background-color: var(--btn-disabled-bg);
+    border-color: var(--btn-disabled-bg);
+    color: var(--btn-disabled-text);
+    cursor: not-allowed;
+}
+
+/* === 按鈕組 === */
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 1em;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .button-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .button-group button {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}
+
+/* === 匯出按鈕 === */
+.export-excel-btn {
+    margin-left: 1em;
+    background-color: var(--btn-export);
+    border-color: var(--btn-export);
+}
+
+/* === 詳情按鈕 === */
+.detail-btn {
+    padding: 0.1rem 0.4rem;
+    font-size: 0.75rem;
+    background-color: var(--pico-primary);
+    border: 1px solid var(--pico-primary);
+    color: white;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    margin-left: 0.5rem;
+}
+
+.detail-btn:hover {
+    background-color: var(--pico-primary-hover);
+    transform: scale(1.05);
+}
+
+/* === 分頁按鈕 === */
+.pagination-wrapper {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1em;
+}
+
+.pagination {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5em;
+    flex-wrap: nowrap;
+}
+
+.pagination button {
+    padding: 0.5em 1em;
+    min-width: 50px;
+    font-size: 0.9em;
+    border: 1px solid var(--pico-border-color);
+    background-color: var(--pico-background-color);
+    color: var(--pico-color);
+    cursor: pointer;
+    border-radius: var(--pico-border-radius);
+    transition: all 0.2s ease;
+    margin: 0;
+}
+
+.pagination button:hover:not(:disabled) {
+    background-color: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+    border-color: var(--pico-primary);
+}
+
+.pagination button.active {
+    background-color: var(--pico-primary);
+    color: var(--pico-primary-inverse);
+    border-color: var(--pico-primary);
+    font-weight: bold;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination span {
+    padding: 0 0.5em;
+    color: var(--pico-muted-color);
+    display: inline-block;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .pagination-wrapper {
+        justify-content: center;
+    }
+    
+    .pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+        font-size: 0.85em;
+    }
+    
+    .pagination button {
+        padding: 0.4em 0.8em;
+        min-width: 40px;
+    }
+}

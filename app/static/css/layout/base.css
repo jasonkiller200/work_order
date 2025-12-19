@@ -1,0 +1,155 @@
+/* ========================================
+   基礎布局樣式
+   ======================================== */
+
+/* === 頁面基礎 === */
+body {
+    padding: 1em;
+}
+
+.container {
+    max-width: 1600px;
+    margin: auto;
+    padding: 0.5em;
+}
+
+/* === 系統狀態徽章（右上角）=== */
+.system-status-badge {
+    position: fixed;
+    top: 1em;
+    right: 1em;
+    padding: 0.5em 1em;
+    background: var(--bg-status-badge);
+    border: 1px solid var(--border-default);
+    border-radius: 20px;
+    font-size: 0.85em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--status-indicator-online);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.status-indicator.loading {
+    background: var(--status-indicator-loading);
+}
+
+.status-indicator.error {
+    background: var(--status-indicator-error);
+    animation: none;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* === 連結樣式 === */
+.material-link {
+    cursor: pointer;
+    color: var(--link-default);
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.material-link:hover {
+    color: var(--link-hover);
+    font-weight: bold;
+}
+
+/* === 訊息區塊 === */
+.shortage-alert {
+    margin-top: 1em;
+    padding: 0.8em;
+    background: var(--bg-warning);
+    border-left: 4px solid var(--border-warning);
+    border-radius: 4px;
+}
+
+.shortage-alert-count {
+    color: var(--status-shortage);
+}
+
+.shortage-warning {
+    color: var(--status-shortage);
+    font-weight: bold;
+}
+
+.success-message {
+    margin-top: 1em;
+    padding: 0.8em;
+    background: var(--bg-success);
+    border-left: 4px solid var(--border-success);
+    border-radius: 4px;
+}
+
+.success-message p {
+    margin: 0.3em 0;
+    color: var(--color-success);
+    font-weight: bold;
+}
+
+.success-message-detail {
+    color: var(--color-success) !important;
+}
+
+/* === 相關採購單標題 === */
+.purchase-orders-title {
+    margin-bottom: 0.5em;
+    color: var(--pico-primary);
+}
+
+/* === 交期歷史記錄 === */
+.delivery-history-summary {
+    cursor: pointer;
+    font-weight: bold;
+    color: var(--text-secondary);
+}
+
+.delivery-history-content {
+    margin-top: 0.5em;
+    font-size: 0.9em;
+    padding: 0.5em;
+    background: var(--history-bg);
+    border-radius: 4px;
+}
+
+/* === 響應式設計 === */
+@media (max-width: 768px) {
+    body {
+        padding: 0.5em;
+    }
+    
+    .container {
+        padding: 0.25em;
+    }
+}
+
+/* 大螢幕優化 */
+@media (min-width: 1920px) {
+    .container {
+        max-width: 1800px;
+    }
+}
+
+/* === 暗黑模式優化 === */
+[data-theme="dark"] .system-status-badge {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+[data-theme="dark"] table {
+    border-color: var(--border-default);
+}
+
+[data-theme="dark"] th,
+[data-theme="dark"] td {
+    border-color: var(--border-default);
+}

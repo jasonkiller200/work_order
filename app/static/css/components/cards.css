@@ -1,0 +1,201 @@
+/* ========================================
+   卡片元件樣式
+   ======================================== */
+
+/* === 統計卡片 === */
+.stats-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1em;
+    margin-bottom: 1em;
+    width: 100%;
+    overflow: visible;
+}
+
+.stat-card {
+    background: var(--stat-card-bg);
+    border: 2px solid var(--stat-card-border);
+    border-radius: 8px;
+    padding: 1em;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-color: var(--pico-primary);
+}
+
+.stat-card.active {
+    border-color: var(--stat-card-active-border);
+    border-width: 3px;
+    background: var(--stat-card-active-bg);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.stat-card.active::before {
+    content: '✓';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: var(--pico-primary);
+    color: var(--text-on-primary);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8em;
+}
+
+/* 優先級顏色 */
+.stat-card.priority-high {
+    border-left: 4px solid var(--priority-high);
+}
+
+.stat-card.priority-high:hover {
+    border-left-color: var(--priority-high-dark);
+}
+
+.stat-card.priority-medium {
+    border-left: 4px solid var(--priority-medium);
+}
+
+.stat-card.priority-medium:hover {
+    border-left-color: var(--priority-medium-dark);
+}
+
+.stat-card.priority-normal {
+    border-left: 4px solid var(--priority-normal);
+}
+
+.stat-card.priority-low {
+    border-left: 4px solid var(--priority-low);
+}
+
+.stat-icon {
+    font-size: 2em;
+    margin-bottom: 0.3em;
+}
+
+.stat-number {
+    font-size: 2em;
+    font-weight: bold;
+    color: var(--pico-primary);
+    margin: 0.2em 0;
+}
+
+.stat-label {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.2em;
+}
+
+.stat-sublabel {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+
+/* === 訂單摘要卡片 === */
+.order-summary-card {
+    background-color: var(--pico-background-color);
+    padding: 1em;
+    border-radius: var(--pico-border-radius);
+    margin-bottom: 1em;
+    border: 1px solid var(--pico-border-color);
+}
+
+.order-summary-card p {
+    margin: 0.5em 0;
+}
+
+/* === 訂單備註卡片 === */
+.order-note-section {
+    margin-bottom: 1.5em;
+}
+
+.order-note-card {
+    background-color: var(--note-bg);
+    border-left: 4px solid var(--note-border);
+    padding: 1em;
+    margin-top: 0.5em;
+}
+
+.order-note-card p {
+    margin: 0;
+    line-height: 1.6;
+}
+
+/* === 庫存總覽區塊 === */
+#stock-summary-section {
+    background-color: var(--pico-background-color);
+    padding: 1em;
+    border-radius: var(--pico-border-radius);
+    margin-bottom: 1em;
+    border: 1px solid var(--pico-border-color);
+}
+
+#stock-summary-section h4 {
+    margin-top: 0;
+    margin-bottom: 0.5em;
+    color: var(--pico-primary);
+}
+
+#stock-summary-section p {
+    margin: 0.2em 0;
+    font-size: 0.9em;
+}
+
+/* === 篩選徽章 === */
+.badge {
+    display: inline-block;
+    padding: 0.5em 1em;
+    background: var(--bg-highlight);
+    border: 1px solid var(--color-info);
+    border-radius: 20px;
+    font-size: 0.9em;
+}
+
+.badge button {
+    background: transparent;
+    border: none;
+    color: var(--color-danger);
+    cursor: pointer;
+    font-size: 1em;
+    padding: 0.2em 0.5em;
+}
+
+.badge button:hover {
+    background: var(--bg-warning);
+    border-radius: 4px;
+}
+
+/* === 響應式設計 === */
+@media (max-width: 768px) {
+    .stats-cards-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .stat-card {
+        padding: 0.8em;
+    }
+    
+    .stat-icon {
+        font-size: 1.5em;
+    }
+    
+    .stat-number {
+        font-size: 1.5em;
+    }
+}
+
+/* === 暗黑模式優化 === */
+[data-theme="dark"] .stat-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
