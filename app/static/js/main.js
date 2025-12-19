@@ -502,10 +502,14 @@ function openDetailsModal(materialId) {
                 substituteSection.innerHTML = subHTML;
             }
 
-            // 🆕 計算並顯示缺料警示
+            // 🆕 計算並顯示缺料警示（使用 CalcUtils）
             const shortageAlertEl = document.getElementById('shortage-alert');
-            const totalAvailable = data.stock_summary.unrestricted + data.stock_summary.inspection + data.stock_summary.on_order;
-            const totalDemand = data.demand_details.reduce((sum, d) => sum + d['未結數量 (EINHEIT)'], 0);
+            const totalStock = CalcUtils.calculateTotalStock(
+                data.stock_summary.unrestricted, 
+                data.stock_summary.inspection
+            );
+            const totalAvailable = totalStock + data.stock_summary.on_order;
+            const totalDemand = CalcUtils.calculateTotalDemand(data.demand_details);
             const shortage = Math.max(0, totalDemand - totalAvailable);
 
             if (shortageAlertEl && shortage > 0) {
