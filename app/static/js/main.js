@@ -562,65 +562,8 @@ function bindBuyerSelectEvents() {
 }
 
 // 設定訂單頁籤切換
-function setupOrderTabs() {
-    const downloadSpecsBtn = document.getElementById('download-specs-btn');
-
-    // 綁定下載按鈕
-    if (downloadSpecsBtn) {
-        downloadSpecsBtn.addEventListener('click', function () {
-            if (currentOrderId) {
-                window.location.href = `/api/download_specs/${currentOrderId}`;
-            } else {
-                alert('請先成功查詢一個訂單號碼，才能下載規格表。');
-            }
-        });
-    }
-
-    // 綁定頁籤切換事件
-    document.querySelectorAll('.order-tab-link').forEach(link => {
-        link.addEventListener('click', function (e) {
-            e.preventDefault();
-            const tabId = this.dataset.tab;
-
-            // 切換頁籤樣式
-            document.querySelectorAll('.order-tab-link').forEach(l => l.classList.remove('active'));
-            document.querySelectorAll('.order-tab-content').forEach(c => c.classList.remove('active'));
-
-            this.classList.add('active');
-            document.getElementById(tabId).classList.add('active');
-        });
-    });
-}
-
 function bindOrderQueryButtons() {
     // 這個函數已不需要，功能已移到 setupOrderTabs
-}
-
-function setupOrderSearch() {
-    const searchInput = document.getElementById('order-id-input');
-    const searchBtn = document.getElementById('search-order-btn');
-    const orderDetailsContainer = document.getElementById('order-details-container');
-
-    searchInput.value = '10000'; // 將輸入框預設值設為 '10000'
-
-    searchBtn.addEventListener('click', function () {
-        const orderId = searchInput.value.trim();
-        if (orderId.length < 9) {
-            orderDetailsContainer.innerHTML = '<p style="color: red;">料號至少需要輸入9碼。</p>';
-            return; // 阻止進一步的搜尋操作
-        }
-        if (orderId) {
-            fetchOrderDetails(orderId);
-        } else {
-            orderDetailsContainer.innerHTML = '<p style="color: red;">請輸入有效的訂單號碼。</p>';
-        }
-    });
-
-    searchInput.addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            searchBtn.click();
-        }
-    });
 }
 
 function setupProcurementFilter() {
@@ -769,78 +712,14 @@ function fetchOrderDetails(orderId) {
             orderTabsNav.style.display = 'block';
             orderTabsContent.style.display = 'block';
 
-            // 渲染訂單摘要資訊
-            let summaryHtmlContent = `<h3>訂單 ${orderId} 摘要資訊</h3>`;
-            if (data.order_summary && Object.keys(data.order_summary).length > 0) {
-                const summary = data.order_summary;
-                summaryHtmlContent += `
-                    <div class="order-summary-card">
-                        <p><strong>下單客戶:</strong> ${summary['下單客戶名稱'] || 'N/A'}</p>
-                        <p><strong>物料說明:</strong> ${summary['物料說明'] || 'N/A'}</p>
-                        <p><strong>生產開始:</strong> ${summary['生產開始'] || 'N/A'}</p>
-                        <p><strong>生產結束:</strong> ${summary['生產結束'] || 'N/A'}</p>
-                        <p><strong>機械外包:</strong> ${summary['機械外包'] || 'N/A'}</p>
-                        <p><strong>電控外包:</strong> ${summary['電控外包'] || 'N/A'}</p>
-                        <p><strong>噴漆外包:</strong> ${summary['噴漆外包'] || 'N/A'}</p>
-                        <p><strong>鏟花外包:</strong> ${summary['鏟花外包'] || 'N/A'}</p>
-                        <p><strong>捆包外包:</strong> ${summary['捆包外包'] || 'N/A'}</p>
-                    </div>
-                `;
-            } else {
-                summaryHtmlContent += '<p>沒有找到該訂單的摘要資訊。</p>';
-            }
+            // 渲染訂單摘要資訊（使用 order-query 模組）
+            const summaryHtmlContent = renderOrderSummary(orderId, data.order_summary);
 
-            // 渲染訂單備註
-            let noteHtmlContent = '';
-            if (data.order_note) {
-                noteHtmlContent = `
-                    <div class="order-note-section">
-                        <h3>訂單備註</h3>
-                        <article class="order-note-card">
-                            <p>${data.order_note.replace(/\n/g, '<br>')}</p>
-                        </article>
-                    </div>
-                `;
-            }
+            // 渲染訂單備註（使用 order-query 模組）
+            const noteHtmlContent = renderOrderNote(data.order_note);
 
-            // 渲染訂單規格資訊
-            let versionText = '';
-            if (data.spec_version && data.spec_version.trim() !== 'nan' && data.spec_version.trim() !== '') {
-                versionText = ` <span style="font-weight: normal; font-size: 0.9em;">(版本: ${data.spec_version})</span>`;
-            }
-            let specsHtmlContent = `<h3>訂單 ${orderId} 的規格資訊${versionText}</h3>`;
-            if (data.order_specs && data.order_specs.length > 0) {
-                specsHtmlContent += `
-                    <figure>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>內部特性號碼</th>
-                                    <th>特性說明</th>
-                                    <th>特性值</th>
-                                    <th>值說明</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-                data.order_specs.forEach(spec => {
-                    specsHtmlContent += `
-                        <tr>
-                            <td>${spec['內部特性號碼']}</td>
-                            <td>${spec['特性說明']}</td>
-                            <td>${spec['特性值']}</td>
-                            <td>${spec['值說明']}</td>
-                        </tr>
-                    `;
-                });
-                specsHtmlContent += `
-                            </tbody>
-                        </table>
-                    </figure>
-                `;
-            } else {
-                specsHtmlContent += '<p>沒有找到該訂單的規格資訊。</p>';
-            }
+            // 渲染訂單規格資訊（使用 order-query 模組）
+            const specsHtmlContent = renderOrderSpecs(orderId, data.order_specs, data.spec_version);
 
             // 將內容寫入規格頁籤
             tabOrderSpecs.innerHTML = noteHtmlContent + summaryHtmlContent + specsHtmlContent;
