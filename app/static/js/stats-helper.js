@@ -109,43 +109,36 @@ function clearStatFilter() {
 
 // 計算統計數據
 function calculateStats(materials, deliveryData) {
+    // 使用 StatsManager 計算統計（簡化版）
+    const basicStats = StatsManager.calculateStats(materials);
+    
+    // 補充原有的額外統計
     const today = new Date();
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
     const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay()); // 本週日
+    weekStart.setDate(today.getDate() - today.getDay());
     const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6); // 本週六
+    weekEnd.setDate(weekStart.getDate() + 6);
     
     const stats = {
-        shortage30Days: 0,
-        noDelivery: 0,
+        shortage30Days: basicStats.within30Days,
+        noDelivery: basicStats.noDelivery,
         delayed: 0,
         dueSoon: 0,
-        allShortage: 0,
+        allShortage: basicStats.shortage + basicStats.partial,
         myItems: 0,
         thisWeek: 0,
-        sufficient: 0,
+        sufficient: basicStats.sufficient,
         substituteNotify: 0,
         inInspection: 0
     };
     
+    // 計算延誤、即將到期、本週需求等
     materials.forEach(m => {
-        const hasShortage = m.current_shortage > 0 || m.projected_shortage > 0;
-        const shortage30 = m.shortage_within_30_days || false;
         const delivery = m.delivery_date ? new Date(m.delivery_date) : null;
         const earliestDemand = m.earliest_demand_date ? new Date(m.earliest_demand_date) : null;
         
-        // 30日內缺料
-        if (shortage30) {
-            stats.shortage30Days++;
-        }
-        
-        // 無交期項目（有缺料但無交期）
-        if (hasShortage && !delivery) {
-            stats.noDelivery++;
-        }
-        
-        // 已延誤（有交期但已過期且未標記完成）
+        // 已延誤
         if (delivery && delivery < today && m.delivery_status !== 'completed') {
             stats.delayed++;
         }
@@ -155,25 +148,12 @@ function calculateStats(materials, deliveryData) {
             stats.dueSoon++;
         }
         
-        // 總缺料
-        if (hasShortage) {
-            stats.allShortage++;
-        }
-        
-        // 我的項目（暫時設為0，需要實作獲取當前使用者）
-        stats.myItems = 0;
-        
         // 本週需求
         if (earliestDemand && earliestDemand >= weekStart && earliestDemand <= weekEnd) {
             stats.thisWeek++;
         }
         
-        // 庫存充足
-        if (!hasShortage) {
-            stats.sufficient++;
-        }
-        
-        // 🆕 替代用料通知（檢查是否有已勾選的替代用料）
+        // 替代用料通知
         const materialBase = m['物料'] ? m['物料'].substring(0, 10) : '';
         if (materialBase) {
             const notifiedSubstitutes = typeof getNotifiedSubstitutes === 'function' ? getNotifiedSubstitutes() : [];
@@ -185,7 +165,7 @@ function calculateStats(materials, deliveryData) {
             }
         }
         
-        // 🆕 品檢中（品檢中數量 > 0）
+        // 品檢中
         const inspectionStock = m.inspection_stock || m['品質檢驗中'] || 0;
         if (inspectionStock > 0) {
             stats.inInspection++;
