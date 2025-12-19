@@ -7,6 +7,8 @@
     <title>生產資訊中心 - 訂單查詢</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <!-- 🆕 CSS 變數系統（新架構） -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base/variables.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -111,6 +113,11 @@
         </article>
     </dialog>
 
+    <!-- 🆕 服務層（新架構 - 必須在其他 JS 之前載入） -->
+    <script src="{{ url_for('static', filename='js/services/api-service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/notification-service.js') }}"></script>
+    
+    <!-- 原有的 JS 檔案 -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服務層測試頁面</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base/variables.css') }}">
+    <style>
+        .test-section {
+            margin: 2em 0;
+            padding: 1em;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+        }
+        .test-result {
+            margin: 1em 0;
+            padding: 1em;
+            border-left: 4px solid var(--color-info);
+            background: var(--bg-card-secondary);
+        }
+        .success {
+            border-left-color: var(--color-success);
+            background: var(--bg-success);
+        }
+        .error {
+            border-left-color: var(--color-danger);
+            background: var(--bg-warning);
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>🧪 前端服務層測試頁面</h1>
+            <p>測試新建立的 API 服務層和通知服務</p>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="/procurement">← 返回採購儀表板</a></li>
+            </ul>
+        </nav>
+
+        <hr>
+
+        <!-- 測試區域 1: 通知服務 -->
+        <section class="test-section">
+            <h2>📢 通知服務測試</h2>
+            <p>測試 Toast 通知功能</p>
+            
+            <div style="display: flex; gap: 1em; flex-wrap: wrap;">
+                <button onclick="testNotification('success')">✅ 成功通知</button>
+                <button onclick="testNotification('error')" class="secondary">❌ 錯誤通知</button>
+                <button onclick="testNotification('warning')" class="secondary">⚠️ 警告通知</button>
+                <button onclick="testNotification('info')" class="secondary">ℹ️ 資訊通知</button>
+                <button onclick="testLoading()" class="contrast">⏳ 載入中通知</button>
+            </div>
+
+            <div id="notification-result" class="test-result" style="margin-top: 1em;">
+                <strong>測試結果：</strong>等待測試...
+            </div>
+        </section>
+
+        <!-- 測試區域 2: API 服務 -->
+        <section class="test-section">
+            <h2>🔌 API 服務測試</h2>
+            <p>測試 API 呼叫功能</p>
+            
+            <div style="display: flex; gap: 1em; flex-wrap: wrap;">
+                <button onclick="testApiStatus()">檢查系統狀態</button>
+                <button onclick="testApiMaterials()" class="secondary">取得物料資料</button>
+                <button onclick="testApiDeliveries()" class="secondary">取得交期資料</button>
+            </div>
+
+            <div id="api-result" class="test-result" style="margin-top: 1em;">
+                <strong>測試結果：</strong>等待測試...
+            </div>
+        </section>
+
+        <!-- 測試區域 3: CSS 變數 -->
+        <section class="test-section">
+            <h2>🎨 CSS 變數測試</h2>
+            <p>測試新的 CSS 變數系統</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1em; margin-top: 1em;">
+                <div style="padding: 1em; background: var(--color-success); color: white; border-radius: 4px; text-align: center;">
+                    Success<br>
+                    <small>--color-success</small>
+                </div>
+                <div style="padding: 1em; background: var(--color-danger); color: white; border-radius: 4px; text-align: center;">
+                    Danger<br>
+                    <small>--color-danger</small>
+                </div>
+                <div style="padding: 1em; background: var(--color-warning); color: white; border-radius: 4px; text-align: center;">
+                    Warning<br>
+                    <small>--color-warning</small>
+                </div>
+                <div style="padding: 1em; background: var(--color-info); color: white; border-radius: 4px; text-align: center;">
+                    Info<br>
+                    <small>--color-info</small>
+                </div>
+            </div>
+
+            <div style="margin-top: 1em;">
+                <button onclick="toggleTheme()">🌓 切換主題（測試暗黑模式變數）</button>
+            </div>
+        </section>
+
+        <!-- 測試區域 4: 服務層資訊 -->
+        <section class="test-section">
+            <h2>ℹ️ 服務層資訊</h2>
+            <div id="service-info" style="font-family: monospace; font-size: 0.9em;">
+                載入中...
+            </div>
+        </section>
+    </main>
+
+    <!-- 載入服務層 -->
+    <script src="{{ url_for('static', filename='js/services/api-service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/notification-service.js') }}"></script>
+
+    <!-- 測試腳本 -->
+    <script>
+        // 顯示服務層資訊
+        document.addEventListener('DOMContentLoaded', function() {
+            const info = document.getElementById('service-info');
+            
+            let html = '<h4>✅ 服務層已載入：</h4><ul>';
+            html += `<li><strong>apiService:</strong> ${typeof apiService !== 'undefined' ? '✅ 已載入' : '❌ 未載入'}</li>`;
+            html += `<li><strong>notificationService:</strong> ${typeof notificationService !== 'undefined' ? '✅ 已載入' : '❌ 未載入'}</li>`;
+            html += `<li><strong>showToast (向後兼容):</strong> ${typeof showToast === 'function' ? '✅ 已載入' : '❌ 未載入'}</li>`;
+            html += '</ul>';
+            
+            if (typeof apiService !== 'undefined') {
+                html += '<h4>📦 API 服務方法：</h4><ul>';
+                const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(apiService))
+                    .filter(m => m !== 'constructor' && typeof apiService[m] === 'function');
+                methods.forEach(m => {
+                    html += `<li>${m}()</li>`;
+                });
+                html += `</ul><p><strong>共 ${methods.length} 個方法</strong></p>`;
+            }
+            
+            info.innerHTML = html;
+        });
+
+        // 測試通知服務
+        function testNotification(type) {
+            const messages = {
+                success: '✅ 這是一個成功通知',
+                error: '❌ 這是一個錯誤通知',
+                warning: '⚠️ 這是一個警告通知',
+                info: 'ℹ️ 這是一個資訊通知'
+            };
+            
+            notificationService[type](messages[type]);
+            
+            document.getElementById('notification-result').innerHTML = 
+                `<strong>測試結果：</strong>已觸發 <code>${type}</code> 通知`;
+            document.getElementById('notification-result').className = 'test-result success';
+        }
+
+        function testLoading() {
+            const close = notificationService.showLoading('載入中，請稍候...');
+            
+            document.getElementById('notification-result').innerHTML = 
+                `<strong>測試結果：</strong>已顯示載入中通知（3秒後自動關閉）`;
+            document.getElementById('notification-result').className = 'test-result success';
+            
+            // 3秒後關閉
+            setTimeout(() => {
+                close();
+                notificationService.success('載入完成！');
+            }, 3000);
+        }
+
+        // 測試 API 服務
+        async function testApiStatus() {
+            const result = document.getElementById('api-result');
+            result.innerHTML = '<strong>測試中：</strong>呼叫 API...';
+            
+            try {
+                const data = await apiService.checkStatus();
+                result.innerHTML = `<strong>測試結果：</strong>✅ API 正常<br>
+                    <pre style="margin-top: 0.5em; padding: 0.5em; background: var(--bg-page); border-radius: 4px;">${JSON.stringify(data, null, 2)}</pre>`;
+                result.className = 'test-result success';
+                notificationService.success('API 狀態檢查成功');
+            } catch (error) {
+                result.innerHTML = `<strong>測試結果：</strong>❌ API 錯誤<br>${error.message}`;
+                result.className = 'test-result error';
+                notificationService.error('API 呼叫失敗');
+            }
+        }
+
+        async function testApiMaterials() {
+            const result = document.getElementById('api-result');
+            result.innerHTML = '<strong>測試中：</strong>載入物料資料...';
+            
+            try {
+                const data = await apiService.getMaterials();
+                result.innerHTML = `<strong>測試結果：</strong>✅ 取得 ${data.length} 筆物料資料<br>
+                    <small>第一筆資料：</small>
+                    <pre style="margin-top: 0.5em; padding: 0.5em; background: var(--bg-page); border-radius: 4px; font-size: 0.8em;">${JSON.stringify(data[0], null, 2)}</pre>`;
+                result.className = 'test-result success';
+                notificationService.success(`成功載入 ${data.length} 筆物料`);
+            } catch (error) {
+                result.innerHTML = `<strong>測試結果：</strong>❌ API 錯誤<br>${error.message}`;
+                result.className = 'test-result error';
+                notificationService.error('載入物料失敗');
+            }
+        }
+
+        async function testApiDeliveries() {
+            const result = document.getElementById('api-result');
+            result.innerHTML = '<strong>測試中：</strong>載入交期資料...';
+            
+            try {
+                const data = await apiService.getAllDeliveries();
+                const count = Object.keys(data.schedules || {}).length;
+                result.innerHTML = `<strong>測試結果：</strong>✅ 取得 ${count} 筆交期資料`;
+                result.className = 'test-result success';
+                notificationService.success(`成功載入 ${count} 筆交期`);
+            } catch (error) {
+                result.innerHTML = `<strong>測試結果：</strong>❌ API 錯誤<br>${error.message}`;
+                result.className = 'test-result error';
+                notificationService.error('載入交期失敗');
+            }
+        }
+
+        // 切換主題
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            notificationService.info(`已切換到${newTheme === 'dark' ? '暗黑' : '亮色'}模式`);
+        }
+    </script>
+</body>
+</html>
