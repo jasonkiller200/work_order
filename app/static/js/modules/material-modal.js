@@ -3,14 +3,39 @@
  * 處理物料詳情彈窗的顯示和互動
  */
 
-/**
- * 開啟物料詳情彈窗
- * @param {string} materialId - 物料編號
- */
+function setupModal() {
+    const modal = document.getElementById('details-modal');
+    if (!modal) return;
+
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const closeLink = modal.querySelector('.close');
+
+    const closeModal = () => modal.close();
+
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', closeModal);
+    }
+    if (closeLink) {
+        closeLink.addEventListener('click', (e) => { e.preventDefault(); closeModal(); });
+    }
+
+    modal.querySelectorAll('.tab-link').forEach(link => {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            const tabId = this.dataset.tab;
+            modal.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+            modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        });
+    });
+}
+
+
 function openDetailsModal(materialId) {
     const modal = document.getElementById('details-modal');
     
-    // 先設定基本標題
+    // 🆕 先設定基本標題，後續從API取得詳細資訊後再更新
     document.getElementById('modal-title').textContent = `物料詳情: ${materialId}`;
 
     document.getElementById('stock-summary-section').style.display = 'block';
@@ -42,20 +67,25 @@ function openDetailsModal(materialId) {
 
     modal.showModal();
 
-    // 載入採購單資料
-    if (typeof loadPurchaseOrders === 'function') {
-        loadPurchaseOrders(materialId);
-    }
+    // 🆕 載入採購單資料
+    loadPurchaseOrders(materialId);
+    
 
     // 根據當前儀表板類型傳遞參數
-    const dashboardType = window.currentDashboardType || 'main';
-    apiService.getMaterialDetails(materialId, dashboardType)
+    const dashboardType = currentDashboardType;
+    fetch(`/api/material/${materialId}/details?type=${dashboardType}`)
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => Promise.reject(err));
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.error) {
                 throw new Error(data.error);
             }
 
-            // 更新標題，顯示物料說明
+            // 🆕 更新標題，顯示物料說明（分兩行顯示）
             const description = data.material_description || '無說明';
             const modalTitle = document.getElementById('modal-title');
             modalTitle.innerHTML = `
@@ -64,190 +94,483 @@ function openDetailsModal(materialId) {
             `;
 
             // 更新庫存總覽
-            document.getElementById('unrestricted-stock').textContent = FormatUtils.formatNumber(data.stock_summary.unrestricted);
-            document.getElementById('inspection-stock').textContent = FormatUtils.formatNumber(data.stock_summary.inspection);
-            document.getElementById('on-order-stock').textContent = FormatUtils.formatNumber(data.stock_summary.on_order);
+            document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
+            document.getElementById('inspection-stock').textContent = data.stock_summary.inspection.toFixed(0);
+            document.getElementById('on-order-stock').textContent = data.stock_summary.on_order.toFixed(0);
 
-            // 顯示替代品資訊
-            renderSubstituteSection(data.substitute_inventory);
+            // 顯示替代品資訊在庫存總覽下方
+            let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
+            if (data.substitute_inventory && data.substitute_inventory.length > 0) {
+                subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>通知</th><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th><th>總需求數</th></tr></thead><tbody>';
+                data.substitute_inventory.forEach(s => {
+                    const totalDemand = s.total_demand || 0;
+                    const isNotified = localStorage.getItem(`notify_${s['物料']}`) === 'true';
+                    const checkedAttr = isNotified ? 'checked' : '';
+                    subHTML += `<tr>
+                        <td><input type="checkbox" ${checkedAttr} onchange="toggleSubstituteNotify('${s['物料']}')"></td>
+                        <td>${s['物料']}</td>
+                        <td>${s['物料說明']}</td>
+                        <td>${s.unrestricted_stock.toFixed(0)}</td>
+                        <td>${s.inspection_stock.toFixed(0)}</td>
+                        <td>${totalDemand.toFixed(0)}</td>
+                    </tr>`;
+                });
+                subHTML += '</tbody></table>';
+            } else {
+                subHTML += '<p style="font-size: 0.9em; color: var(--pico-muted-color);">沒有找到可用的替代版本。</p>';
+            }
 
-            // 計算並顯示缺料警示
-            handleShortageAlert(data, materialId);
+            const substituteSection = document.getElementById('substitute-section');
+            if (substituteSection) {
+                substituteSection.innerHTML = subHTML;
+            }
+
+            // 🆕 計算並顯示缺料警示
+            const shortageAlertEl = document.getElementById('shortage-alert');
+            const totalAvailable = data.stock_summary.unrestricted + data.stock_summary.inspection + data.stock_summary.on_order;
+            const totalDemand = data.demand_details.reduce((sum, d) => sum + d['未結數量 (EINHEIT)'], 0);
+            const shortage = Math.max(0, totalDemand - totalAvailable);
+
+            if (shortageAlertEl && shortage > 0) {
+                shortageAlertEl.style.display = 'block';
+
+                const shortageQtyEl = document.getElementById('current-shortage-qty');
+                if (shortageQtyEl) {
+                    shortageQtyEl.textContent = shortage.toFixed(0);
+                }
+
+                // 🔧 找開始缺料的需求日（而不是最早需求日）
+                let shortageStartDate = '-';
+                let runningStock = totalAvailable;
+
+                for (const demand of data.demand_details) {
+                    runningStock -= demand['未結數量 (EINHEIT)'];
+                    if (runningStock < 0 && shortageStartDate === '-') {
+                        // 這是第一筆造成缺料的需求
+                        shortageStartDate = demand['需求日期'];
+                        break;
+                    }
+                }
+
+                // 如果都會缺料，就用第一筆需求日
+                if (shortageStartDate === '-' && data.demand_details.length > 0) {
+                    shortageStartDate = data.demand_details[0]['需求日期'];
+                }
+
+                const demandDateEl = document.getElementById('earliest-demand-date');
+                if (demandDateEl) {
+                    demandDateEl.textContent = shortageStartDate;
+                }
+
+                // 建議採購數量
+                const suggestedQty = Math.ceil(shortage * 1.1);
+                const deliveryQtyEl = document.getElementById('delivery-qty');
+                if (deliveryQtyEl) {
+                    deliveryQtyEl.value = suggestedQty;
+                    deliveryQtyEl.placeholder = `建議: ${suggestedQty}`;
+                }
+
+                // 建議到貨日期（開始缺料需求日 - 3天）
+                if (shortageStartDate !== '-') {
+                    try {
+                        const demandDate = new Date(shortageStartDate);
+                        demandDate.setDate(demandDate.getDate() - 3);
+                        const deliveryDateEl = document.getElementById('delivery-date');
+                        if (deliveryDateEl) {
+                            deliveryDateEl.value = demandDate.toISOString().split('T')[0];
+                        }
+                    } catch (e) {
+                        // 忽略日期轉換錯誤
+                    }
+                }
+            } else if (shortageAlertEl) {
+                shortageAlertEl.style.display = 'none';
+            }
+
+            // 🆕 載入現有交期資料（只在元素存在時執行）
+            if (typeof loadExistingDelivery === 'function') {
+                loadExistingDelivery(materialId);
+            }
+
+            // 🆕 綁定交期表單事件（只在元素存在時執行）
+            if (typeof setupDeliveryFormEvents === 'function') {
+                setupDeliveryFormEvents(materialId, data);
+            }
 
             // 顯示需求訂單
-            renderDemandDetails(data.demand_details);
+            let demandHTML = '<table><thead><tr><th>訂單號碼</th><th>未結數量</th><th>需求日期</th><th>預計剩餘庫存</th></tr></thead><tbody>';
+            if (data.demand_details && data.demand_details.length > 0) {
+                data.demand_details.forEach(d => {
+                    const shortageClass = d.is_shortage_point ? ' class="shortage-warning"' : '';
+                    demandHTML += `<tr>
+                        <td>${d['訂單']}</td>
+                        <td${shortageClass}>${d['未結數量 (EINHEIT)'].toFixed(0)}</td>
+                        <td>${d['需求日期']}</td>
+                        <td>${d.remaining_stock.toFixed(0)}</td>
+                    </tr>`;
+                });
+            } else {
+                demandHTML += '<tr><td colspan="4">沒有找到相關的需求訂單。</td></tr>';
+            }
+            demandHTML += '</tbody></table>';
+            document.getElementById('tab-demand').innerHTML = demandHTML;
         })
         .catch(error => {
             console.error('Error fetching details:', error);
-            handleModalError(error);
-        });
-}
+            const errorMsg = error.error || error.message || '未知錯誤';
+            document.getElementById('unrestricted-stock').textContent = '-';
+            document.getElementById('inspection-stock').textContent = '-';
+            document.getElementById('on-order-stock').textContent = '-';
 
-/**
- * 渲染替代品區域
- * @param {Array} substitutes - 替代品清單
- */
-function renderSubstituteSection(substitutes) {
-    let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
-    
-    if (substitutes && substitutes.length > 0) {
-        subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>通知</th><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th><th>總需求數</th></tr></thead><tbody>';
-        substitutes.forEach(s => {
-            const totalDemand = s.total_demand || 0;
-            const isNotified = localStorage.getItem(`notify_${s['物料']}`) === 'true';
-            const checkedAttr = isNotified ? 'checked' : '';
-            subHTML += `<tr>
-                <td><input type="checkbox" ${checkedAttr} onchange="toggleSubstituteNotify('${s['物料']}')"></td>
-                <td>${s['物料']}</td>
-                <td>${s['物料說明']}</td>
-                <td>${FormatUtils.formatNumber(s.unrestricted_stock)}</td>
-                <td>${FormatUtils.formatNumber(s.inspection_stock)}</td>
-                <td>${FormatUtils.formatNumber(totalDemand)}</td>
-            </tr>`;
-        });
-        subHTML += '</tbody></table>';
-    } else {
-        subHTML += '<p style="font-size: 0.9em; color: var(--pico-muted-color);">沒有找到可用的替代版本。</p>';
-    }
-
-    const substituteSection = document.getElementById('substitute-section');
-    if (substituteSection) {
-        substituteSection.innerHTML = subHTML;
-    }
-}
-
-/**
- * 處理缺料警示
- * @param {object} data - 物料詳情資料
- * @param {string} materialId - 物料編號
- */
-function handleShortageAlert(data, materialId) {
-    const shortageAlertEl = document.getElementById('shortage-alert');
-    const totalStock = CalcUtils.calculateTotalStock(
-        data.stock_summary.unrestricted, 
-        data.stock_summary.inspection
-    );
-    const totalAvailable = totalStock + data.stock_summary.on_order;
-    const totalDemand = CalcUtils.calculateTotalDemand(data.demand_details);
-    const shortage = Math.max(0, totalDemand - totalAvailable);
-
-    if (shortageAlertEl && shortage > 0) {
-        shortageAlertEl.style.display = 'block';
-
-        const shortageQtyEl = document.getElementById('current-shortage-qty');
-        if (shortageQtyEl) {
-            shortageQtyEl.textContent = FormatUtils.formatNumber(shortage);
-        }
-
-        // 找開始缺料的需求日
-        const shortageStartDate = findShortageStartDate(data.demand_details, totalAvailable);
-        
-        const demandDateEl = document.getElementById('earliest-demand-date');
-        if (demandDateEl) {
-            demandDateEl.textContent = shortageStartDate;
-        }
-
-        // 建議採購數量
-        const suggestedQty = Math.ceil(shortage * 1.1);
-        const deliveryQtyEl = document.getElementById('delivery-qty');
-        if (deliveryQtyEl) {
-            deliveryQtyEl.value = suggestedQty;
-            deliveryQtyEl.placeholder = `建議: ${suggestedQty}`;
-        }
-
-        // 建議到貨日期（開始缺料需求日 - 3天）
-        if (shortageStartDate !== '-') {
-            try {
-                const demandDate = new Date(shortageStartDate);
-                demandDate.setDate(demandDate.getDate() - 3);
-                const deliveryDateEl = document.getElementById('delivery-date');
-                if (deliveryDateEl) {
-                    deliveryDateEl.value = demandDate.toISOString().split('T')[0];
-                }
-            } catch (e) {
-                // 忽略日期轉換錯誤
+            const substituteSection = document.getElementById('substitute-section');
+            if (substituteSection) {
+                substituteSection.innerHTML = '<p style="color:red;">載入替代版本時發生錯誤。</p>';
             }
-        }
-    } else if (shortageAlertEl) {
-        shortageAlertEl.style.display = 'none';
-    }
 
-    // 載入現有交期資料
-    if (typeof loadExistingDelivery === 'function') {
-        loadExistingDelivery(materialId);
-    }
-
-    // 綁定交期表單事件
-    if (typeof setupDeliveryFormEvents === 'function') {
-        setupDeliveryFormEvents(materialId, data);
-    }
-}
-
-/**
- * 找出開始缺料的需求日期
- * @param {Array} demands - 需求清單
- * @param {number} totalAvailable - 總可用數量
- * @returns {string} 開始缺料日期
- */
-function findShortageStartDate(demands, totalAvailable) {
-    let shortageStartDate = '-';
-    let runningStock = totalAvailable;
-
-    for (const demand of demands) {
-        runningStock -= demand['未結數量 (EINHEIT)'];
-        if (runningStock < 0 && shortageStartDate === '-') {
-            shortageStartDate = demand['需求日期'];
-            break;
-        }
-    }
-
-    // 如果都會缺料，就用第一筆需求日
-    if (shortageStartDate === '-' && demands.length > 0) {
-        shortageStartDate = demands[0]['需求日期'];
-    }
-
-    return shortageStartDate;
-}
-
-/**
- * 渲染需求訂單詳情
- * @param {Array} demands - 需求清單
- */
-function renderDemandDetails(demands) {
-    let demandHTML = '<table><thead><tr><th>訂單號碼</th><th>未結數量</th><th>需求日期</th><th>預計剩餘庫存</th></tr></thead><tbody>';
-    
-    if (demands && demands.length > 0) {
-        demands.forEach(d => {
-            const shortageClass = d.is_shortage_point ? ' class="shortage-warning"' : '';
-            demandHTML += `<tr>
-                <td>${d['訂單']}</td>
-                <td${shortageClass}>${FormatUtils.formatNumber(d['未結數量 (EINHEIT)'])}</td>
-                <td>${d['需求日期']}</td>
-                <td>${FormatUtils.formatNumber(d.remaining_stock)}</td>
-            </tr>`;
+            document.getElementById('tab-demand').innerHTML = `<p style="color:red;">載入需求時發生錯誤: ${errorMsg}</p>`;
         });
-    } else {
-        demandHTML += '<tr><td colspan="4">沒有找到相關的需求訂單。</td></tr>';
+}
+
+function openBuyerReferenceModal(materialId) {
+    const modal = document.getElementById('details-modal');
+    document.getElementById('modal-title').textContent = `採購人員參考清單: ${materialId}`;
+
+    document.getElementById('stock-summary-section').style.display = 'none';
+    document.getElementById('tab-demand').innerHTML = '<p>載入中...</p>';
+    document.getElementById('tab-substitute').innerHTML = '';
+
+    modal.querySelectorAll('.tab-link').forEach(l => l.classList.add('hidden'));
+    document.querySelector('.tab-link[data-tab="tab-demand"]').classList.remove('hidden');
+    modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-demand').classList.add('active');
+
+    modal.showModal();
+
+    // 取得當前儀表板類型
+    const dashboardType = currentDashboardType;
+
+    fetch(`/api/material/${materialId}/buyer_reference?type=${dashboardType}`)
+        .then(response => response.json())
+        .then(data => {
+            // 先取得所有採購人員清單
+            fetch('/api/buyers_list')
+                .then(response => response.json())
+                .then(buyersData => {
+                    let buyerHTML = '<h4>該物料上下25筆採購人員參考（點擊下拉選單可修改採購人員）</h4>';
+                    buyerHTML += '<table><thead><tr><th>物料</th><th>物料說明</th><th>採購人員</th></tr></thead><tbody>';
+
+                    if (data.reference_list && data.reference_list.length > 0) {
+                        data.reference_list.forEach(item => {
+                            const isCurrentMaterial = item['物料'] === materialId;
+                            const rowClass = isCurrentMaterial ? ' class="current-material-row"' : '';
+                            const currentBuyer = item['採購人員'] || '';
+
+                            // 建立採購人員下拉選單
+                            let buyerSelect = `<select class="buyer-select" data-material-id="${item['物料']}" data-dashboard-type="${dashboardType}">`;
+                            buyerSelect += `<option value="">未指定</option>`;
+                            buyersData.buyers.forEach(buyer => {
+                                const selected = buyer === currentBuyer ? 'selected' : '';
+                                buyerSelect += `<option value="${buyer}" ${selected}>${buyer}</option>`;
+                            });
+                            buyerSelect += `</select>`;
+
+                            buyerHTML += `<tr${rowClass}>
+                                <td>${item['物料']}</td>
+                                <td>${item['物料說明']}</td>
+                                <td>${buyerSelect}</td>
+                            </tr>`;
+                        });
+                    } else {
+                        buyerHTML += '<tr><td colspan="3">沒有找到相關的採購人員資料。</td></tr>';
+                    }
+
+                    buyerHTML += '</tbody></table>';
+                    document.getElementById('tab-demand').innerHTML = buyerHTML;
+
+                    // 綁定下拉選單變更事件
+                    bindBuyerSelectEvents();
+                })
+                .catch(error => {
+                    console.error('Error fetching buyers list:', error);
+                    let buyerHTML = '<h4>該物料上下25筆採購人員參考</h4>';
+                    buyerHTML += '<table><thead><tr><th>物料</th><th>物料說明</th><th>採購人員</th></tr></thead><tbody>';
+
+                    if (data.reference_list && data.reference_list.length > 0) {
+                        data.reference_list.forEach(item => {
+                            const isCurrentMaterial = item['物料'] === materialId;
+                            const rowClass = isCurrentMaterial ? ' class="current-material-row"' : '';
+                            buyerHTML += `<tr${rowClass}>
+                                <td>${item['物料']}</td>
+                                <td>${item['物料說明']}</td>
+                                <td>${item['採購人員'] || '-'}</td>
+                            </tr>`;
+                        });
+                    }
+
+                    buyerHTML += '</tbody></table>';
+                    buyerHTML += '<p style="color: orange;">無法載入採購人員清單，顯示為唯讀模式。</p>';
+                    document.getElementById('tab-demand').innerHTML = buyerHTML;
+                });
+        })
+        .catch(error => {
+            console.error('Error fetching buyer reference:', error);
+            document.getElementById('tab-demand').innerHTML = '<p style="color:red;">載入採購人員參考時發生錯誤。</p>';
+        });
+}
+
+function bindBuyerSelectEvents() {
+    document.querySelectorAll('.buyer-select').forEach(select => {
+        select.addEventListener('change', function () {
+            const materialId = this.dataset.materialId;
+            const newBuyer = this.value;
+            const dashboardType = this.dataset.dashboardType;
+            const originalValue = this.getAttribute('data-original-value') || '';
+
+            // 暫時禁用選單
+            this.disabled = true;
+            this.style.opacity = '0.6';
+
+            // 儲存採購人員變更
+            fetch('/api/update_buyer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    material_id: materialId,
+                    buyer: newBuyer,
+                    dashboard_type: dashboardType
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 顯示成功訊息
+                        this.style.backgroundColor = '#d4edda';
+                        this.style.borderColor = '#c3e6cb';
+                        setTimeout(() => {
+                            this.style.backgroundColor = '';
+                            this.style.borderColor = '';
+                        }, 1500);
+
+                        // 更新快取資料
+                        if (dashboardType === 'finished') {
+                            const material = currentFinishedMaterialsData.find(m => m['物料'] === materialId);
+                            if (material) {
+                                material['採購人員'] = newBuyer;
+                            }
+                        } else {
+                            const material = currentMaterialsData.find(m => m['物料'] === materialId);
+                            if (material) {
+                                material['採購人員'] = newBuyer;
+                            }
+                        }
+
+                        // 重新渲染表格以反映變更
+                        renderMaterialsTable();
+                    } else {
+                        // 顯示錯誤訊息
+                        alert('儲存失敗: ' + (data.error || '未知錯誤'));
+                        this.value = originalValue;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating buyer:', error);
+                    alert('儲存採購人員時發生錯誤');
+                    this.value = originalValue;
+                })
+                .finally(() => {
+                    // 重新啟用選單
+                    this.disabled = false;
+                    this.style.opacity = '1';
+                });
+        });
+
+        // 儲存原始值
+        select.setAttribute('data-original-value', select.value);
+    });
+}
+
+function loadPurchaseOrders(materialId) {
+    const poSection = document.getElementById('purchase-orders-section');
+    const poTbody = document.getElementById('purchase-orders-tbody');
+    const poSelect = document.getElementById('po-select');
+
+    if (!poSection || !poTbody) return;
+
+    // 顯示載入中
+    poSection.style.display = 'block';
+    poTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">載入中...</td></tr>';
+
+    fetch(`/api/purchase_orders/${materialId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                poTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">${data.error}</td></tr>`;
+                return;
+            }
+
+            if (data.length === 0) {
+                // 🆕 友善的無採購單提示
+                poTbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 2em;">
+                            <div style="background: var(--pico-card-background-color, #1a1f36); padding: 1.5em; border-radius: 8px; border: 1px solid var(--pico-muted-border-color);">
+                                <div style="font-size: 2em; margin-bottom: 0.5em;">📋</div>
+                                <div style="font-weight: bold; margin-bottom: 0.5em; color: var(--pico-primary, #3b82f6); font-size: 1.1em;">此物料目前無採購單記錄</div>
+                                <div style="font-size: 0.9em; color: var(--pico-color, #d1d5db);">
+                                    您可以在下方「📅 交期維護」中直接填寫預計交期<br>
+                                    <small style="color: var(--pico-muted-color, #9ca3af); margin-top: 0.3em; display: inline-block;">
+                                        ※ 採購單號可留空，或填寫預計採購單號（例如：預採-20251215-001）
+                                    </small>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                // 清空並重置選擇器
+                if (poSelect) {
+                    poSelect.innerHTML = '<option value="">-- 新建交期記錄 (不關聯採購單) --</option>';
+                }
+                
+                // 🆕 在交期維護表單上方加入提示
+                addNoPurchaseOrderHint();
+                return;
+            }
+
+            // 渲染表格
+            renderPurchaseOrdersTable(data);
+
+            // 填充選擇器
+            populatePOSelect(data);
+        })
+        .catch(error => {
+            console.error('Error loading purchase orders:', error);
+            poTbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">載入失敗</td></tr>';
+        });
+}
+
+function renderPurchaseOrdersTable(purchaseOrders) {
+    const poTbody = document.getElementById('purchase-orders-tbody');
+    if (!poTbody) return;
+
+    let html = '';
+    purchaseOrders.forEach(po => {
+        const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '-';
+        // 🆕 完整的狀態映射
+        const statusMap = {
+            'pending': '<span style="color: orange;">待交貨</span>',
+            'partial': '<span style="color: blue;">部分交貨</span>',
+            'completed': '<span style="color: gray;">已完成</span>',
+            'cancelled': '<span style="color: red;">已取消</span>',
+            'planned': '<span style="color: purple;">計畫中</span>',
+            'updated': '<span style="color: green;">已更新</span>'
+        };
+        const status = statusMap[po.status] || `<span>${po.status}</span>`;
+
+        html += `
+            <tr>
+                <td>${po.po_number}</td>
+                <td>${po.supplier || '-'}</td>
+                <td>
+                    訂購: ${po.ordered_quantity}<br>
+                    <small style="color: #666;">未交: ${po.outstanding_quantity}</small>
+                </td>
+                <td>${deliveryDate}</td>
+                <td>${status}</td>
+                <td>
+                    <button class="small secondary" onclick="fillDeliveryFormFromPO('${po.po_number}')">
+                        帶入
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    poTbody.innerHTML = html;
+
+    // 將採購單資料儲存到全域變數，供選擇器使用
+    window.currentPurchaseOrders = purchaseOrders;
+}
+
+function populatePOSelect(purchaseOrders) {
+    const poSelect = document.getElementById('po-select');
+    if (!poSelect) return;
+
+    let html = '<option value="">-- 新建交期記錄 (不關聯採購單) --</option>';
+
+    // 🆕 所有未結案的採購單都會顯示（API已過濾completed和cancelled）
+    purchaseOrders.forEach(po => {
+        const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '未定';
+        html += `<option value="${po.po_number}">
+            ${po.po_number} - ${po.supplier || '未知供應商'} (未交: ${po.outstanding_quantity}, 交期: ${deliveryDate})
+        </option>`;
+    });
+
+    poSelect.innerHTML = html;
+}
+
+window.fillDeliveryFormFromPO = function (poNumber) {
+    const poSelect = document.getElementById('po-select');
+    if (poSelect) {
+        poSelect.value = poNumber;
+        // 觸發 change 事件
+        const event = new Event('change');
+        poSelect.dispatchEvent(event);
     }
+};
+
+function addNoPurchaseOrderHint() {
+    const deliveryFormSection = document.getElementById('delivery-form-section');
+    if (!deliveryFormSection) return;
     
-    demandHTML += '</tbody></table>';
-    document.getElementById('tab-demand').innerHTML = demandHTML;
-}
-
-/**
- * 處理彈窗載入錯誤
- * @param {Error} error - 錯誤物件
- */
-function handleModalError(error) {
-    const errorMsg = error.error || error.message || '未知錯誤';
-    document.getElementById('unrestricted-stock').textContent = '-';
-    document.getElementById('inspection-stock').textContent = '-';
-    document.getElementById('on-order-stock').textContent = '-';
-
-    const substituteSection = document.getElementById('substitute-section');
-    if (substituteSection) {
-        substituteSection.innerHTML = '<p style="color:red;">載入替代版本時發生錯誤。</p>';
+    // 移除舊的提示（如果有）
+    const oldHint = deliveryFormSection.querySelector('.no-po-hint');
+    if (oldHint) oldHint.remove();
+    
+    // 新增提示訊息
+    const hint = document.createElement('div');
+    hint.className = 'no-po-hint';
+    hint.style.cssText = `
+        padding: 1.2em;
+        margin-bottom: 1em;
+        background: var(--pico-card-background-color, #1e293b);
+        border-left: 4px solid var(--pico-primary, #3b82f6);
+        border-radius: 6px;
+        font-size: 0.9em;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    `;
+    hint.innerHTML = `
+        <div style="display: flex; align-items: start; gap: 0.8em;">
+            <div style="font-size: 1.5em;">💡</div>
+            <div style="flex: 1;">
+                <div style="font-weight: bold; margin-bottom: 0.5em; color: var(--pico-primary, #3b82f6); font-size: 1.05em;">此物料目前無採購單記錄</div>
+                <div style="color: var(--pico-color, #cbd5e1); line-height: 1.6;">
+                    您可以直接填寫預計交期，系統會自動記錄：
+                    <ul style="margin: 0.8em 0 0 1.5em; padding: 0; color: var(--pico-muted-color, #94a3b8);">
+                        <li style="margin-bottom: 0.3em;">採購單號可留空，或填寫預計單號（例如：預採-20251215-001）</li>
+                        <li style="margin-bottom: 0.3em;">供應商可填寫預計供應商名稱</li>
+                        <li>之後有正式採購單時，可隨時更新</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 插入到表單標題之後
+    const formTitle = deliveryFormSection.querySelector('.delivery-form-title');
+    if (formTitle && formTitle.nextSibling) {
+        deliveryFormSection.insertBefore(hint, formTitle.nextSibling);
+    } else {
+        deliveryFormSection.insertBefore(hint, deliveryFormSection.firstChild);
     }
-
-    document.getElementById('tab-demand').innerHTML = `<p style="color:red;">載入需求時發生錯誤: ${errorMsg}</p>`;
 }
+
+function removeNoPurchaseOrderHint() {
+    const hint = document.querySelector('.no-po-hint');
+    if (hint) hint.remove();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    setupModal();
+});
