@@ -61,8 +61,7 @@ class ProcurementDashboard {
             // 填充採購人員下拉選單
             this.populateBuyerFilter(this.currentMaterialsData);
 
-            // 設定快速篩選圖卡事件
-            this.setupQuickFilterCards();
+            // 設定快速篩選圖卡事件（由 DOMContentLoaded 中的 setupStatsCardEvents 處理）
 
             // 渲染當前儀表板
             if (typeof window.renderMaterialsTable === 'function') {
@@ -368,51 +367,46 @@ class ProcurementDashboard {
      * 設定快速篩選圖卡點擊事件
      */
     setupQuickFilterCards() {
-        // 快速篩選圖卡與對應的 filter 值
-        const filterMap = {
-            'stat-shortage-30': 'shortage-30-days',
-            'stat-no-delivery': 'no-delivery',
-            'stat-delayed': 'delayed',
-            'stat-due-soon': 'due-soon',
-            'stat-all-shortage': 'all-shortage',
-            'stat-my-items': 'my-items',
-            'stat-this-week': 'this-week',
-            'stat-sufficient': 'sufficient',
-            'stat-substitute-notify': 'substitute-notify',
-            'stat-in-inspection': 'in-inspection'
-        };
-
-        // 為每個圖卡設定點擊事件
-        Object.entries(filterMap).forEach(([cardId, filterValue]) => {
-            const card = document.getElementById(cardId);
-            if (card) {
-                const cardElement = card.closest('.stat-card');
-                if (cardElement) {
-                    cardElement.style.cursor = 'pointer';
-                    cardElement.addEventListener('click', () => {
-                        // 切換篩選狀態
-                        if (this.currentQuickFilter === filterValue) {
-                            // 如果已經是當前篩選，則取消篩選
-                            this.currentQuickFilter = null;
-                            window.currentStatFilter = 'all'; // 同步全域變數
-                            document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
-                        } else {
-                            // 設定新的篩選
-                            this.currentQuickFilter = filterValue;
-                            window.currentStatFilter = filterValue; // 同步全域變數
-                            document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
-                            cardElement.classList.add('active');
-                        }
-
-                        // 重置分頁並重新渲染
-                        this.resetCurrentPage();
-                        if (typeof window.renderMaterialsTable === 'function') {
-                            window.renderMaterialsTable();
-                        }
-                    });
+        console.log('=== setupQuickFilterCards 被呼叫 ===');
+        
+        // 找到所有帶 data-filter 屬性的統計卡片
+        const statCards = document.querySelectorAll('.stat-card[data-filter]');
+        console.log('找到統計卡片數量:', statCards.length);
+        
+        statCards.forEach(cardElement => {
+            const filterValue = cardElement.getAttribute('data-filter');
+            console.log('設置卡片篩選:', filterValue);
+            
+            cardElement.style.cursor = 'pointer';
+            
+            cardElement.addEventListener('click', () => {
+                console.log('卡片被點擊:', filterValue);
+                
+                // 切換篩選狀態
+                if (this.currentQuickFilter === filterValue) {
+                    // 如果已經是當前篩選，則取消篩選
+                    console.log('取消篩選');
+                    this.currentQuickFilter = null;
+                    window.currentStatFilter = 'all'; // 同步全域變數
+                    document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+                } else {
+                    // 設定新的篩選
+                    console.log('設定新篩選:', filterValue);
+                    this.currentQuickFilter = filterValue;
+                    window.currentStatFilter = filterValue; // 同步全域變數
+                    document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+                    cardElement.classList.add('active');
                 }
-            }
+
+                // 重置分頁並重新渲染
+                this.resetCurrentPage();
+                if (typeof window.renderMaterialsTable === 'function') {
+                    window.renderMaterialsTable();
+                }
+            });
         });
+        
+        console.log('快速篩選卡片事件設置完成');
     }
 
     /**
