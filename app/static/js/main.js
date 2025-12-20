@@ -40,26 +40,7 @@ function checkApiStatus() {
         });
 }
 
-// 全局變數來儲存原始資料、排序狀態和篩選關鍵字
-let currentMaterialsData = [];
-let currentFinishedMaterialsData = []; // 成品儀表板資料
-let currentSortColumn = null;
-let currentSortOrder = 'asc'; // 'asc' 或 'desc'
-let currentFilterKeyword = ''; // 物料篩選關鍵字
-let currentBuyerKeyword = ''; // 採購人員篩選關鍵字
 
-// 🆕 統計圖卡篩選
-let currentStatFilter = 'all'; // 當前圖卡篩選狀態
-let allDeliveryData = {}; // 所有交期資料
-
-// 分頁相關變數 - 為兩個儀表板各自維護獨立的分頁狀態
-let mainDashboardPage = 1;
-let mainDashboardItemsPerPage = 50;
-let finishedDashboardPage = 1;
-let finishedDashboardItemsPerPage = 50;
-
-// 當前顯示的儀表板類型
-let currentDashboardType = 'main'; // 'main' 或 'finished'
 
 // 全局變數來儲存訂單物料的排序狀態
 // let orderMaterialsData = []; // 儲存原始訂單物料資料 -> MOVED TO order-query.js
@@ -69,100 +50,11 @@ let currentDashboardType = 'main'; // 'main' 或 'finished'
 // 新增：全局變數來儲存當前查詢的訂單號碼
 // let currentOrderId = null; -> MOVED TO order-query.js
 
-function loadProcurementDashboard() {
-    // 🆕 初始化自動清理按鈕狀態
-    if (typeof initAutoClearButton === 'function') {
-        initAutoClearButton();
-    }
-    
-    // 🆕 檢查並執行自動清理
-    if (typeof checkAndAutoClearOverdue === 'function') {
-        checkAndAutoClearOverdue();
-    }
-    
-    // 同時載入主儀表板、成品儀表板、交期資料
-    Promise.all([
-        fetch('/api/materials').then(r => r.json()),
-        fetch('/api/finished_materials').then(r => r.json()),
-        fetch('/api/delivery/all').then(r => r.json()),
-        fetch('/api/demand_details/all').then(r => r.json())
-    ])
-        .then(([materialsData, finishedData, deliveryData, demandDetailsData]) => {
-            // 儲存資料
-            allDeliveryData = deliveryData.schedules || {};
 
-            // 🆕 為每個物料加入最早需求日期和交期資訊
-            currentMaterialsData = enhanceMaterialsData(materialsData, demandDetailsData, allDeliveryData);
-            currentFinishedMaterialsData = enhanceMaterialsData(finishedData, demandDetailsData, allDeliveryData);
 
-            // 🆕 計算並更新統計
-            updateStatsCards();
 
-            // 填充採購人員下拉選單
-            populateBuyerFilter(currentMaterialsData);
 
-            // 渲染當前儀表板
-            renderMaterialsTable();
-        })
-        .catch(error => {
-            console.error('Error loading dashboard data:', error);
-            document.getElementById('tab-main-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
-            document.getElementById('tab-finished-dashboard').innerHTML = '<p style="color: red;">載入儀表板資料時發生錯誤。</p>';
-        });
-}
 
-// 🆕 切換替代用料通知
-function toggleSubstituteNotify(materialId) {
-    const isChecked = event.target.checked;
-    if (isChecked) {
-        localStorage.setItem(`notify_${materialId}`, 'true');
-    } else {
-        localStorage.removeItem(`notify_${materialId}`);
-    }
-    // 重新計算統計
-    if (typeof updateStatsCards === 'function') {
-        updateStatsCards();
-    }
-}
-
-// 🆕 取得所有已通知的替代用料
-function getNotifiedSubstitutes() {
-    const notified = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('notify_') && localStorage.getItem(key) === 'true') {
-            notified.push(key.replace('notify_', ''));
-        }
-    }
-    return notified;
-}
-
-// 將函數暴露到全域
-window.toggleSubstituteNotify = toggleSubstituteNotify;
-window.getNotifiedSubstitutes = getNotifiedSubstitutes;
-
-// 填充採購人員下拉選單
-function populateBuyerFilter(data) {
-    const buyerSelect = document.getElementById('buyer-filter-select');
-    if (!buyerSelect) return;
-
-    // 收集所有不重複的採購人員
-    const buyers = new Set();
-    data.forEach(item => {
-        if (item['採購人員'] && item['採購人員'].trim() !== '') {
-            buyers.add(item['採購人員']);
-        }
-    });
-
-    // 排序並填充下拉選單
-    const sortedBuyers = Array.from(buyers).sort();
-    sortedBuyers.forEach(buyer => {
-        const option = document.createElement('option');
-        option.value = buyer;
-        option.textContent = buyer;
-        buyerSelect.appendChild(option);
-    });
-}
 
 function renderMaterialsTable() {
     // 根據當前頁籤選擇對應的容器和資料
