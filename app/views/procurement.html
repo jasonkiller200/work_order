@@ -7,10 +7,7 @@
     <title>生產資訊中心 - 採購儀表板</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
-    <!-- 🆕 新的模組化 CSS 架構 -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <!-- 舊的 style.css 暫時保留作為備份 -->
-    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <!-- ExcelJS for Excel export with full styling support (本地版本) -->
     <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
@@ -350,23 +347,6 @@
         </article>
     </dialog>
 
-    <!-- 🆕 服務層（新架構 - 必須在其他 JS 之前載入） -->
-    <script src="{{ url_for('static', filename='js/services/api-service.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/services/notification-service.js') }}"></script>
-    
-    <!-- 🆕 工具層（可重用的工具函數） -->
-    <script src="{{ url_for('static', filename='js/utils/format-utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/utils/date-utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/utils/calc-utils.js') }}"></script>
-    
-    <!-- 🆕 核心層（業務邏輯管理器） -->
-    <script src="{{ url_for('static', filename='js/core/table-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/stats-manager.js') }}"></script>
-    
-    <!-- 🆕 模組層（功能模組） -->
-    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}"></script>
-    
-    <!-- 原有的 JS 檔案 -->
     <script src="{{ url_for('static', filename='js/stats-helper.js') }}"></script>
     <script src="{{ url_for('static', filename='js/delivery-helper.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

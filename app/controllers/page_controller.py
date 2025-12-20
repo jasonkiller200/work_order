@@ -30,8 +30,3 @@ def admin_dashboard():
     """管理後台頁面"""
     TrafficService.record_page_view('admin_dashboard.html', request.remote_addr)
     return render_template('admin_dashboard.html')
-
-@page_bp.route('/test_services')
-def test_services():
-    """服務層測試頁面（開發用）"""
-    return render_template('test_services.html')
