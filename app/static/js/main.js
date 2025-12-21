@@ -1,12 +1,19 @@
+
+
+
 document.addEventListener('DOMContentLoaded', function () {
     checkApiStatus();
 
     if (window.location.pathname === '/procurement') {
-        loadProcurementDashboard();
+
         setupProcurementFilter();
         setupDashboardTabs(); // 設定儀表板頁籤切換
         setupStatsCardEvents(); // 🆕 設定統計圖卡事件
         setupItemsPerPageHandler(); // 🆕 設定每頁顯示數量選擇器的全域事件處理
+        setTimeout(() => {
+            loadProcurementDashboard(); // 載入採購儀表板資料
+        }, 0);
+
     } else if (window.location.pathname === '/order_query') {
         // All setup is now in order-query.js
     }
@@ -42,13 +49,24 @@ function checkApiStatus() {
 
 
 
-// 全局變數來儲存訂單物料的排序狀態
-// let orderMaterialsData = []; // 儲存原始訂單物料資料 -> MOVED TO order-query.js
-// let orderMaterialsSortColumn = null; -> MOVED TO order-query.js
-// let orderMaterialsSortOrder = 'asc'; // 'asc' 或 'desc' -> MOVED TO order-query.js
+// 全局變數來儲存當前儀表板的資料和狀態
+let currentDashboardType = 'main'; // 'main' 或 'finished'
+let currentMaterialsData = []; // 儲存主儀表板的物料資料
+let currentFinishedMaterialsData = []; // 儲存成品儀表板的物料資料
+let allDeliveryData = {}; // 儲存所有物料的交期資料
+let currentStatFilter = 'all'; // 儲存當前統計圖卡的篩選狀態 ('all', 'shortage-30-days', ...)
+let currentFilterKeyword = ''; // 儲存物料篩選關鍵字
+let currentBuyerKeyword = ''; // 儲存採購人員篩選關鍵字
 
-// 新增：全局變數來儲存當前查詢的訂單號碼
-// let currentOrderId = null; -> MOVED TO order-query.js
+// 全局變數來儲存排序狀態
+let currentSortColumn = null;
+let currentSortOrder = 'asc'; // 'asc' 或 'desc'
+
+// 全局變數來儲存分頁狀態
+let mainDashboardPage = 1;
+let mainDashboardItemsPerPage = 20;
+let finishedDashboardPage = 1;
+let finishedDashboardItemsPerPage = 20;
 
 
 
@@ -56,7 +74,7 @@ function checkApiStatus() {
 
 
 
-function renderMaterialsTable() {
+window.renderMaterialsTable = function() {
     // 根據當前頁籤選擇對應的容器和資料
     const containerId = currentDashboardType === 'main' ? 'tab-main-dashboard' : 'tab-finished-dashboard';
     const container = document.getElementById(containerId);
@@ -334,6 +352,26 @@ function addBuyerCellListeners() {
     });
 }
 
+window.populateBuyerFilter = function(materials) {
+    const buyerFilterSelect = document.getElementById('buyer-filter-select');
+    if (!buyerFilterSelect) return;
+
+    const buyers = [...new Set(materials.map(m => m['採購人員']).filter(Boolean))];
+    buyers.sort();
+
+    // Clear existing options except the first one
+    while (buyerFilterSelect.options.length > 1) {
+        buyerFilterSelect.remove(1);
+    }
+
+    buyers.forEach(buyer => {
+        const option = document.createElement('option');
+        option.value = buyer;
+        option.textContent = buyer;
+        buyerFilterSelect.appendChild(option);
+    });
+}
+
 
 
 
@@ -351,8 +389,11 @@ function setupProcurementFilter() {
     if (applyFilterBtn && filterInput) {
         // 應用物料篩選
         const applyMaterialFilter = function () {
-            currentFilterKeyword = filterInput.value.trim();
-            currentPage = 1; // 重置到第一頁
+                    if (currentDashboardType === 'main') {
+            mainDashboardPage = 1;
+        } else {
+            finishedDashboardPage = 1;
+        }
             renderMaterialsTable();
         };
 
@@ -370,7 +411,11 @@ function setupProcurementFilter() {
     if (buyerFilterSelect) {
         buyerFilterSelect.addEventListener('change', function () {
             currentBuyerKeyword = this.value;
-            currentPage = 1; // 重置到第一頁
+            if (currentDashboardType === 'main') {
+                mainDashboardPage = 1;
+            } else {
+                finishedDashboardPage = 1;
+            }
             renderMaterialsTable();
         });
     }
@@ -382,7 +427,11 @@ function setupProcurementFilter() {
             if (buyerFilterSelect) buyerFilterSelect.value = '';
             currentFilterKeyword = '';
             currentBuyerKeyword = '';
-            currentPage = 1;
+            if (currentDashboardType === 'main') {
+                mainDashboardPage = 1;
+            } else {
+                finishedDashboardPage = 1;
+            }
             renderMaterialsTable();
         });
     }

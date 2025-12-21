@@ -3,29 +3,9 @@
  * 負責處理 /procurement 頁面的所有功能，包括資料載入、渲染、篩選和排序。
  */
 
-// 全局變數來儲存原始資料、排序狀態和篩選關鍵字
-let currentMaterialsData = [];
-let currentFinishedMaterialsData = []; // 成品儀表板資料
-let currentSortColumn = null;
-let currentSortOrder = 'asc'; // 'asc' 或 'desc'
-let currentFilterKeyword = ''; // 物料篩選關鍵字
-let currentBuyerKeyword = ''; // 採購人員篩選關鍵字
-
-// 🆕 統計圖卡篩選
-let currentStatFilter = 'all'; // 當前圖卡篩選狀態
-let allDeliveryData = {}; // 所有交期資料
-
-// 分頁相關變數 - 為兩個儀表板各自維護獨立的分頁狀態
-let mainDashboardPage = 1;
-let mainDashboardItemsPerPage = 50;
-let finishedDashboardPage = 1;
-let finishedDashboardItemsPerPage = 50;
-
-// 當前顯示的儀表板類型
-let currentDashboardType = 'main'; // 'main' 或 'finished'
 
 
-function loadProcurementDashboard() {
+window.loadProcurementDashboard = function() {
     // 🆕 初始化自動清理按鈕狀態
     if (typeof initAutoClearButton === 'function') {
         initAutoClearButton();

@@ -1,7 +1,7 @@
 // 統計圖卡和排序相關函數
 
 // 增強物料資料（加入預計交貨日期資訊）
-function enhanceMaterialsData(materialsData, demandDetailsData, deliveryData) {
+window.enhanceMaterialsData = function(materialsData, demandDetailsData, deliveryData) {
     return materialsData.map(material => {
         const materialId = material['物料'];
         
@@ -196,7 +196,7 @@ function calculateStats(materials, deliveryData) {
 }
 
 // 更新統計圖卡數字
-function updateStatsCards() {
+window.updateStatsCards = function() {
     const materials = currentDashboardType === 'main' ? currentMaterialsData : currentFinishedMaterialsData;
     const stats = calculateStats(materials, allDeliveryData);
     
@@ -222,7 +222,7 @@ function updateStatsCards() {
 }
 
 // 篩選物料資料
-function filterMaterialsByStats(materials) {
+window.filterMaterialsByStats = function(materials) {
     if (currentStatFilter === 'all') {
         return materials;
     }
@@ -288,7 +288,7 @@ function filterMaterialsByStats(materials) {
 }
 
 // 排序物料資料（30日內缺料優先，然後按預計交貨日期）
-function sortMaterialsByPriority(materials) {
+window.sortMaterialsByPriority = function(materials) {
     return materials.sort((a, b) => {
         // 第一優先：30日內缺料排最前
         const a30Days = a.shortage_within_30_days || false;
