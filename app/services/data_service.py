@@ -9,7 +9,7 @@ from app.models.database import db, ComponentRequirement, Material, User, Purcha
 from sqlalchemy.orm import joinedload
 
 from app.config import FilePaths
-from app.utils.helpers import replace_nan_in_dict
+from app.utils.helpers import replace_nan_in_dict, get_taiwan_time
 
 app_logger = logging.getLogger(__name__)
 
@@ -444,8 +444,8 @@ class DataService:
                         description=description,
                         base_material_id=base_material_id,
                         buyer_id=buyer.id if buyer else None,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow()
+                        created_at=get_taiwan_time(),
+                        updated_at=get_taiwan_time()
                     )
                     
                     db.session.add(new_material)
@@ -486,7 +486,7 @@ class DataService:
         '''
         from datetime import datetime, timedelta
         
-        cutoff_date = pd.Timestamp(datetime.now() + timedelta(days=days))
+        cutoff_date = pd.Timestamp(get_taiwan_time() + timedelta(days=days))
         shortage_flags = []
         
         for _, material in df_materials.iterrows():
@@ -623,8 +623,8 @@ class DataService:
                 base_material_id=base_material_id,
                 buyer_id=buyer_id,
                 description=description if pd.notna(description) else None,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=get_taiwan_time(),
+                updated_at=get_taiwan_time()
             )
             db.session.add(material)
             app_logger.info(f"建立新物料（前10碼）: {base_material_id} (使用版本: {material_id})")
@@ -695,7 +695,7 @@ class DataService:
         ).all()
         
         updated_count = 0
-        today = datetime.now().date()
+        today = get_taiwan_time().date()
         
         for po in all_db_pos:
             # 如果採購單在 Excel 中，跳過（不是已刪除）
@@ -743,7 +743,7 @@ class DataService:
                 return
             
             # 檢查是否有關聯到這個採購單的交期
-            today = datetime.now().date()
+            today = get_taiwan_time().date()
             updated = False
             
             for schedule in schedules:
@@ -757,7 +757,7 @@ class DataService:
                             # 🆕 標記為部分到貨
                             schedule['status'] = 'partial_received'
                             schedule['partial_note'] = f"已部分到貨 {received_qty} 件，剩餘 {outstanding_qty} 件待交"
-                            schedule['partial_date'] = datetime.now().isoformat()
+                            schedule['partial_date'] = get_taiwan_time().isoformat()
                             schedule['needs_update'] = True
                             updated = True
                             app_logger.info(f"物料 {material_id} 的採購單 {po_number} 已部分到貨，交期標記為需更新")
@@ -793,7 +793,7 @@ class DataService:
             
             for material in related_materials:
                 material.buyer_id = purchase_group
-                material.updated_at = datetime.utcnow()
+                material.updated_at = get_taiwan_time()
                 updated_count += 1
         
         if updated_count > 0:

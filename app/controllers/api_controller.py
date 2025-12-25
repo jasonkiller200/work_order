@@ -15,7 +15,7 @@ from app.models.traffic import TrafficDAO
 # 匯入資料庫模型
 from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping
 from app.utils.decorators import cache_required
-from app.utils.helpers import format_date
+from app.utils.helpers import format_date, get_taiwan_time
 
 app_logger = logging.getLogger(__name__)
 
@@ -365,7 +365,7 @@ def update_buyer():
             if material_record:
                 # 更新現有物料的採購人員
                 material_record.buyer_id = buyer.id if buyer else None
-                material_record.updated_at = datetime.utcnow()
+                material_record.updated_at = get_taiwan_time()
                 app_logger.info(f"更新物料 {material_id} 的採購人員為: {new_buyer_name}")
             else:
                 # 自動新增物料到資料庫
@@ -374,8 +374,8 @@ def update_buyer():
                     description=material_description or '',
                     base_material_id=base_material_id,
                     buyer_id=buyer.id if buyer else None,
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
+                    created_at=get_taiwan_time(),
+                    updated_at=get_taiwan_time()
                 )
                 db.session.add(material_record)
                 app_logger.info(f"自動新增物料 {material_id} 到資料庫，採購人員: {new_buyer_name}")
@@ -551,7 +551,7 @@ def get_all_deliveries():
             
             # 🔧 改進的交期選擇邏輯
             schedules = {}
-            today = datetime.now().date()
+            today = get_taiwan_time().date()
             yesterday = today - timedelta(days=1)
             
             for material_id, history in data.get('delivery_schedules', {}).items():
@@ -657,7 +657,7 @@ def get_delivery(material_id):
             schedules = data.get('delivery_schedules', {}).get(material_id, [])
             
             # 🔧 選擇距離今天最近且未過期的交期
-            today = datetime.now().date()
+            today = get_taiwan_time().date()
             yesterday = today - timedelta(days=1)
             
             if schedules:
@@ -761,8 +761,8 @@ def save_delivery():
             "supplier": form_data.get('supplier', ''),
             "notes": form_data.get('notes', ''),
             "status": "pending",
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": get_taiwan_time().isoformat(),
+            "updated_at": get_taiwan_time().isoformat()
         }
         
         data['delivery_schedules'][material_id].append(new_delivery)
@@ -807,7 +807,7 @@ def clear_overdue_delivery(material_id):
             return jsonify({"success": True, "message": "沒有交期記錄"})
         
         # 移除所有過期的交期（寬限期2天）
-        today = datetime.now().date()
+        today = get_taiwan_time().date()
         grace_date = today - timedelta(days=2)
         
         updated_schedules = []
@@ -864,7 +864,7 @@ def batch_clear_overdue_deliveries():
         schedules = data.get('delivery_schedules', {})
         
         # 找出過期的交期（寬限期2天）
-        today = datetime.now().date()
+        today = get_taiwan_time().date()
         grace_date = today - timedelta(days=2)
         
         total_cleared = 0
@@ -1162,7 +1162,7 @@ def update_part_drawing(part_number):
         
         old_drawing_number = mapping.drawing_number
         mapping.drawing_number = new_drawing_number
-        mapping.updated_at = datetime.utcnow()
+        mapping.updated_at = get_taiwan_time()
         db.session.commit()
         
         app_logger.info(f"更新品號 {part_number} 的圖號: {old_drawing_number} -> {new_drawing_number}")

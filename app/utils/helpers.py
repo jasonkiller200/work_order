@@ -3,6 +3,14 @@
 
 import math
 import pandas as pd
+from datetime import datetime, timedelta, timezone
+
+def get_taiwan_time():
+    """取得台灣時間 (UTC+8)"""
+    # 建立 UTC+8 的時區物件
+    tz_taiwan = timezone(timedelta(hours=8))
+    # 取得帶時區資訊的當前時間，然後轉為不帶時區的本地時間
+    return datetime.now(tz_taiwan).replace(tzinfo=None)
 
 def replace_nan_in_dict(obj):
     """

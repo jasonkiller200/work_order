@@ -1,14 +1,4 @@
-# Check and create virtual environment
-if (-not (Test-Path ".\venv")) {
-# Check and create virtual environment
-if (-not (Test-Path ".\venv")) {
-    Write-Host "Virtual environment not found, creating..."
-    python -m venv venv
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to create virtual environment."
-        exit 1
-    }
-    Write-Host "Virtual environment# 工單管理系統啟動腳本 (MVC 架構版本)
+# 工單管理系統啟動腳本 (MVC 架構版本)
 # 此腳本用於啟動工單管理系統的 Flask 應用程式
 
 # 設定 Python 執行檔路徑

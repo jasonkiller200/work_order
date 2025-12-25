@@ -3,6 +3,7 @@
 
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
+from app.utils.helpers import get_taiwan_time
 
 db = SQLAlchemy()
 
@@ -18,8 +19,8 @@ class User(db.Model):
     department = db.Column(db.String(100))
     role = db.Column(db.String(20), default='buyer')  # admin, buyer, viewer
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
     
     # 關聯
     materials = db.relationship('Material', back_populates='buyer')
@@ -44,8 +45,8 @@ class Material(db.Model):
     lead_time_days = db.Column(db.Integer, default=0)
     
     # 系統欄位
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
     
     # 關聯
     buyer = db.relationship('User', back_populates='materials')
@@ -84,8 +85,8 @@ class Order(db.Model):
     fifo_priority = db.Column(db.Integer, index=True)
     
     # 系統欄位
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
     
     # 關聯
     order_materials = db.relationship('OrderMaterial', back_populates='order', cascade='all, delete-orphan')
@@ -113,8 +114,8 @@ class OrderMaterial(db.Model):
     allocated_quantity = db.Column(db.Numeric(15, 3), default=0)
     
     # 系統欄位
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
     
     # 關聯
     order = db.relationship('Order', back_populates='order_materials')
@@ -163,8 +164,8 @@ class PurchaseOrder(db.Model):
     status = db.Column(db.String(20), default='pending')  # pending, partial, completed, cancelled
     
     # 系統欄位
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
     
     # 關聯
     material = db.relationship('Material', back_populates='purchase_orders')
@@ -187,7 +188,7 @@ class OrderSpec(db.Model):
     value_description = db.Column(db.String(200))
     
     # 系統欄位
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
     
     # 關聯
     order = db.relationship('Order', back_populates='order_specs')
@@ -210,7 +211,7 @@ class DeliveryUpdate(db.Model):
     
     # 更新人員
     updated_by = db.Column(db.String(10), db.ForeignKey('users.id'))
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time)
     
     def __repr__(self):
         return f'<DeliveryUpdate {self.po_number}>'
@@ -226,8 +227,8 @@ class ComponentRequirement(db.Model):
     note = db.Column(db.String(200))
     
     # 系統欄位
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
     
     def __repr__(self):
         return f'<ComponentRequirement {self.material_id}>'
@@ -241,8 +242,8 @@ class PartDrawingMapping(db.Model):
     drawing_number = db.Column(db.String(50), nullable=False, index=True)
     
     # 系統欄位
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
     
     def __repr__(self):
         return f'<PartDrawingMapping {self.part_number}-{self.drawing_number}>'

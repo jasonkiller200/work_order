@@ -1,7 +1,5 @@
-# app/models/traffic.py
-# 流量統計資料模型
-
 from datetime import datetime
+from app.utils.helpers import get_taiwan_time
 
 class PageView:
     """頁面瀏覽記錄"""
@@ -17,7 +15,7 @@ class PageView:
         """
         self.page_name = page_name
         self.ip_address = ip_address
-        self.timestamp = timestamp or datetime.now().isoformat()
+        self.timestamp = timestamp or get_taiwan_time().isoformat()
     
     def to_dict(self):
         """轉換為字典格式"""
