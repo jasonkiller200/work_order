@@ -30,3 +30,10 @@ def admin_dashboard():
     """管理後台頁面"""
     TrafficService.record_page_view('admin_dashboard.html', request.remote_addr)
     return render_template('admin_dashboard.html')
+
+@page_bp.route('/part-drawing-management')
+@login_required
+def part_drawing_management():
+    """品號-圖號維護頁面"""
+    TrafficService.record_page_view('part_drawing_management.html', request.remote_addr)
+    return render_template('part_drawing_management.html')

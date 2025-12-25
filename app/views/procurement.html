@@ -31,6 +31,7 @@
                 <li><a href="/procurement" class="active">採購儀表板</a></li>
                 <li><a href="/order_query">訂單查詢</a></li>
                 <li><a href="/admin_dashboard">後台管理</a></li>
+                <li><a href="/part-drawing-management">品號-圖號維護</a></li>
             </ul>
         </nav>
 
@@ -144,7 +145,8 @@
             </div>
 
             <!-- 🆕 批量操作欄 -->
-            <div id="batch-actions-bar" style="display: none; padding: 1em; margin: 1em 0; background: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px;">
+            <div id="batch-actions-bar"
+                style="display: none; padding: 1em; margin: 1em 0; background: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px;">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <div>
                         <strong>⚠️ 已延誤交期處理</strong>
@@ -154,7 +156,8 @@
                         <button id="batch-clear-overdue-btn" class="secondary" onclick="batchClearOverdueDeliveries()">
                             🗑️ 批量清除所有過期交期
                         </button>
-                        <button id="auto-clear-overdue-btn" class="outline" onclick="toggleAutoClearOverdue()" style="margin-left: 0.5em;">
+                        <button id="auto-clear-overdue-btn" class="outline" onclick="toggleAutoClearOverdue()"
+                            style="margin-left: 0.5em;">
                             ⚡ 啟用自動清理
                         </button>
                     </div>

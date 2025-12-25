@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 import os
 from datetime import datetime
-from app.models.database import db, ComponentRequirement, Material, User, PurchaseOrder
+from app.models.database import db, ComponentRequirement, Material, User, PurchaseOrder, PartDrawingMapping
 from sqlalchemy.orm import joinedload
 
 from app.config import FilePaths
@@ -77,6 +77,15 @@ class DataService:
             except Exception as e:
                 app_logger.error(f"讀取物料採購人員對應失敗: {e}")
             
+            # 4. 讀取品號-圖號對照表
+            part_drawing_map = {}
+            try:
+                mappings = PartDrawingMapping.query.all()
+                part_drawing_map = {m.part_number: m.drawing_number for m in mappings}
+                app_logger.info(f"已載入 {len(part_drawing_map)} 筆品號-圖號對照資料")
+            except Exception as e:
+                app_logger.error(f"讀取品號-圖號對照失敗: {e}")
+            
             # --- 新增邏輯：成品撥料分流 ---
             # 1. 取得撥料.XLSX 的所有物料前10碼
             wip_base_ids = set(df_wip_parts['物料'].astype(str).str[:10])
@@ -131,12 +140,12 @@ class DataService:
             
             # 建立主資料表
             df_main = DataService._build_main_dataframe(
-                df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map, demand_details_map
+                df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map, demand_details_map, part_drawing_map
             )
             
             # 建立成品資料表
             df_finished_dashboard = DataService._build_main_dataframe(
-                df_total_finished_demand, df_inventory, df_total_on_order, df_finished_demand, material_buyer_map, finished_demand_details_map
+                df_total_finished_demand, df_inventory, df_total_on_order, df_finished_demand, material_buyer_map, finished_demand_details_map, part_drawing_map
             )
             
             # 建立訂單詳情對應表 (包含所有成品撥料，以便查詢)
@@ -229,7 +238,7 @@ class DataService:
         return df_on_order
     
     @staticmethod
-    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None, demand_details_map=None):
+    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None, demand_details_map=None, part_drawing_map=None):
         """建立主資料表"""
         # 以總需求為基礎，確保所有有需求的物料都被包含
         df_main = df_total_demand.copy()
@@ -279,6 +288,19 @@ class DataService:
             df_main['採購人員'] = df_main['base_material_id'].map(material_buyer_map).fillna('')
         else:
             df_main['採購人員'] = ''
+        
+        # 加入圖號資訊
+        if part_drawing_map:
+            # 嘗試使用完整物料號碼匹配，也嘗試前10碼匹配
+            df_main['drawing_number'] = df_main['物料'].map(part_drawing_map)
+            
+            # 如果還有空的，再嘗試用 base_material_id 匹配
+            mask_empty = df_main['drawing_number'].isna()
+            df_main.loc[mask_empty, 'drawing_number'] = df_main.loc[mask_empty, 'base_material_id'].map(part_drawing_map)
+            
+            df_main['drawing_number'] = df_main['drawing_number'].fillna('')
+        else:
+            df_main['drawing_number'] = ''
         
         return df_main
     

@@ -1,6 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body>
     <!-- 🆕 系統狀態徽章（右上角） -->
     <div class="system-status-badge">
@@ -21,12 +22,13 @@
             <h1>生產資訊中心</h1>
             <p>一個整合工單料況、庫存與規格的查詢系統</p>
         </header>
-        
+
         <nav>
             <ul>
                 <li><a href="/procurement">採購儀表板</a></li>
                 <li><a href="/order_query" class="active">訂單查詢</a></li>
                 <li><a href="/admin_dashboard">後台管理</a></li>
+                <li><a href="/part-drawing-management">品號-圖號維護</a></li>
             </ul>
         </nav>
 
@@ -43,13 +45,13 @@
             <div class="button-group">
                 <button id="download-specs-btn" disabled>下載當前訂單規格表</button>
             </div>
-            
+
             <!-- 訂單內容容器 -->
             <div id="order-details-container">
                 <!-- 初始提示訊息 -->
                 <p>請輸入訂單號碼進行查詢。</p>
             </div>
-            
+
             <!-- 頁籤導覽 (初始隱藏) -->
             <nav id="order-tabs-nav" style="display: none;">
                 <ul>
@@ -57,7 +59,7 @@
                     <li><a href="#" class="order-tab-link" data-tab="tab-order-materials">物料清單</a></li>
                 </ul>
             </nav>
-            
+
             <!-- 頁籤內容 -->
             <div id="order-tabs-content" style="display: none;">
                 <div id="tab-order-specs" class="order-tab-content active">
@@ -78,7 +80,7 @@
                 <a href="#close" aria-label="Close" class="close"></a>
                 <h3 id="modal-title">物料詳情</h3>
             </header>
-            
+
             <!-- 庫存總覽區塊 -->
             <div id="stock-summary-section">
                 <h4>庫存總覽</h4>
@@ -116,4 +118,5 @@
     <script src="{{ url_for('static', filename='js/modules/order-query.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
+
 </html>

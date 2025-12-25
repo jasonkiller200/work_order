@@ -74,7 +74,7 @@ let finishedDashboardItemsPerPage = 20;
 
 
 
-window.renderMaterialsTable = function() {
+window.renderMaterialsTable = function () {
     // 根據當前頁籤選擇對應的容器和資料
     const containerId = currentDashboardType === 'main' ? 'tab-main-dashboard' : 'tab-finished-dashboard';
     const container = document.getElementById(containerId);
@@ -183,6 +183,7 @@ window.renderMaterialsTable = function() {
 
     let tableHTML = `<figure><table><thead><tr>
         <th data-sort-key="物料" class="sortable">物料 <span class="sort-icon"></span></th>
+        <th data-sort-key="drawing_number" class="sortable">圖號 <span class="sort-icon"></span></th>
         <th data-sort-key="物料說明" class="sortable">物料說明 <span class="sort-icon"></span></th>
         <th data-sort-key="採購人員" class="sortable">採購人員 <span class="sort-icon"></span></th>
         <th data-sort-key="delivery_date" class="sortable">預計交貨日 <span class="sort-icon"></span></th>
@@ -226,6 +227,7 @@ window.renderMaterialsTable = function() {
             tableHTML += `
                 <tr${rowClass}>
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
+                    <td>${m['drawing_number'] || '-'}</td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
                     <td${dateClass}>${deliveryDateStr}</td>
@@ -297,7 +299,7 @@ function changePage(page) {
         finishedDashboardPage = page;
     }
     renderMaterialsTable();
-    
+
     // 🆕 滾動到表格清單位置
     setTimeout(() => {
         const tabContent = document.getElementById('dashboard-tabs-content');
@@ -352,7 +354,7 @@ function addBuyerCellListeners() {
     });
 }
 
-window.populateBuyerFilter = function(materials) {
+window.populateBuyerFilter = function (materials) {
     const buyerFilterSelect = document.getElementById('buyer-filter-select');
     if (!buyerFilterSelect) return;
 
@@ -389,11 +391,11 @@ function setupProcurementFilter() {
     if (applyFilterBtn && filterInput) {
         // 應用物料篩選
         const applyMaterialFilter = function () {
-                    if (currentDashboardType === 'main') {
-            mainDashboardPage = 1;
-        } else {
-            finishedDashboardPage = 1;
-        }
+            if (currentDashboardType === 'main') {
+                mainDashboardPage = 1;
+            } else {
+                finishedDashboardPage = 1;
+            }
             renderMaterialsTable();
         };
 
@@ -573,6 +575,7 @@ async function exportToExcel() {
         // 定義欄位
         worksheet.columns = [
             { header: '物料', key: 'material', width: 15 },
+            { header: '圖號', key: 'drawing_number', width: 12 },
             { header: '物料說明', key: 'description', width: 30 },
             { header: '採購人員', key: 'buyer', width: 12 },
             { header: '預計交貨日', key: 'delivery_date', width: 12 },
@@ -603,6 +606,7 @@ async function exportToExcel() {
 
             const row = worksheet.addRow({
                 material: m['物料'] || '',
+                drawing_number: m['drawing_number'] || '',
                 description: m['物料說明'] || '',
                 buyer: m['採購人員'] || '',
                 delivery_date: deliveryDateStr,
