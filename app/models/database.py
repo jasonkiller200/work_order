@@ -231,3 +231,18 @@ class ComponentRequirement(db.Model):
     
     def __repr__(self):
         return f'<ComponentRequirement {self.material_id}>'
+
+class PartDrawingMapping(db.Model):
+    """品號-圖號對照表"""
+    __tablename__ = 'part_drawing_mappings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    part_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    drawing_number = db.Column(db.String(50), nullable=False, index=True)
+    
+    # 系統欄位
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<PartDrawingMapping {self.part_number}-{self.drawing_number}>'

@@ -12,7 +12,8 @@ from app.services.traffic_service import TrafficService
 from app.models.material import MaterialDAO
 from app.models.order import OrderDAO
 from app.models.traffic import TrafficDAO
-from app.models.database import db, User, Material, PurchaseOrder
+# 匯入資料庫模型
+from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping
 from app.utils.decorators import cache_required
 from app.utils.helpers import format_date
 
@@ -968,6 +969,286 @@ def get_purchase_order_detail(po_number):
             'storage_location': po.storage_location
         })
         
+        
     except Exception as e:
         app_logger.error(f"查詢採購單 {po_number} 失敗: {e}", exc_info=True)
         return jsonify({"error": "查詢採購單詳情失敗"}), 500
+
+
+# ============================================================================
+# 品號-圖號對照表 API
+# ============================================================================
+
+@api_bp.route('/part-drawing/<part_number>')
+def get_part_drawing(part_number):
+    """查詢單一品號的圖號"""
+    try:
+        mapping = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+        
+        if not mapping:
+            return jsonify({"error": "找不到該品號"}), 404
+        
+        return jsonify({
+            "part_number": mapping.part_number,
+            "drawing_number": mapping.drawing_number,
+            "created_at": mapping.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "updated_at": mapping.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+        })
+    
+    except Exception as e:
+        app_logger.error(f"查詢品號 {part_number} 失敗: {e}", exc_info=True)
+        return jsonify({"error": "查詢失敗"}), 500
+
+
+@api_bp.route('/part-drawing/search', methods=['POST'])
+def search_part_drawing():
+    """批量查詢品號或圖號"""
+    try:
+        data = request.get_json()
+        search_type = data.get('type', 'part_number')  # part_number 或 drawing_number
+        search_values = data.get('values', [])  # 要查詢的值列表
+        
+        if not search_values:
+            return jsonify({"results": []})
+        
+        results = []
+        
+        if search_type == 'part_number':
+            mappings = PartDrawingMapping.query.filter(
+                PartDrawingMapping.part_number.in_(search_values)
+            ).all()
+        else:  # drawing_number
+            mappings = PartDrawingMapping.query.filter(
+                PartDrawingMapping.drawing_number.in_(search_values)
+            ).all()
+        
+        for mapping in mappings:
+            results.append({
+                "part_number": mapping.part_number,
+                "drawing_number": mapping.drawing_number
+            })
+        
+        return jsonify({"results": results, "count": len(results)})
+    
+    except Exception as e:
+        app_logger.error(f"批量查詢失敗: {e}", exc_info=True)
+        return jsonify({"error": "查詢失敗"}), 500
+
+
+@api_bp.route('/part-drawing', methods=['POST'])
+def add_part_drawing():
+    """新增單筆品號-圖號對照"""
+    try:
+        data = request.get_json()
+        part_number = data.get('part_number', '').strip()
+        drawing_number = data.get('drawing_number', '').strip()
+        
+        if not part_number or not drawing_number:
+            return jsonify({"success": False, "error": "品號和圖號不能為空"}), 400
+        
+        # 檢查是否已存在
+        existing = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+        
+        if existing:
+            return jsonify({
+                "success": False,
+                "error": "品號已存在",
+                "existing_drawing_number": existing.drawing_number
+            }), 409
+        
+        # 新增記錄
+        mapping = PartDrawingMapping(
+            part_number=part_number,
+            drawing_number=drawing_number
+        )
+        db.session.add(mapping)
+        db.session.commit()
+        
+        app_logger.info(f"新增品號-圖號對照: {part_number} -> {drawing_number}")
+        
+        return jsonify({
+            "success": True,
+            "part_number": mapping.part_number,
+            "drawing_number": mapping.drawing_number
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"新增品號-圖號對照失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "新增失敗"}), 500
+
+
+@api_bp.route('/part-drawing/batch', methods=['POST'])
+def batch_add_part_drawing():
+    """批量新增品號-圖號對照"""
+    try:
+        data = request.get_json()
+        mappings_data = data.get('mappings', [])  # [{part_number, drawing_number}, ...]
+        
+        if not mappings_data:
+            return jsonify({"success": False, "error": "沒有資料"}), 400
+        
+        stats = {
+            'total': len(mappings_data),
+            'success': 0,
+            'duplicate': 0,
+            'error': 0
+        }
+        errors = []
+        
+        for item in mappings_data:
+            try:
+                part_number = str(item.get('part_number', '')).strip()
+                drawing_number = str(item.get('drawing_number', '')).strip()
+                
+                if not part_number or not drawing_number:
+                    stats['error'] += 1
+                    continue
+                
+                # 檢查是否已存在
+                existing = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+                
+                if existing:
+                    stats['duplicate'] += 1
+                    continue
+                
+                # 新增記錄
+                mapping = PartDrawingMapping(
+                    part_number=part_number,
+                    drawing_number=drawing_number
+                )
+                db.session.add(mapping)
+                stats['success'] += 1
+                
+                # 每 100 筆提交一次
+                if stats['success'] % 100 == 0:
+                    db.session.commit()
+            
+            except Exception as e:
+                stats['error'] += 1
+                errors.append(str(e))
+        
+        # 最後提交
+        db.session.commit()
+        
+        app_logger.info(f"批量新增品號-圖號對照: 成功 {stats['success']}, 重複 {stats['duplicate']}, 錯誤 {stats['error']}")
+        
+        return jsonify({
+            "success": True,
+            "stats": stats,
+            "errors": errors[:10]  # 只返回前 10 個錯誤
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"批量新增品號-圖號對照失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "批量新增失敗"}), 500
+
+
+@api_bp.route('/part-drawing/<part_number>', methods=['PUT'])
+def update_part_drawing(part_number):
+    """更新品號的圖號"""
+    try:
+        data = request.get_json()
+        new_drawing_number = data.get('drawing_number', '').strip()
+        
+        if not new_drawing_number:
+            return jsonify({"success": False, "error": "圖號不能為空"}), 400
+        
+        mapping = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+        
+        if not mapping:
+            return jsonify({"success": False, "error": "找不到該品號"}), 404
+        
+        old_drawing_number = mapping.drawing_number
+        mapping.drawing_number = new_drawing_number
+        mapping.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        app_logger.info(f"更新品號 {part_number} 的圖號: {old_drawing_number} -> {new_drawing_number}")
+        
+        return jsonify({
+            "success": True,
+            "part_number": mapping.part_number,
+            "old_drawing_number": old_drawing_number,
+            "new_drawing_number": mapping.drawing_number
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"更新品號 {part_number} 失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "更新失敗"}), 500
+
+
+@api_bp.route('/part-drawing/<part_number>', methods=['DELETE'])
+def delete_part_drawing(part_number):
+    """刪除品號-圖號對照"""
+    try:
+        mapping = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+        
+        if not mapping:
+            return jsonify({"success": False, "error": "找不到該品號"}), 404
+        
+        drawing_number = mapping.drawing_number
+        db.session.delete(mapping)
+        db.session.commit()
+        
+        app_logger.info(f"刪除品號-圖號對照: {part_number} -> {drawing_number}")
+        
+        return jsonify({
+            "success": True,
+            "message": f"已刪除品號 {part_number} 的對照"
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"刪除品號 {part_number} 失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "刪除失敗"}), 500
+
+
+@api_bp.route('/part-drawing/list')
+def list_part_drawing():
+    """列出所有品號-圖號對照（支援分頁和搜尋）"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        search = request.args.get('search', '').strip()
+        
+        query = PartDrawingMapping.query
+        
+        # 搜尋功能
+        if search:
+            query = query.filter(
+                db.or_(
+                    PartDrawingMapping.part_number.like(f'%{search}%'),
+                    PartDrawingMapping.drawing_number.like(f'%{search}%')
+                )
+            )
+        
+        # 分頁
+        pagination = query.order_by(PartDrawingMapping.part_number).paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+        
+        results = []
+        for mapping in pagination.items:
+            results.append({
+                "part_number": mapping.part_number,
+                "drawing_number": mapping.drawing_number,
+                "updated_at": mapping.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        return jsonify({
+            "results": results,
+            "total": pagination.total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": pagination.pages
+        })
+    
+    except Exception as e:
+        app_logger.error(f"列出品號-圖號對照失敗: {e}", exc_info=True)
+        return jsonify({"error": "查詢失敗"}), 500
+
