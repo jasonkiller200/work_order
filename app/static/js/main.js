@@ -301,7 +301,7 @@ window.renderMaterialsTable = function () {
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
-                    <td${dateClass} class="delivery-date-cell${m.delivery_schedules && m.delivery_schedules.length > 0 ? ' clickable-delivery' : ''}" data-schedules='${m.delivery_schedules ? JSON.stringify(m.delivery_schedules) : '[]'}' data-first-demand="${m.demand_details && m.demand_details.length > 0 ? m.demand_details[0]['需求日期'] : ''}">${deliveryDateStr}</td>
+                    <td${dateClass} class="delivery-date-cell${m.delivery_schedules && m.delivery_schedules.length > 0 ? ' clickable-delivery' : ''}" data-schedules='${m.delivery_schedules ? JSON.stringify(m.delivery_schedules) : '[]'}' data-first-demand="${firstShortageOrder ? firstShortageOrder['需求日期'] : ''}">${deliveryDateStr}</td>
                     <td>${m.total_demand.toFixed(0)}</td>
                     <td>${m.unrestricted_stock.toFixed(0)}</td>
                     <td>${m.inspection_stock.toFixed(0)}</td>
