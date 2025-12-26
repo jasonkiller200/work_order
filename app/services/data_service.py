@@ -133,9 +133,36 @@ class DataService:
             
             # 建立需求詳情對應表
             df_demand['需求日期'] = pd.to_datetime(df_demand['需求日期'], errors='coerce')
-            demand_details_map = df_demand.groupby('物料').apply(
-                lambda x: x[['訂單', '未結數量 (EINHEIT)', '需求日期']].to_dict('records'), include_groups=False
-            ).to_dict()
+            
+            # 🆕 計算每筆需求的 remaining_stock
+            demand_details_map = {}
+            for material_id in df_demand['物料'].unique():
+                material_demands = df_demand[df_demand['物料'] == material_id].copy()
+                material_demands = material_demands.sort_values('需求日期')
+                
+                # 取得該物料的庫存資訊
+                material_stock = df_inventory[df_inventory['物料'] == material_id]
+                if not material_stock.empty:
+                    unrestricted = float(material_stock.iloc[0].get('未限制', 0) or 0)
+                    inspection = float(material_stock.iloc[0].get('品質檢驗中', 0) or 0)
+                    running_stock = unrestricted + inspection
+                else:
+                    running_stock = 0
+                
+                # 計算每筆需求的剩餘庫存
+                details = []
+                for _, demand in material_demands.iterrows():
+                    qty = float(demand.get('未結數量 (EINHEIT)', 0) or 0)
+                    running_stock -= qty
+                    
+                    details.append({
+                        '訂單': demand['訂單'],
+                        '未結數量 (EINHEIT)': qty,
+                        '需求日期': demand['需求日期'].strftime('%Y-%m-%d') if pd.notna(demand['需求日期']) else '',
+                        'remaining_stock': running_stock  # 🆕 加入剩餘庫存
+                    })
+                
+                demand_details_map[material_id] = details
             
             # --- 處理成品儀表板資料 (不符合的成品撥料) ---
             df_finished_demand = df_finished_parts_invalid.copy()
@@ -144,9 +171,36 @@ class DataService:
             
             # 成品需求詳情
             df_finished_demand['需求日期'] = pd.to_datetime(df_finished_demand['需求日期'], errors='coerce')
-            finished_demand_details_map = df_finished_demand.groupby('物料').apply(
-                lambda x: x[['訂單', '未結數量 (EINHEIT)', '需求日期']].to_dict('records'), include_groups=False
-            ).to_dict()
+            
+            # 🆕 計算成品需求的 remaining_stock
+            finished_demand_details_map = {}
+            for material_id in df_finished_demand['物料'].unique():
+                material_demands = df_finished_demand[df_finished_demand['物料'] == material_id].copy()
+                material_demands = material_demands.sort_values('需求日期')
+                
+                # 取得該物料的庫存資訊
+                material_stock = df_inventory[df_inventory['物料'] == material_id]
+                if not material_stock.empty:
+                    unrestricted = float(material_stock.iloc[0].get('未限制', 0) or 0)
+                    inspection = float(material_stock.iloc[0].get('品質檢驗中', 0) or 0)
+                    running_stock = unrestricted + inspection
+                else:
+                    running_stock = 0
+                
+                # 計算每筆需求的剩餘庫存
+                details = []
+                for _, demand in material_demands.iterrows():
+                    qty = float(demand.get('未結數量 (EINHEIT)', 0) or 0)
+                    running_stock -= qty
+                    
+                    details.append({
+                        '訂單': demand['訂單'],
+                        '未結數量 (EINHEIT)': qty,
+                        '需求日期': demand['需求日期'].strftime('%Y-%m-%d') if pd.notna(demand['需求日期']) else '',
+                        'remaining_stock': running_stock  # 🆕 加入剩餘庫存
+                    })
+                
+                finished_demand_details_map[material_id] = details
 
             # --- 共通處理 ---
             df_specs = pd.read_excel(FilePaths.SPECS_FILE)
@@ -183,6 +237,18 @@ class DataService:
             # 清理 NaN 值
             materials_dashboard_cleaned = df_main.fillna('').to_dict(orient='records')
             finished_dashboard_cleaned = df_finished_dashboard.fillna('').to_dict(orient='records')
+            
+            # 🆕 為每個物料加入 delivery_schedules 和 demand_details
+            for material in materials_dashboard_cleaned:
+                material_id = material.get('物料')
+                material['delivery_schedules'] = delivery_schedules_map.get(material_id, [])
+                material['demand_details'] = demand_details_map.get(material_id, [])
+            
+            for material in finished_dashboard_cleaned:
+                material_id = material.get('物料')
+                material['delivery_schedules'] = delivery_schedules_map.get(material_id, [])
+                material['demand_details'] = finished_demand_details_map.get(material_id, [])
+            
             specs_data_cleaned = df_specs.fillna('').to_dict(orient='records')
             inventory_data_cleaned = df_inventory.fillna('').to_dict(orient='records')
             demand_details_map_cleaned = replace_nan_in_dict(demand_details_map)
