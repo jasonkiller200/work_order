@@ -532,7 +532,7 @@ function renderPurchaseOrdersTable(purchaseOrders) {
                         const delayDays = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
                         const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
                         const warningColor = isDarkMode ? '#ffcdd2' : '#c62828';
-                        shortageInfo = `<br><small style="color: ${warningColor}; font-size: 0.75em;">⚠️ 工單 ${firstShortage['訂單號碼']} 需求 ${firstShortage['需求日期']} 延遲 ${delayDays}天</small>`;
+                        shortageInfo = `<br><small style="color: ${warningColor}; font-size: 0.75em;">⚠️ 工單 ${firstShortage['訂單']} 需求 ${firstShortage['需求日期']} 延遲 ${delayDays}天</small>`;
                     }
                 }
 

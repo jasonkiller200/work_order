@@ -247,7 +247,7 @@ window.renderMaterialsTable = function () {
                             delayDays = Math.ceil((date - demandDate) / (1000 * 60 * 60 * 24));
                             firstShortageOrder = firstShortage;
                             // 加入延遲警告標記(包含工單資訊)
-                            deliveryDateStr += ` <span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;" title="工單 ${firstShortage['訂單號碼']} 需求 ${firstShortage['需求日期']}">⚠️ 延遲${delayDays}天</span>`;
+                            deliveryDateStr += ` <span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;" title="工單 ${firstShortage['訂單']} 需求 ${firstShortage['需求日期']}">⚠️ 延遲${delayDays}天</span>`;
                         }
                     }
                 }
