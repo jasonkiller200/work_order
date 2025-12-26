@@ -870,7 +870,11 @@ def get_purchase_order_detail(po_number):
 def get_part_drawing(part_number):
     """查詢單一品號的圖號"""
     try:
-        mapping = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+        # 🆕 只使用前10碼進行比對
+        part_number_prefix = part_number[:10] if len(part_number) >= 10 else part_number
+        mapping = PartDrawingMapping.query.filter(
+            PartDrawingMapping.part_number.like(f'{part_number_prefix}%')
+        ).first()
         
         if not mapping:
             return jsonify({"error": "找不到該品號"}), 404
