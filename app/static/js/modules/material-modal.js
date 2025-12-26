@@ -67,10 +67,6 @@ function openDetailsModal(materialId) {
 
     modal.showModal();
 
-    // 🆕 載入採購單資料
-    loadPurchaseOrders(materialId);
-
-
     // 根據當前儀表板類型傳遞參數
     const dashboardType = currentDashboardType;
     fetch(`/api/material/${materialId}/details?type=${dashboardType}`)
@@ -147,6 +143,9 @@ function openDetailsModal(materialId) {
 
             // 🆕 儲存需求資料到全域變數供採購單表格使用
             window.currentDemandDetails = data.demand_details || [];
+
+            // 🆕 載入採購單資料(在需求資料載入完成後)
+            loadPurchaseOrders(materialId);
 
             // 🆕 計算並顯示缺料警示
             const shortageAlertEl = document.getElementById('shortage-alert');
