@@ -12,7 +12,7 @@
     --color-success-light: #66bb6a;
     --color-info: #2196f3;
     --color-info-light: #42a5f5;
-    
+
     /* === 背景顏色 === */
     --bg-page: #fafafa;
     --bg-card: #ffffff;
@@ -21,25 +21,25 @@
     --bg-warning: #fff3cd;
     --bg-success: #e8f5e9;
     --bg-status-badge: #ffffff;
-    
+
     /* === 文字顏色 === */
     --text-primary: #333333;
     --text-secondary: #666666;
     --text-muted: #9e9e9e;
     --text-on-primary: #ffffff;
     --text-on-dark: #ffffff;
-    
+
     /* === 邊框顏色 === */
     --border-default: #e0e0e0;
     --border-light: #f0f0f0;
     --border-dark: #dee2e6;
     --border-warning: #ff9800;
     --border-success: #4caf50;
-    
+
     /* === 連結顏色 === */
     --link-default: #0066cc;
     --link-hover: #004499;
-    
+
     /* === 按鈕顏色 === */
     --btn-primary: #1e88e5;
     --btn-success: #43a047;
@@ -49,7 +49,7 @@
     --btn-disabled-bg: #e0e0e0;
     --btn-disabled-text: #9e9e9e;
     --btn-export: #28a745;
-    
+
     /* === 狀態顏色 === */
     --status-shortage: var(--color-danger);
     --status-warning-30days: #e8f5e9;
@@ -58,7 +58,7 @@
     --status-indicator-online: #4caf50;
     --status-indicator-loading: #ff9800;
     --status-indicator-error: #f44336;
-    
+
     /* === 優先級顏色 === */
     --priority-high: #f44336;
     --priority-high-dark: #d32f2f;
@@ -66,17 +66,17 @@
     --priority-medium-dark: #f57c00;
     --priority-normal: #2196f3;
     --priority-low: #9e9e9e;
-    
+
     /* === 統計卡片顏色 === */
     --stat-card-bg: #ffffff;
     --stat-card-border: #e0e0e0;
     --stat-card-active-bg: #e3f2fd;
     --stat-card-active-border: var(--color-info);
-    
+
     /* === 訂單備註顏色 === */
     --note-bg: #fffbf0;
     --note-border: #ffa726;
-    
+
     /* === 歷史記錄顏色 === */
     --history-bg: #ffffff;
     --history-text: #666666;
@@ -93,7 +93,7 @@
     --color-success-light: #81c784;
     --color-info: #42a5f5;
     --color-info-light: #64b5f6;
-    
+
     /* === 背景顏色 === */
     --bg-page: #121212;
     --bg-card: #1e1e1e;
@@ -102,25 +102,25 @@
     --bg-warning: #3d2f1f;
     --bg-success: #1e3a20;
     --bg-status-badge: #2a2a2a;
-    
+
     /* === 文字顏色 === */
     --text-primary: #e0e0e0;
     --text-secondary: #b0b0b0;
     --text-muted: #757575;
     --text-on-primary: #ffffff;
     --text-on-dark: #e0e0e0;
-    
+
     /* === 邊框顏色 === */
     --border-default: #333333;
     --border-light: #2a2a2a;
     --border-dark: #404040;
     --border-warning: #d9a256;
     --border-success: #6b9b6d;
-    
+
     /* === 連結顏色 === */
     --link-default: #64b5f6;
     --link-hover: #90caf9;
-    
+
     /* === 按鈕顏色 === */
     --btn-primary: #1976d2;
     --btn-success: #388e3c;
@@ -130,7 +130,7 @@
     --btn-disabled-bg: #333333;
     --btn-disabled-text: #666666;
     --btn-export: #2e7d32;
-    
+
     /* === 狀態顏色 === */
     --status-shortage: #ff6b6b;
     --status-warning-30days: #2d4a2b;
@@ -139,7 +139,7 @@
     --status-indicator-online: #66bb6a;
     --status-indicator-loading: #ffa726;
     --status-indicator-error: #ef5350;
-    
+
     /* === 優先級顏色 === */
     --priority-high: #ef5350;
     --priority-high-dark: #f44336;
@@ -147,17 +147,17 @@
     --priority-medium-dark: #ff9800;
     --priority-normal: #42a5f5;
     --priority-low: #757575;
-    
+
     /* === 統計卡片顏色 === */
     --stat-card-bg: #2a2a2a;
     --stat-card-border: #404040;
     --stat-card-active-bg: #1a2634;
     --stat-card-active-border: var(--color-info);
-    
+
     /* === 訂單備註顏色 === */
     --note-bg: #3d2f1f;
     --note-border: #d9a256;
-    
+
     /* === 歷史記錄顏色 === */
     --history-bg: #252525;
     --history-text: #b0b0b0;
@@ -172,25 +172,32 @@ body {
 }
 
 .container {
-    max-width: 1600px; /* 從 1200px 增加到 1600px */
+    max-width: 1600px;
+    /* 從 1200px 增加到 1600px */
     margin: auto;
-    padding: 0.5em; /* 從 1em 減少到 0.5em */
+    padding: 0.5em;
+    /* 從 1em 減少到 0.5em */
 }
 
 figure {
     overflow-x: auto;
-    margin: 0; /* 移除預設外邊距 */
+    margin: 0;
+    /* 移除預設外邊距 */
 }
 
 table {
     width: 100%;
-    font-size: 0.95em; /* 稍微縮小字體讓更多內容可見 */
+    font-size: 0.95em;
+    /* 稍微縮小字體讓更多內容可見 */
 }
 
 /* 表格欄位寬度優化 */
-th, td {
-    padding: 0.5em 0.75em; /* 適中的內邊距 */
-    white-space: nowrap; /* 防止文字換行 */
+th,
+td {
+    padding: 0.5em 0.75em;
+    /* 適中的內邊距 */
+    white-space: nowrap;
+    /* 防止文字換行 */
 }
 
 /* 物料說明欄位可以換行 */
@@ -220,7 +227,8 @@ td:nth-child(2) {
 
 /* 讓表格行有可點擊的視覺提示 */
 .clickable-row,
-.clickable-material { /* 讓表格行和物料欄位有可點擊的視覺提示 */
+.clickable-material {
+    /* 讓表格行和物料欄位有可點擊的視覺提示 */
     cursor: pointer;
 }
 
@@ -231,32 +239,59 @@ td:nth-child(2) {
 
 /* 彈出視窗 Modal 樣式 */
 #details-modal article {
-    width: 80%;
-    max-width: 900px;
+    width: 95%;
+    max-width: 1400px;
+    padding: 1.5em;
 }
 
-/* 分頁樣式 */
-.tab-link.active {
-    background-color: var(--pico-primary-background);
-    color: var(--pico-primary-inverse);
+/* 🆕 左右分欄容器 */
+.modal-split-container {
+    display: flex !important;
+    gap: 1.5em;
+    align-items: flex-start;
 }
 
-.tab-content {
-    display: none; /* 預設隱藏所有分頁內容 */
-    padding: 1em 0;
+.modal-left-column {
+    flex: 0 0 380px;
+    /* 稍微縮小左側固定寬度 */
+    max-height: 80vh;
+    overflow-y: auto;
+    padding-right: 0.5em;
 }
 
-.tab-content.active {
-    display: block; /* 只顯示 active 的分頁內容 */
+.modal-right-column {
+    flex: 1;
+    min-width: 0;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-left: 1px solid var(--pico-border-color);
+    padding-left: 1.5em;
+}
+
+/* 響應式調整：小螢幕切換回單欄 (降低至 900px 讓分欄更容易出現) */
+@media (max-width: 900px) {
+    .modal-split-container {
+        flex-direction: column !important;
+    }
+
+    .modal-left-column,
+    .modal-right-column {
+        flex: 1 1 auto;
+        width: 100%;
+        max-height: none;
+        border-left: none;
+        padding-left: 0;
+        padding-right: 0;
+    }
 }
 
 /* 庫存總覽區塊樣式 */
 #stock-summary-section {
-    background-color: var(--pico-background-color);
+    background-color: var(--bg-card-secondary);
     padding: 1em;
     border-radius: var(--pico-border-radius);
-    margin-bottom: 1em;
-    border: 1px solid var(--pico-border-color);
+    margin-bottom: 1.5em;
+    border-left: 4px solid var(--pico-primary);
 }
 
 #stock-summary-section h4 {
@@ -279,18 +314,24 @@ td:nth-child(2) {
 /* 按鈕組樣式 */
 .button-group {
     display: flex;
-    gap: 10px; /* 按鈕間距 */
-    margin-bottom: 1em; /* 與下方內容的間距 */
-    flex-wrap: wrap; /* 允許按鈕換行 */
+    gap: 10px;
+    /* 按鈕間距 */
+    margin-bottom: 1em;
+    /* 與下方內容的間距 */
+    flex-wrap: wrap;
+    /* 允許按鈕換行 */
 }
 
 @media (max-width: 768px) {
     .button-group {
-        flex-direction: column; /* 按鈕垂直排列 */
+        flex-direction: column;
+        /* 按鈕垂直排列 */
         align-items: stretch;
     }
+
     .button-group button {
-        width: 100%; /* 按鈕佔滿寬度 */
+        width: 100%;
+        /* 按鈕佔滿寬度 */
         margin-bottom: 10px;
     }
 }
@@ -298,18 +339,22 @@ td:nth-child(2) {
 /* 訂單查詢區塊的樣式 */
 #order-search .grid {
     display: grid;
-    grid-template-columns: 3fr 1fr; /* 輸入框佔3份，按鈕佔1份 */
+    grid-template-columns: 3fr 1fr;
+    /* 輸入框佔3份，按鈕佔1份 */
     gap: 1em;
     margin-bottom: 1em;
 }
 
 @media (max-width: 600px) {
     #order-search .grid {
-        grid-template-columns: 1fr; /* 輸入框和按鈕垂直排列 */
+        grid-template-columns: 1fr;
+        /* 輸入框和按鈕垂直排列 */
         gap: 0.5em;
     }
+
     #order-search .grid button {
-        width: 100%; /* 查詢按鈕佔滿寬度 */
+        width: 100%;
+        /* 查詢按鈕佔滿寬度 */
     }
 }
 
@@ -327,10 +372,12 @@ td:nth-child(2) {
 
 /* 排序功能相關樣式 */
 th.sortable,
-th.sortable-order-materials { /* 應用於兩種可排序表格 */
+th.sortable-order-materials {
+    /* 應用於兩種可排序表格 */
     cursor: pointer;
     position: relative;
-    padding-right: 1.5em; /* 為排序圖示留出空間 */
+    padding-right: 1.5em;
+    /* 為排序圖示留出空間 */
 }
 
 .sort-icon {
@@ -345,7 +392,8 @@ th.sortable-order-materials { /* 應用於兩種可排序表格 */
 /* 針對訂單物料表格的特定欄位寬度調整 */
 th.sortable-order-materials[data-sort-key="物料"],
 th.sortable-order-materials[data-sort-key="物料說明"] {
-    min-width: 100px; /* 增加物料和物料說明欄位的最小寬度 */
+    min-width: 100px;
+    /* 增加物料和物料說明欄位的最小寬度 */
 }
 
 th.sortable-order-materials[data-sort-key="需求數量 (EINHEIT)"],
@@ -354,11 +402,13 @@ th.sortable-order-materials[data-sort-key="未結數量 (EINHEIT)"],
 th.sortable-order-materials[data-sort-key="unrestricted_stock"],
 th.sortable-order-materials[data-sort-key="inspection_stock"],
 th.sortable-order-materials[data-sort-key="order_shortage"] {
-    min-width: 80px; /* 增加數量和庫存相關欄位的最小寬度 */
+    min-width: 80px;
+    /* 增加數量和庫存相關欄位的最小寬度 */
 }
 
 th.sortable-order-materials[data-sort-key="需求日期"] {
-    min-width: 90px; /* 增加需求日期欄位的最小寬度 */
+    min-width: 90px;
+    /* 增加需求日期欄位的最小寬度 */
 }
 
 /* 查詢結果高亮樣式 */
@@ -442,16 +492,19 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 /* 分頁按鈕區域 */
 .pagination-wrapper {
     display: flex;
-    justify-content: flex-end; /* 固定在右側 */
+    justify-content: flex-end;
+    /* 固定在右側 */
     margin-top: 1em;
 }
 
 .pagination {
     display: flex;
-    justify-content: flex-end; /* 靠右對齊 */
+    justify-content: flex-end;
+    /* 靠右對齊 */
     align-items: center;
     gap: 0.5em;
-    flex-wrap: nowrap; /* 改為不換行 */
+    flex-wrap: nowrap;
+    /* 改為不換行 */
 }
 
 .pagination button {
@@ -464,7 +517,8 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     cursor: pointer;
     border-radius: var(--pico-border-radius);
     transition: all 0.2s ease;
-    margin: 0; /* 移除預設 margin */
+    margin: 0;
+    /* 移除預設 margin */
 }
 
 .pagination button:hover:not(:disabled) {
@@ -494,37 +548,40 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 /* 響應式設計 */
 @media (max-width: 768px) {
     body {
-        padding: 0.5em; /* 手機版更小的邊距 */
+        padding: 0.5em;
+        /* 手機版更小的邊距 */
     }
-    
+
     .container {
         padding: 0.25em;
     }
-    
+
     .table-controls {
         flex-direction: column;
         align-items: flex-start;
     }
-    
+
     .pagination-wrapper {
-        justify-content: center; /* 手機版置中 */
+        justify-content: center;
+        /* 手機版置中 */
     }
-    
+
     .pagination {
-        flex-wrap: wrap; /* 手機版允許換行 */
+        flex-wrap: wrap;
+        /* 手機版允許換行 */
         justify-content: center;
         font-size: 0.85em;
     }
-    
+
     .pagination button {
         padding: 0.4em 0.8em;
         min-width: 40px;
     }
-    
+
     .filter-row {
         flex-direction: column !important;
     }
-    
+
     .filter-row input,
     .filter-row button {
         width: 100% !important;
@@ -534,7 +591,8 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 /* 大螢幕優化 */
 @media (min-width: 1920px) {
     .container {
-        max-width: 1800px; /* 大螢幕可以更寬 */
+        max-width: 1800px;
+        /* 大螢幕可以更寬 */
     }
 }
 
@@ -647,6 +705,7 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
         opacity: 0;
         transform: translateY(-10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -777,7 +836,7 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 
 .stat-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     border-color: var(--pico-primary);
 }
 
@@ -882,15 +941,15 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     .stats-cards-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .stat-card {
         padding: 0.8em;
     }
-    
+
     .stat-icon {
         font-size: 1.5em;
     }
-    
+
     .stat-number {
         font-size: 1.5em;
     }
@@ -910,7 +969,7 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     border: 1px solid var(--border-default);
     border-radius: 20px;
     font-size: 0.85em;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -935,8 +994,15 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
 }
 
 /* 匯出 Excel 按鈕 */
@@ -1027,11 +1093,11 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 
 /* 暗黑模式下的陰影調整 */
 [data-theme="dark"] .system-status-badge {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme="dark"] .stat-card:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* 暗黑模式下的表格優化 */
@@ -1051,5 +1117,6 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 }
 
 [data-theme="dark"] .current-material-row {
-    background-color: #3d2f1f !important; /* 暗黑模式下的深橘黃色 */
+    background-color: #3d2f1f !important;
+    /* 暗黑模式下的深橘黃色 */
 }

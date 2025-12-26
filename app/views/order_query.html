@@ -7,7 +7,7 @@
     <title>生產資訊中心 - 訂單查詢</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1226">
 </head>
 
 <body>
@@ -81,42 +81,161 @@
                 <h3 id="modal-title">物料詳情</h3>
             </header>
 
-            <!-- 庫存總覽區塊 -->
-            <div id="stock-summary-section">
-                <h4>庫存總覽</h4>
-                <p>未限制庫存: <span id="unrestricted-stock"></span></p>
-                <p>品質檢驗中: <span id="inspection-stock"></span></p>
-                <p>已訂未入: <span id="on-order-stock"></span></p>
-            </div>
+            <!-- 🆕 左右分欄佈局容器 (使用內聯樣式確保強制生效) -->
+            <div class="modal-split-container"
+                style="display: flex !important; gap: 1.5em; align-items: flex-start; min-height: 500px;">
 
-            <!-- 分頁導覽 -->
-            <nav>
-                <ul>
-                    <li><a href="#" class="tab-link active" data-tab="tab-demand">需求訂單</a></li>
-                    <li><a href="#" class="tab-link" data-tab="tab-substitute">可替代版本</a></li>
-                </ul>
-            </nav>
+                <!-- 左側分欄：庫存、警示與表單 -->
+                <div class="modal-left-column"
+                    style="flex: 0 0 380px; max-height: 80vh; overflow-y: auto; padding-right: 0.5em;">
+                    <!-- 庫存總覽區塊 -->
+                    <div id="stock-summary-section">
+                        <h4>📦 庫存總覽</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-bottom: 0.5em;">
+                            <p>未限制: <span id="unrestricted-stock"
+                                    style="font-weight: bold; color: var(--color-success);"></span></p>
+                            <p>品檢中: <span id="inspection-stock"
+                                    style="font-weight: bold; color: var(--color-warning);"></span></p>
+                        </div>
+                        <p>已訂未入 (PO): <span id="on-order-stock"
+                                style="font-weight: bold; color: var(--color-info);"></span></p>
 
-            <!-- 分頁內容 -->
-            <div id="modal-content">
-                <div id="tab-demand" class="tab-content active">
-                    <!-- 需求訂單表格將會被動態插入這裡 -->
+                        <!-- 🆕 缺料警示 -->
+                        <div id="shortage-alert" class="shortage-alert"
+                            style="display: none; margin-top: 1em; padding: 0.8em; border-radius: 4px; background: rgba(211, 47, 47, 0.1); border-left: 4px solid var(--color-danger);">
+                            <p style="margin: 0; font-weight: bold; color: var(--color-danger);">⚠️ 當前缺料: <strong
+                                    id="current-shortage-qty">0</strong> 件</p>
+                            <p style="margin: 0.3em 0 0 0; font-size: 0.85em; color: var(--text-secondary);">📅 開始缺料日:
+                                <strong id="earliest-demand-date">-</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 🆕 相關採購單區塊 -->
+                    <div id="purchase-orders-section" style="margin-bottom: 1.5em; display: none;">
+                        <h4 class="purchase-orders-title">📋 相關採購單 (SAP)</h4>
+                        <div style="overflow-x: auto; max-height: 200px;">
+                            <table style="font-size: 0.8em; width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>單號</th>
+                                        <th>數量</th>
+                                        <th>交期</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="purchase-orders-tbody">
+                                    <!-- 動態載入 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 🆕 交期維護表單 -->
+                    <div id="delivery-form-section" class="delivery-form-section">
+                        <h4 class="delivery-form-title">📅 交期/分批維護</h4>
+                        <form id="delivery-form">
+                            <div style="margin-bottom: 0.5em;">
+                                <label for="po-select"
+                                    style="font-size: 0.85em; margin-bottom: 2px; display: block;">關聯採購單</label>
+                                <select id="po-select"
+                                    style="font-size: 0.9em; padding: 4px; height: auto; margin-bottom: 0;">
+                                    <option value="">-- 新建 (不關聯) --</option>
+                                    <!-- 動態載入 -->
+                                </select>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 0.5em;">
+                                <div>
+                                    <label for="delivery-date" style="font-size: 0.85em; margin-bottom: 2px;">預計到貨 <span
+                                            class="required-mark">*</span></label>
+                                    <input type="date" id="delivery-date"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;" required>
+                                </div>
+                                <div>
+                                    <label for="delivery-qty" style="font-size: 0.85em; margin-bottom: 2px;">數量 <span
+                                            class="required-mark">*</span></label>
+                                    <input type="number" id="delivery-qty" min="1"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;" required>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-top: 0.5em;">
+                                <div>
+                                    <label for="po-number" style="font-size: 0.8em;">採購單號</label>
+                                    <input type="text" id="po-number"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;">
+                                </div>
+                                <div>
+                                    <label for="supplier" style="font-size: 0.8em;">供應商</label>
+                                    <input type="text" id="supplier"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;">
+                                </div>
+                            </div>
+
+                            <textarea id="delivery-notes" rows="1" placeholder="備註..."
+                                style="margin-top: 0.5em; font-size: 0.85em; padding: 4px; height: auto;"></textarea>
+
+                            <div id="delivery-calculation"
+                                style="display: none; margin-top: 0.5em; background: rgba(33, 150, 243, 0.1); padding: 8px; border-radius: 4px; border-left: 3px solid var(--color-info);">
+                                <p style="margin: 0; font-size: 0.85em; color: var(--color-info);">✅ 到貨後可用: <strong
+                                        id="calc-available-stock">0</strong></p>
+                                <p style="margin: 0; font-size: 0.8em; color: var(--text-secondary);">滿足至: <strong
+                                        id="calc-satisfy-until">-</strong></p>
+                            </div>
+
+                            <div style="margin-top: 0.8em; display: flex; gap: 0.4em;">
+                                <button type="button" id="save-delivery-btn"
+                                    style="flex: 1.5; padding: 4px 8px; font-size: 0.9em;">💾 儲存</button>
+                                <button type="button" id="clear-delivery-btn" class="secondary"
+                                    style="flex: 1; padding: 4px 8px; font-size: 0.9em;">🗑️ 清除</button>
+                            </div>
+                        </form>
+
+                        <details style="margin-top: 0.8em; font-size: 0.85em;">
+                            <summary>📜 交期歷史記錄</summary>
+                            <div id="delivery-history"
+                                style="max-height: 200px; overflow-y: auto; margin-top: 0.5em; border-top: 1px dashed var(--pico-border-color); padding-top: 0.5em;">
+                                <!-- 動態載入 -->
+                            </div>
+                        </details>
+                    </div>
                 </div>
-                <div id="tab-substitute" class="tab-content">
-                    <!-- 替代版本庫存表格將會被動態插入這裡 -->
+
+                <!-- 右側分欄：需求訂單與頁籤內容 -->
+                <div class="modal-right-column"
+                    style="flex: 1; min-width: 0; max-height: 80vh; overflow-y: auto; border-left: 1px solid var(--pico-border-color); padding-left: 1.5em;">
+                    <nav style="margin-bottom: 0.5em;">
+                        <ul>
+                            <li><a href="#" class="tab-link active" data-tab="tab-demand">📊 訂單需求</a></li>
+                            <li><a href="#" class="tab-link" data-tab="tab-substitute">🔄 替代品/版本</a></li>
+                        </ul>
+                    </nav>
+
+                    <div id="modal-content">
+                        <div id="tab-demand" class="tab-content active">
+                            <p style="color: var(--pico-muted-color);">載入需求中...</p>
+                        </div>
+                        <div id="tab-substitute" class="tab-content">
+                            <div id="substitute-section">
+                                <p style="color: var(--pico-muted-color);">載入替代品中...</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
+
+            </div> <!-- End split container -->
 
             <footer>
-                <button class="secondary" id="close-modal-btn">關閉</button>
+                <button class="secondary" id="close-modal-btn" style="margin: 0;">關閉視窗</button>
             </footer>
         </article>
     </dialog>
 
-    <script src="{{ url_for('static', filename='js/services/api-service.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/modules/order-query.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/api-service.js') }}?v=1226"></script>
+    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}?v=1226"></script>
+    <script src="{{ url_for('static', filename='js/modules/order-query.js') }}?v=1226"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=1226"></script>
 </body>
 
 </html>

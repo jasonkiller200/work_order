@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 import os
 from datetime import datetime
-from app.models.database import db, ComponentRequirement, Material, User, PurchaseOrder, PartDrawingMapping
+from app.models.database import db, ComponentRequirement, Material, User, PurchaseOrder, PartDrawingMapping, DeliverySchedule
 from sqlalchemy.orm import joinedload
 
 from app.config import FilePaths
@@ -85,6 +85,25 @@ class DataService:
                 app_logger.info(f"已載入 {len(part_drawing_map)} 筆品號-圖號對照資料")
             except Exception as e:
                 app_logger.error(f"讀取品號-圖號對照失敗: {e}")
+
+            # 5. 讀取分批交期排程
+            delivery_schedules_map = {}
+            try:
+                # 只讀取未完成且未取消的交期
+                schedules = DeliverySchedule.query.filter(
+                    DeliverySchedule.status.notin_(['completed', 'cancelled'])
+                ).all()
+                for s in schedules:
+                    if s.material_id not in delivery_schedules_map:
+                        delivery_schedules_map[s.material_id] = []
+                    delivery_schedules_map[s.material_id].append({
+                        'expected_date': s.expected_date,
+                        'quantity': float(s.quantity - (s.received_quantity or 0)),
+                        'status': s.status
+                    })
+                app_logger.info(f"已載入 {len(schedules)} 筆分批交期排程資料")
+            except Exception as e:
+                app_logger.error(f"讀取分批交期失敗: {e}")
             
             # --- 新增邏輯：成品撥料分流 ---
             # 1. 取得撥料.XLSX 的所有物料前10碼
@@ -140,12 +159,12 @@ class DataService:
             
             # 建立主資料表
             df_main = DataService._build_main_dataframe(
-                df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map, demand_details_map, part_drawing_map
+                df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map, demand_details_map, part_drawing_map, delivery_schedules_map
             )
             
             # 建立成品資料表
             df_finished_dashboard = DataService._build_main_dataframe(
-                df_total_finished_demand, df_inventory, df_total_on_order, df_finished_demand, material_buyer_map, finished_demand_details_map, part_drawing_map
+                df_total_finished_demand, df_inventory, df_total_on_order, df_finished_demand, material_buyer_map, finished_demand_details_map, part_drawing_map, delivery_schedules_map
             )
             
             # 建立訂單詳情對應表 (包含所有成品撥料，以便查詢)
@@ -238,7 +257,7 @@ class DataService:
         return df_on_order
     
     @staticmethod
-    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None, demand_details_map=None, part_drawing_map=None):
+    def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None, demand_details_map=None, part_drawing_map=None, delivery_schedules_map=None):
         """建立主資料表"""
         # 以總需求為基礎，確保所有有需求的物料都被包含
         df_main = df_total_demand.copy()
@@ -270,7 +289,7 @@ class DataService:
         
         # 計算未來30日內是否有需求缺料
         df_main['shortage_within_30_days'] = DataService._check_shortage_within_days(
-            df_main, demand_details_map, days=30
+            df_main, demand_details_map, delivery_schedules_map, days=30
         )
         
         # 確保物料說明欄位不為空
@@ -472,50 +491,71 @@ class DataService:
             app_logger.error(f'同步物料到資料庫時發生錯誤: {e}', exc_info=True)
     
     @staticmethod
-    def _check_shortage_within_days(df_materials, demand_details_map, days=30):
+    def _check_shortage_within_days(df_materials, demand_details_map, delivery_schedules_map=None, days=30):
         '''
         檢查物料是否在未來指定天數內有需求缺料
         
         Args:
             df_materials: 物料DataFrame
             demand_details_map: 需求詳情對應表
+            delivery_schedules_map: 交期分批對應表 (🆕)
             days: 檢查天數（預設30天）
             
         Returns:
             Series: 布林值序列，True表示在指定天數內會缺料
         '''
         from datetime import datetime, timedelta
-        
-        cutoff_date = pd.Timestamp(get_taiwan_time() + timedelta(days=days))
+        if delivery_schedules_map is None:
+            delivery_schedules_map = {}
+            
+        now = get_taiwan_time()
+        cutoff_date = pd.Timestamp(now + timedelta(days=days))
         shortage_flags = []
         
         for _, material in df_materials.iterrows():
             material_id = material['物料']
-            available_stock = material.get('unrestricted_stock', 0) + material.get('inspection_stock', 0)
+            available_stock = float(material.get('unrestricted_stock', 0) + material.get('inspection_stock', 0))
             
-            # 取得該物料的需求詳情
+            # 1. 取得需求與到貨的時間軸事件
+            timeline_events = []
+            
+            # 加入需求事件
             demand_details = demand_details_map.get(material_id, [])
-            
-            # 過濾出指定天數內的需求
-            within_days_demands = []
             for demand in demand_details:
                 demand_date = demand.get('需求日期')
                 if pd.notna(demand_date) and demand_date <= cutoff_date:
-                    within_days_demands.append(demand)
+                    timeline_events.append({
+                        'date': demand_date,
+                        'type': 'demand',
+                        'quantity': float(demand.get('未結數量 (EINHEIT)', 0))
+                    })
             
-            # 按日期排序
-            within_days_demands.sort(key=lambda x: x.get('需求日期', pd.Timestamp.max))
+            # 加入到貨事件 (🆕 分批交期)
+            schedules = delivery_schedules_map.get(material_id, [])
+            for s in schedules:
+                delivery_date = pd.Timestamp(s['expected_date'])
+                if delivery_date <= cutoff_date:
+                    timeline_events.append({
+                        'date': delivery_date,
+                        'type': 'delivery',
+                        'quantity': s['quantity']
+                    })
             
-            # 計算是否會缺料
+            # 2. 按日期排序 (到貨排在需求之前，如果同一天)
+            timeline_events.sort(key=lambda x: (x['date'], 0 if x['type'] == 'delivery' else 1))
+            
+            # 3. 模擬庫存水位
             running_stock = available_stock
             has_shortage = False
             
-            for demand in within_days_demands:
-                demand_qty = demand.get('未結數量 (EINHEIT)', 0)
-                running_stock -= demand_qty
-                if running_stock < 0:
-                    has_shortage = True
-                    break
+            for event in timeline_events:
+                if event['type'] == 'demand':
+                    running_stock -= event['quantity']
+                    if running_stock < 0:
+                        has_shortage = True
+                        break
+                else: # delivery
+                    running_stock += event['quantity']
             
             shortage_flags.append(has_shortage)
         

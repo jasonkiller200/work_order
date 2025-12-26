@@ -13,7 +13,7 @@ from app.models.material import MaterialDAO
 from app.models.order import OrderDAO
 from app.models.traffic import TrafficDAO
 # 匯入資料庫模型
-from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping
+from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping, DeliverySchedule
 from app.utils.decorators import cache_required
 from app.utils.helpers import format_date, get_taiwan_time
 
@@ -193,8 +193,13 @@ def get_material_details(material_id):
                     'total_demand': total_demand
                 })
         
+        # 🆕 取得圖號資訊
+        drawing_mapping = PartDrawingMapping.query.filter_by(part_number=material_id).first()
+        drawing_number = drawing_mapping.drawing_number if drawing_mapping else None
+        
         return jsonify({
             "material_description": material_description,
+            "drawing_number": drawing_number,
             "stock_summary": {
                 "unrestricted": unrestricted_stock,
                 "inspection": inspection_stock,
@@ -537,170 +542,101 @@ def get_all_demand_details():
 
 @api_bp.route('/delivery/all')
 def get_all_deliveries():
-    """取得所有交期資料 用於統計"""
+    """取得所有交期資料 用於統計 (分批)"""
     try:
-        import os
-        import json
         from datetime import datetime, timedelta
+        today = get_taiwan_time().date()
+        yesterday = today - timedelta(days=1)
         
-        delivery_file = 'instance/delivery_schedules.json'
+        # 查詢所有未完成且未取消的交期
+        all_schedules = DeliverySchedule.query.filter(
+            DeliverySchedule.status.notin_(['completed', 'cancelled'])
+        ).order_by(DeliverySchedule.expected_date).all()
         
-        if os.path.exists(delivery_file):
-            with open(delivery_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        # 整理為每個物料一筆最優先交期 (與原邏輯一致)
+        schedules = {}
+        for s in all_schedules:
+            if s.material_id in schedules:
+                continue # 已經有更早的分批了
+                
+            delivery_date = s.expected_date
             
-            # 🔧 改進的交期選擇邏輯
-            schedules = {}
-            today = get_taiwan_time().date()
-            yesterday = today - timedelta(days=1)
+            if delivery_date >= today:
+                schedules[s.material_id] = {
+                    "id": s.id,
+                    "expected_date": delivery_date.strftime('%Y-%m-%d'),
+                    "quantity": float(s.quantity),
+                    "po_number": s.po_number or '',
+                    "status": s.status
+                }
+            elif delivery_date == yesterday:
+                schedules[s.material_id] = {
+                    "id": s.id,
+                    "expected_date": delivery_date.strftime('%Y-%m-%d'),
+                    "quantity": float(s.quantity),
+                    "po_number": s.po_number or '',
+                    "status": "overdue"
+                }
             
-            for material_id, history in data.get('delivery_schedules', {}).items():
-                if history:
-                    # 1️⃣ 優先：未過期的交期（包含今天）
-                    valid_schedules = []
-                    # 2️⃣ 次要：過期1天內的交期（保留提醒）
-                    expired_recent = []
-                    
-                    for schedule in history:
-                        try:
-                            delivery_date = datetime.fromisoformat(schedule['expected_date']).date()
-                            
-                            if delivery_date >= today:
-                                # 未過期的交期
-                                valid_schedules.append({
-                                    **schedule,
-                                    'date_obj': delivery_date,
-                                    'is_overdue': False
-                                })
-                            elif delivery_date == yesterday:
-                                # 昨天過期的交期（保留一天提醒）
-                                expired_recent.append({
-                                    **schedule,
-                                    'date_obj': delivery_date,
-                                    'is_overdue': True
-                                })
-                        except (ValueError, KeyError):
-                            continue
-                    
-                    # 選擇邏輯：
-                    # - 有未過期的 → 選最近的一筆
-                    # - 都過期但有昨天的 → 選昨天的（提醒）
-                    # - 都過期超過1天 → 不顯示（讓系統自動清空）
-                    if valid_schedules:
-                        nearest = min(valid_schedules, key=lambda x: x['date_obj'])
-                        del nearest['date_obj']
-                        schedules[material_id] = nearest
-                    elif expired_recent:
-                        # 保留昨天過期的交期，加上過期標記
-                        overdue = min(expired_recent, key=lambda x: x['date_obj'])
-                        del overdue['date_obj']
-                        overdue['status'] = 'overdue'  # 標記為過期
-                        schedules[material_id] = overdue
-                    # 如果都過期超過1天，不加入 schedules（自動清空）
-            
-            return jsonify({
-                "schedules": schedules,
-                "total": len(schedules)
-            })
-        else:
-            return jsonify({
-                "schedules": {},
-                "total": 0
-            })
+        return jsonify({
+            "schedules": schedules,
+            "total": len(schedules)
+        })
     except Exception as e:
         app_logger.error(f"取得所有交期失敗: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/delivery/<material_id>')
 def get_delivery(material_id):
-    """取得物料的交期資訊"""
+    """取得物料的交期資訊 (分批)"""
     try:
-        import os
-        import json
         from datetime import datetime, timedelta
+        today = get_taiwan_time().date()
         
-        delivery_file = 'instance/delivery_schedules.json'
+        # 1. 查詢資料庫中的交期分批
+        schedules = DeliverySchedule.query.filter_by(material_id=material_id).order_by(DeliverySchedule.expected_date).all()
         
-        # 🆕 同時查詢採購單資料，優先使用未結案採購單的交期
+        history = []
+        for s in schedules:
+            history.append({
+                "id": s.id,
+                "expected_date": s.expected_date.strftime('%Y-%m-%d'),
+                "quantity": float(s.quantity),
+                "received_quantity": float(s.received_quantity or 0),
+                "po_number": s.po_number or '',
+                "supplier": s.supplier or '',
+                "notes": s.notes or '',
+                "status": s.status,
+                "created_at": s.created_at.isoformat() if s.created_at else None
+            })
+            
+        # 2. 決定當前要顯示的「最優先」交期 (未過期且最近的一筆)
         po_delivery = None
-        try:
-            active_pos = PurchaseOrder.query.filter(
-                PurchaseOrder.material_id == material_id,
-                PurchaseOrder.status.notin_(['completed', 'cancelled'])
-            ).order_by(PurchaseOrder.original_delivery_date).all()
-            
-            if active_pos:
-                # 選擇最早的未結案採購單交期
-                first_po = active_pos[0]
-                po_date = first_po.updated_delivery_date or first_po.original_delivery_date
-                if po_date:
-                    po_delivery = {
-                        'source': 'purchase_order',
-                        'po_number': first_po.po_number,
-                        'expected_date': po_date.strftime('%Y-%m-%d'),
-                        'quantity': float(first_po.outstanding_quantity),
-                        'supplier': first_po.supplier or '',
-                        'notes': f'來自採購單 {first_po.po_number}',
-                        'status': first_po.status
-                    }
-        except Exception as po_error:
-            app_logger.warning(f"查詢採購單交期失敗: {po_error}")
-        
-        # 查詢手動維護的交期
         manual_delivery = None
-        schedules = []
         
-        if os.path.exists(delivery_file):
-            with open(delivery_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            schedules = data.get('delivery_schedules', {}).get(material_id, [])
-            
-            # 🔧 選擇距離今天最近且未過期的交期
-            today = get_taiwan_time().date()
-            yesterday = today - timedelta(days=1)
-            
-            if schedules:
-                valid_schedules = []
-                expired_recent = []
-                
-                for schedule in schedules:
-                    try:
-                        delivery_date = datetime.fromisoformat(schedule['expected_date']).date()
-                        
-                        if delivery_date >= today:
-                            valid_schedules.append({
-                                **schedule,
-                                'date_obj': delivery_date,
-                                'is_overdue': False
-                            })
-                        elif delivery_date == yesterday:
-                            expired_recent.append({
-                                **schedule,
-                                'date_obj': delivery_date,
-                                'is_overdue': True
-                            })
-                    except (ValueError, KeyError):
-                        continue
-                
-                if valid_schedules:
-                    nearest = min(valid_schedules, key=lambda x: x['date_obj'])
-                    del nearest['date_obj']
-                    manual_delivery = nearest
-                elif expired_recent:
-                    overdue = min(expired_recent, key=lambda x: x['date_obj'])
-                    del overdue['date_obj']
-                    overdue['status'] = 'overdue'
-                    manual_delivery = overdue
+        valid_schedules = [h for h in history if h['status'] != 'completed' and h['status'] != 'cancelled']
         
-        # 🎯 優先順序：採購單交期 > 手動維護交期
-        current_delivery = po_delivery if po_delivery else manual_delivery
-        
+        if valid_schedules:
+            # 找到最接近今天的一筆
+            upcoming = [h for h in valid_schedules if h['expected_date'] >= today.strftime('%Y-%m-%d')]
+            overdue = [h for h in valid_schedules if h['expected_date'] < today.strftime('%Y-%m-%d')]
+            
+            if upcoming:
+                manual_delivery = min(upcoming, key=lambda x: x['expected_date'])
+            elif overdue:
+                manual_delivery = max(overdue, key=lambda x: x['expected_date'])
+                manual_delivery['status'] = 'overdue'
+
+        # 🎯 傳統邏輯向下相容：如果是採購單相關，標註為 po_delivery
+        if manual_delivery and manual_delivery.get('po_number'):
+            po_delivery = manual_delivery.copy()
+            po_delivery['source'] = 'purchase_order'
+            
         return jsonify({
-            "delivery": current_delivery,
-            "po_delivery": po_delivery,  # 🆕 提供採購單交期資訊
-            "manual_delivery": manual_delivery,  # 🆕 提供手動交期資訊
-            "history": schedules
+            "delivery": manual_delivery,
+            "po_delivery": po_delivery,
+            "manual_delivery": manual_delivery,
+            "history": history
         })
     except Exception as e:
         app_logger.error(f"取得交期失敗: {e}", exc_info=True)
@@ -708,202 +644,159 @@ def get_delivery(material_id):
 
 @api_bp.route('/delivery', methods=['POST'])
 def save_delivery():
-    """儲存交期資訊"""
+    """儲存交期資訊 (分批)"""
     try:
-        import os
-        import json
-        import time
-        from datetime import datetime
-        
         form_data = request.get_json()
         material_id = form_data.get('material_id')
         po_number = form_data.get('po_number')
+        expected_date_str = form_data.get('expected_date')
+        quantity = form_data.get('quantity')
         
         if not material_id:
             return jsonify({"success": False, "error": "缺少物料編號"}), 400
+        if not expected_date_str or quantity is None:
+            return jsonify({"success": False, "error": "缺少交期或數量"}), 400
+            
+        expected_date = datetime.strptime(expected_date_str, '%Y-%m-%d').date()
         
-        # 如果有提供採購單號，更新採購單資料庫
+        # 1. 儲存到 DeliverySchedule 資料表
+        new_schedule = DeliverySchedule(
+            material_id=material_id,
+            po_number=po_number,
+            expected_date=expected_date,
+            quantity=float(quantity),
+            supplier=form_data.get('supplier', ''),
+            notes=form_data.get('notes', ''),
+            status='pending'
+        )
+        db.session.add(new_schedule)
+        
+        # 2. 如果有採購單號，同步更新採購單的預計交期 (維持舊邏輯向下相容)
         if po_number:
-            try:
-                po = PurchaseOrder.query.filter_by(po_number=po_number).first()
-                if po:
-                    new_date_str = form_data.get('expected_date')
-                    if new_date_str:
-                        po.updated_delivery_date = datetime.strptime(new_date_str, '%Y-%m-%d').date()
-                        po.status = 'updated' # 標記為已更新
-                        db.session.commit()
-                        app_logger.info(f"已更新採購單 {po_number} 的交期為 {new_date_str}")
-                else:
-                    app_logger.warning(f"找不到採購單 {po_number}，無法更新資料庫")
-            except Exception as db_error:
-                app_logger.error(f"更新採購單資料庫失敗: {db_error}", exc_info=True)
-                db.session.rollback()
-        
-        # 繼續執行原有的 JSON 檔案儲存邏輯 (作為備份或歷史記錄)
-        delivery_file = 'instance/delivery_schedules.json'
-        
-        # 載入現有資料
-        if os.path.exists(delivery_file):
-            with open(delivery_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        else:
-            data = {"delivery_schedules": {}}
-        
-        if material_id not in data['delivery_schedules']:
-            data['delivery_schedules'][material_id] = []
-        
-        # 新增交期記錄
-        new_delivery = {
-            "id": f"DS-{int(time.time())}",
-            "expected_date": form_data.get('expected_date'),
-            "quantity": form_data.get('quantity'),
-            "po_number": form_data.get('po_number', ''),
-            "supplier": form_data.get('supplier', ''),
-            "notes": form_data.get('notes', ''),
-            "status": "pending",
-            "created_at": get_taiwan_time().isoformat(),
-            "updated_at": get_taiwan_time().isoformat()
-        }
-        
-        data['delivery_schedules'][material_id].append(new_delivery)
-        
-        # 確保目錄存在
-        os.makedirs(os.path.dirname(delivery_file), exist_ok=True)
-        
-        # 儲存
-        with open(delivery_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        
-        app_logger.info(f"已儲存物料 {material_id} 的交期: {new_delivery['expected_date']}")
+            po = PurchaseOrder.query.filter_by(po_number=po_number).first()
+            if po:
+                po.updated_delivery_date = expected_date
+                po.status = 'updated'
+                
+        db.session.commit()
+        app_logger.info(f"已儲存物料 {material_id} 的分批交期: {expected_date}")
         
         return jsonify({
             "success": True,
-            "delivery": new_delivery
+            "delivery": {
+                "id": new_schedule.id,
+                "expected_date": expected_date_str,
+                "quantity": float(quantity),
+                "po_number": po_number,
+                "status": "pending"
+            }
         })
         
     except Exception as e:
+        db.session.rollback()
         app_logger.error(f"儲存交期失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route('/delivery/<int:schedule_id>', methods=['PUT'])
+def update_delivery(schedule_id):
+    """更新特定交期分批"""
+    try:
+        form_data = request.get_json()
+        schedule = DeliverySchedule.query.get(schedule_id)
+        if not schedule:
+            return jsonify({"success": False, "error": "找不到該交期記錄"}), 404
+            
+        if 'expected_date' in form_data:
+            schedule.expected_date = datetime.strptime(form_data['expected_date'], '%Y-%m-%d').date()
+        if 'quantity' in form_data:
+            schedule.quantity = float(form_data['quantity'])
+        if 'notes' in form_data:
+            schedule.notes = form_data['notes']
+        if 'supplier' in form_data:
+            schedule.supplier = form_data['supplier']
+        if 'po_number' in form_data:
+            schedule.po_number = form_data['po_number']
+            
+        db.session.commit()
+        app_logger.info(f"已更新交期分批 (ID: {schedule_id})")
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"更新交期失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route('/delivery/<int:schedule_id>', methods=['DELETE'])
+def delete_delivery(schedule_id):
+    """刪除特定交期分批"""
+    try:
+        schedule = DeliverySchedule.query.get(schedule_id)
+        if not schedule:
+            return jsonify({"success": False, "error": "找不到該交期記錄"}), 404
+            
+        material_id = schedule.material_id
+        db.session.delete(schedule)
+        db.session.commit()
+        
+        app_logger.info(f"已刪除物料 {material_id} 的交期分批 (ID: {schedule_id})")
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"刪除交期失敗: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
 @api_bp.route('/delivery/<material_id>/clear_overdue', methods=['POST'])
 def clear_overdue_delivery(material_id):
-    """清除過期的交期記錄"""
+    """清除物料過期的交期記錄"""
     try:
-        import os
-        import json
-        from datetime import datetime, timedelta
-        
-        delivery_file = 'instance/delivery_schedules.json'
-        
-        if not os.path.exists(delivery_file):
-            return jsonify({"success": True, "message": "沒有交期記錄"})
-        
-        with open(delivery_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        schedules = data.get('delivery_schedules', {}).get(material_id, [])
-        
-        if not schedules:
-            return jsonify({"success": True, "message": "沒有交期記錄"})
-        
-        # 移除所有過期的交期（寬限期2天）
         today = get_taiwan_time().date()
-        grace_date = today - timedelta(days=2)
+        # 清除過期且未完成的交期
+        overdue_schedules = DeliverySchedule.query.filter(
+            DeliverySchedule.material_id == material_id,
+            DeliverySchedule.expected_date < today,
+            DeliverySchedule.status.notin_(['completed', 'cancelled'])
+        ).all()
         
-        updated_schedules = []
-        removed_count = 0
+        count = len(overdue_schedules)
+        for s in overdue_schedules:
+            db.session.delete(s)
+            
+        db.session.commit()
+        app_logger.info(f"已清除物料 {material_id} 的 {count} 筆過期交期")
         
-        for schedule in schedules:
-            try:
-                delivery_date = datetime.fromisoformat(schedule['expected_date']).date()
-                # 只保留前天及之後的交期（寬限期2天）
-                if delivery_date > grace_date:
-                    updated_schedules.append(schedule)
-                else:
-                    removed_count += 1
-            except (ValueError, KeyError):
-                # 格式錯誤的記錄也移除
-                removed_count += 1
-        
-        # 更新資料
-        data['delivery_schedules'][material_id] = updated_schedules
-        
-        # 儲存
-        with open(delivery_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        
-        app_logger.info(f"物料 {material_id} 已清除 {removed_count} 筆過期交期")
-        
-        return jsonify({
-            "success": True,
-            "removed_count": removed_count,
-            "message": f"已清除 {removed_count} 筆過期交期"
-        })
-        
+        return jsonify({"success": True, "cleared_count": count})
     except Exception as e:
+        db.session.rollback()
         app_logger.error(f"清除過期交期失敗: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @api_bp.route('/delivery/batch-clear-overdue', methods=['POST'])
 def batch_clear_overdue_deliveries():
     """批量清除所有過期的交期"""
     try:
-        import os
-        import json
-        from datetime import datetime, timedelta
-        
-        delivery_file = 'instance/delivery_schedules.json'
-        
-        if not os.path.exists(delivery_file):
-            return jsonify({'success': True, 'message': '無交期資料', 'cleared_count': 0})
-        
-        with open(delivery_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        schedules = data.get('delivery_schedules', {})
-        
-        # 找出過期的交期（寬限期2天）
         today = get_taiwan_time().date()
-        grace_date = today - timedelta(days=2)
+        # 考慮寬限期，清理昨天之前的
+        yesterday = today - timedelta(days=1)
         
-        total_cleared = 0
+        overdue_schedules = DeliverySchedule.query.filter(
+            DeliverySchedule.expected_date <= yesterday,
+            DeliverySchedule.status.notin_(['completed', 'cancelled'])
+        ).all()
         
-        # 遍歷所有物料的交期
-        for material_id, deliveries in schedules.items():
-            original_count = len(deliveries)
+        count = len(overdue_schedules)
+        for s in overdue_schedules:
+            db.session.delete(s)
             
-            # 過濾掉過期的交期
-            valid_deliveries = []
-            for d in deliveries:
-                try:
-                    delivery_date = datetime.fromisoformat(d['expected_date']).date()
-                    if delivery_date > grace_date:
-                        valid_deliveries.append(d)
-                except (ValueError, KeyError):
-                    # 格式錯誤的記錄也移除
-                    pass
-            
-            cleared_count = original_count - len(valid_deliveries)
-            total_cleared += cleared_count
-            
-            schedules[material_id] = valid_deliveries
-        
-        # 更新 JSON 檔案
-        with open(delivery_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        
-        app_logger.info(f"批量清除過期交期: 共清除 {total_cleared} 筆")
+        db.session.commit()
+        app_logger.info(f"批量清理完成，共清除 {count} 筆過期交期")
         
         return jsonify({
-            'success': True,
-            'message': f'已清除 {total_cleared} 個過期交期',
-            'cleared_count': total_cleared
+            "success": True, 
+            "cleared_count": count
         })
-    
     except Exception as e:
-        app_logger.error(f"批量清除過期交期失敗: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': str(e)}), 500
+        db.session.rollback()
+        app_logger.error(f"批量清理過期交期失敗: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @api_bp.route('/purchase_orders/<material_id>')
 @cache_required

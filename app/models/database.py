@@ -52,6 +52,7 @@ class Material(db.Model):
     buyer = db.relationship('User', back_populates='materials')
     order_materials = db.relationship('OrderMaterial', back_populates='material')
     purchase_orders = db.relationship('PurchaseOrder', back_populates='material')
+    delivery_schedules = db.relationship('DeliverySchedule', back_populates='material')
     
     def __repr__(self):
         return f'<Material {self.material_id}>'
@@ -170,6 +171,7 @@ class PurchaseOrder(db.Model):
     # 關聯
     material = db.relationship('Material', back_populates='purchase_orders')
     buyer = db.relationship('User', back_populates='purchase_orders')
+    delivery_schedules = db.relationship('DeliverySchedule', back_populates='purchase_order')
     
     def __repr__(self):
         return f'<PurchaseOrder {self.po_number}>'
@@ -247,3 +249,30 @@ class PartDrawingMapping(db.Model):
     
     def __repr__(self):
         return f'<PartDrawingMapping {self.part_number}-{self.drawing_number}>'
+
+class DeliverySchedule(db.Model):
+    """交期分批排程"""
+    __tablename__ = 'delivery_schedules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    material_id = db.Column(db.String(50), db.ForeignKey('materials.material_id'), nullable=False, index=True)
+    po_number = db.Column(db.String(50), db.ForeignKey('purchase_orders.po_number'), nullable=True, index=True)
+    
+    expected_date = db.Column(db.Date, nullable=False, index=True)
+    quantity = db.Column(db.Numeric(15, 3), nullable=False)
+    received_quantity = db.Column(db.Numeric(15, 3), default=0)
+    
+    supplier = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pending')  # pending, partial, completed, cancelled
+    
+    # 系統欄位
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
+    
+    # 關聯
+    material = db.relationship('Material', back_populates='delivery_schedules')
+    purchase_order = db.relationship('PurchaseOrder', back_populates='delivery_schedules')
+    
+    def __repr__(self):
+        return f'<DeliverySchedule {self.material_id} - {self.expected_date}>'

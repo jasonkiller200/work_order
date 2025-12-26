@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # 加入專案路徑
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.models.database import db, PurchaseOrder, Material
+from app.models.database import db, PurchaseOrder, Material, DeliverySchedule
 from app.config.paths import FilePaths
 from app import create_app
 
@@ -35,7 +35,7 @@ class ReceiptSyncService:
         1. 讀取今日入庫 Excel
         2. 更新採購單的 actual_delivery_date
         3. 交叉比對：已訂未交消失 + 有入庫記錄 = 確認完成
-        4. 自動結案相關交期
+        4. 分批交期：自動結案或扣減對應的分批交期 (DeliverySchedule)
         """
         with self.app.app_context():
             try:
@@ -181,8 +181,8 @@ class ReceiptSyncService:
             po.outstanding_quantity = Decimal('0')
             po.received_quantity = po.ordered_quantity
             
-            # 🆕 自動結案交期
-            self._close_delivery_schedule(po.material_id, po.po_number)
+            # 🆕 自動結案或扣減交期分批
+            self._reconcile_delivery_schedules(po.material_id, po.po_number, receipt_qty)
             
             logger.info(f"✅ 採購單 {po.po_number} 完全結案 (收貨: {po.received_quantity}/{po.ordered_quantity})")
             return 'completed'
@@ -193,78 +193,69 @@ class ReceiptSyncService:
             po.status = 'partial'
             
             if old_status != 'partial':
-                # 🆕 標記交期需要更新
-                self._mark_delivery_partial(po.material_id, po.po_number, po.received_quantity, po.outstanding_quantity)
+                # 🆕 標記交期部分到貨/扣減數量
+                self._reconcile_delivery_schedules(po.material_id, po.po_number, receipt_qty)
                 logger.info(f"📦 採購單 {po.po_number} 部分交貨 (收貨: {po.received_quantity}/{po.ordered_quantity})")
             
             return 'partial'
         
         return 'updated'
     
-    def _close_delivery_schedule(self, material_id, po_number):
-        """結案交期"""
+    def _reconcile_delivery_schedules(self, material_id, po_number, receipt_qty):
+        """
+        對消/更新交期分批
+        
+        邏輯：
+        1. 優先找與該 po_number 相符的、尚未完成的 DeliverySchedule
+        2. 按日期先後順序進行扣減
+        3. 如果入庫數量 > 某個分批，則該分批 status = 'completed', 剩餘數量去沖下一個分批
+        4. 如果入庫數量 < 某個分批，則該分批 received_quantity 增加，status = 'partial'
+        """
         try:
-            import json
-            delivery_file = 'instance/delivery_schedules.json'
+            from decimal import Decimal
+            remaining_to_deduct = Decimal(str(receipt_qty))
             
-            if not os.path.exists(delivery_file):
-                return
+            # 撈出該品號相關的、未結案的排程 (優先處理 po_number 相符的)
+            schedules = DeliverySchedule.query.filter(
+                DeliverySchedule.material_id == material_id,
+                DeliverySchedule.status.notin_(['completed', 'cancelled'])
+            ).order_by(
+                # po_number 相符的优先，然后按日期
+                db.case((DeliverySchedule.po_number == po_number, 0), else_=1),
+                DeliverySchedule.expected_date
+            ).all()
             
-            with open(delivery_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            schedules = data.get('delivery_schedules', {}).get(material_id, [])
             if not schedules:
                 return
-            
-            # 移除與該採購單相關的交期
-            original_count = len(schedules)
-            updated_schedules = [s for s in schedules if s.get('po_number') != po_number]
-            
-            if len(updated_schedules) < original_count:
-                data['delivery_schedules'][material_id] = updated_schedules
                 
-                with open(delivery_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+            for s in schedules:
+                if remaining_to_deduct <= 0:
+                    break
+                    
+                # 該分批剩餘需要到貨的數量
+                s_outstanding = s.quantity - (s.received_quantity or 0)
                 
-                logger.info(f"🔒 已結案物料 {material_id} 採購單 {po_number} 的交期")
-        
+                if s_outstanding <= 0:
+                    continue
+                    
+                if remaining_to_deduct >= s_outstanding:
+                    # 完全沖銷此分批
+                    remaining_to_deduct -= s_outstanding
+                    s.received_quantity = s.quantity
+                    s.status = 'completed'
+                    logger.info(f"✅ 交期對消: 分批 ID {s.id} ({s.expected_date}) 已完成")
+                else:
+                    # 部分沖銷此分批
+                    s.received_quantity = (s.received_quantity or 0) + remaining_to_deduct
+                    s.status = 'partial'
+                    logger.info(f"📦 交期對消: 分批 ID {s.id} ({s.expected_date}) 沖銷 {remaining_to_deduct} 件")
+                    remaining_to_deduct = 0
+            
+            # db.session.commit() # 由呼叫者提交
+            
         except Exception as e:
-            logger.error(f"結案交期失敗: {e}")
+            logger.error(f"對消交期失敗: {e}")
     
-    def _mark_delivery_partial(self, material_id, po_number, received_qty, outstanding_qty):
-        """標記部分交貨的交期"""
-        try:
-            import json
-            delivery_file = 'instance/delivery_schedules.json'
-            
-            if not os.path.exists(delivery_file):
-                return
-            
-            with open(delivery_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            schedules = data.get('delivery_schedules', {}).get(material_id, [])
-            if not schedules:
-                return
-            
-            updated = False
-            for schedule in schedules:
-                if schedule.get('po_number') == po_number:
-                    schedule['status'] = 'partial_received'
-                    schedule['partial_note'] = f"已部分到貨 {received_qty} 件，剩餘 {outstanding_qty} 件待交"
-                    schedule['partial_date'] = datetime.now().isoformat()
-                    schedule['needs_update'] = True
-                    updated = True
-            
-            if updated:
-                with open(delivery_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                
-                logger.info(f"📝 已標記物料 {material_id} 採購單 {po_number} 為部分交貨")
-        
-        except Exception as e:
-            logger.error(f"標記部分交貨失敗: {e}")
     
     def cross_validate_with_on_order(self, on_order_file=None):
         """
@@ -317,7 +308,7 @@ class ReceiptSyncService:
                             po.status = 'completed'
                             po.outstanding_quantity = 0
                             po.received_quantity = po.ordered_quantity
-                            self._close_delivery_schedule(po.material_id, po.po_number)
+                            self._reconcile_delivery_schedules(po.material_id, po.po_number, po.ordered_quantity - (po.received_quantity or 0)) # 補足沖銷
                             completed_count += 1
                             logger.info(f"✅ 交叉驗證完成: {po.po_number}")
                         else:

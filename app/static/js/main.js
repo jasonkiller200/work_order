@@ -183,7 +183,6 @@ window.renderMaterialsTable = function () {
 
     let tableHTML = `<figure><table><thead><tr>
         <th data-sort-key="物料" class="sortable">物料 <span class="sort-icon"></span></th>
-        <th data-sort-key="drawing_number" class="sortable">圖號 <span class="sort-icon"></span></th>
         <th data-sort-key="物料說明" class="sortable">物料說明 <span class="sort-icon"></span></th>
         <th data-sort-key="採購人員" class="sortable">採購人員 <span class="sort-icon"></span></th>
         <th data-sort-key="delivery_date" class="sortable">預計交貨日 <span class="sort-icon"></span></th>
@@ -227,7 +226,6 @@ window.renderMaterialsTable = function () {
             tableHTML += `
                 <tr${rowClass}>
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
-                    <td>${m['drawing_number'] || '-'}</td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
                     <td${dateClass}>${deliveryDateStr}</td>

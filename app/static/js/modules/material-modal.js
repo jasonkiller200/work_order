@@ -34,7 +34,7 @@ function setupModal() {
 
 function openDetailsModal(materialId) {
     const modal = document.getElementById('details-modal');
-    
+
     // 🆕 先設定基本標題，後續從API取得詳細資訊後再更新
     document.getElementById('modal-title').textContent = `物料詳情: ${materialId}`;
 
@@ -69,7 +69,7 @@ function openDetailsModal(materialId) {
 
     // 🆕 載入採購單資料
     loadPurchaseOrders(materialId);
-    
+
 
     // 根據當前儀表板類型傳遞參數
     const dashboardType = currentDashboardType;
@@ -89,9 +89,29 @@ function openDetailsModal(materialId) {
             const description = data.material_description || '無說明';
             const modalTitle = document.getElementById('modal-title');
             modalTitle.innerHTML = `
-                <div>物料詳情: ${materialId}</div>
-                <div style="font-size: 0.85em; font-weight: normal; color: var(--pico-muted-color); margin-top: 0.3em;">${description}</div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                    <div>
+                        <div>物料詳情: ${materialId}</div>
+                        <div style="font-size: 0.85em; font-weight: normal; color: var(--pico-muted-color); margin-top: 0.3em;">${description}</div>
+                    </div>
+                    <div style="text-align: right; font-size: 0.9em; padding-right: 2em;">
+                        <span class="drawing-edit-link" data-part-number="${materialId}" data-drawing="${data.drawing_number || ''}" style="cursor: pointer; color: var(--pico-primary); border-bottom: 1px dashed;">
+                            圖號: ${data.drawing_number || '未設定'} 🖊️
+                        </span>
+                    </div>
+                </div>
             `;
+
+            // 🆕 綁定圖號編輯事件
+            const drawingLink = modalTitle.querySelector('.drawing-edit-link');
+            if (drawingLink) {
+                drawingLink.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const partNo = this.dataset.partNumber;
+                    const currentDrawing = this.dataset.drawing;
+                    promptUpdateDrawingNumber(partNo, currentDrawing);
+                });
+            }
 
             // 更新庫存總覽
             document.getElementById('unrestricted-stock').textContent = data.stock_summary.unrestricted.toFixed(0);
@@ -432,7 +452,7 @@ function loadPurchaseOrders(materialId) {
                 if (poSelect) {
                     poSelect.innerHTML = '<option value="">-- 新建交期記錄 (不關聯採購單) --</option>';
                 }
-                
+
                 // 🆕 在交期維護表單上方加入提示
                 addNoPurchaseOrderHint();
                 return;
@@ -523,11 +543,11 @@ window.fillDeliveryFormFromPO = function (poNumber) {
 function addNoPurchaseOrderHint() {
     const deliveryFormSection = document.getElementById('delivery-form-section');
     if (!deliveryFormSection) return;
-    
+
     // 移除舊的提示（如果有）
     const oldHint = deliveryFormSection.querySelector('.no-po-hint');
     if (oldHint) oldHint.remove();
-    
+
     // 新增提示訊息
     const hint = document.createElement('div');
     hint.className = 'no-po-hint';
@@ -556,7 +576,7 @@ function addNoPurchaseOrderHint() {
             </div>
         </div>
     `;
-    
+
     // 插入到表單標題之後
     const formTitle = deliveryFormSection.querySelector('.delivery-form-title');
     if (formTitle && formTitle.nextSibling) {
@@ -571,6 +591,86 @@ function removeNoPurchaseOrderHint() {
     if (hint) hint.remove();
 }
 
+/**
+ * 🆕 提示更新圖號
+ */
+function promptUpdateDrawingNumber(partNumber, currentDrawing) {
+    const newDrawing = prompt(`請輸入品號 ${partNumber} 的新圖號:`, currentDrawing);
+
+    if (newDrawing === null) return; // 使用者取消
+
+    // 如果沒變，就不處理
+    if (newDrawing === currentDrawing) return;
+
+    // 呼叫 API 更新
+    fetch(`/api/part-drawing/${partNumber}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            drawing_number: newDrawing
+        })
+    })
+        .then(response => {
+            if (!response.ok) {
+                // 如果是 404，表示該品號在對照表中不存在，需改用 POST 新增
+                if (response.status === 404) {
+                    return fetch('/api/part-drawing', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            part_number: partNumber,
+                            drawing_number: newDrawing
+                        })
+                    }).then(res => res.json());
+                }
+                return response.json().then(err => Promise.reject(err));
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // 更新成功，重新整理詳情彈窗內容
+                openDetailsModal(partNumber);
+
+                // 同時更新主畫面快取（如果有的話）
+                updateMainCacheDrawing(partNumber, newDrawing);
+            } else {
+                alert('更新失敗: ' + (data.error || '未知錯誤'));
+            }
+        })
+        .catch(error => {
+            console.error('Error updating drawing:', error);
+            alert('更新圖號時發生錯誤: ' + (error.error || error.message || '連線失敗'));
+        });
+}
+
+/**
+ * 🆕 更新主畫面快取中的圖號
+ */
+function updateMainCacheDrawing(partNumber, newDrawing) {
+    // 遍歷主儀表板資料
+    const mainItem = currentMaterialsData.find(m => m['物料'] === partNumber);
+    if (mainItem) {
+        mainItem['drawing_number'] = newDrawing;
+    }
+
+    // 遍歷成品儀表板資料
+    const finishedItem = currentFinishedMaterialsData.find(m => m['物料'] === partNumber);
+    if (finishedItem) {
+        finishedItem['drawing_number'] = newDrawing;
+    }
+
+    // 重新渲染表格（雖然欄位沒顯示，但匯出會用到）
+    if (typeof renderMaterialsTable === 'function') {
+        renderMaterialsTable();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     setupModal();
 });
+

@@ -9,16 +9,16 @@ function loadExistingDelivery(materialId) {
             let deliveryToShow = data.delivery;
             let isOverdue = false;
             let isPartialReceived = false;
-            
+
             // 🆕 顯示交期來源提示
             const deliveryFormContainer = document.getElementById('delivery-form')?.parentElement;
             if (deliveryFormContainer) {
                 // 移除舊的提示
                 const oldHint = deliveryFormContainer.querySelector('.delivery-source-hint');
                 if (oldHint) oldHint.remove();
-                
+
                 let hintHTML = '';
-                
+
                 // 如果有採購單交期
                 if (data.po_delivery) {
                     hintHTML = `
@@ -57,12 +57,12 @@ function loadExistingDelivery(materialId) {
                     }
                     deliveryToShow = data.manual_delivery;
                 }
-                
+
                 if (hintHTML) {
                     deliveryFormContainer.insertAdjacentHTML('afterbegin', hintHTML);
                 }
             }
-            
+
             if (deliveryToShow) {
                 // 填充表單
                 document.getElementById('delivery-date').value = deliveryToShow.expected_date || '';
@@ -70,7 +70,7 @@ function loadExistingDelivery(materialId) {
                 document.getElementById('po-number').value = deliveryToShow.po_number || '';
                 document.getElementById('supplier').value = deliveryToShow.supplier || '';
                 document.getElementById('delivery-notes').value = deliveryToShow.notes || '';
-                
+
                 // 🆕 如果是過期或部分到貨交期，標記為橙色
                 if (isOverdue || isPartialReceived) {
                     document.getElementById('delivery-date').style.borderColor = '#ff9800';
@@ -84,41 +84,69 @@ function loadExistingDelivery(materialId) {
                 document.getElementById('delivery-form').reset();
             }
 
-            // 顯示歷史記錄
+            // 🆕 顯示交期排程清單 (原歷史記錄區塊)
+            const historyContainer = document.getElementById('delivery-history');
             if (data.history && data.history.length > 0) {
-                let historyHTML = '<ul style="list-style: none; padding: 0; margin: 0;">';
+                let historyHTML = '<div class="delivery-schedule-list">';
                 data.history.forEach(h => {
-                    const createdDate = h.created_at ? new Date(h.created_at).toLocaleString('zh-TW') : '-';
-                    // 🆕 檢查是否過期或部分到貨
                     const deliveryDate = new Date(h.expected_date);
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
-                    const isHistoryOverdue = deliveryDate < today;
-                    const isHistoryPartial = h.status === 'partial_received';
-                    
+
+                    const isCompleted = h.status === 'completed';
+                    const isOverdue = deliveryDate < today && !isCompleted;
+                    const isPartial = h.status === 'partial';
+
+                    let statusBadge = '';
                     let borderColor = '#2196f3';
-                    let statusText = '';
-                    
-                    if (isHistoryPartial) {
+                    let bgColor = '#f8f9fa';
+
+                    if (isCompleted) {
+                        statusBadge = '<span class="badge success">已到貨</span>';
+                        borderColor = '#4caf50';
+                        bgColor = '#f1f8e9';
+                    } else if (isPartial) {
+                        statusBadge = '<span class="badge warning">部分到貨</span>';
                         borderColor = '#ff9800';
-                        statusText = `<span style="color: #ff9800;">⚠️ ${h.partial_note || '部分到貨'}</span>`;
-                    } else if (isHistoryOverdue) {
-                        borderColor = '#ff9800';
-                        statusText = '<span style="color: #ff9800;">⚠️ 已過期</span>';
+                        bgColor = '#fff3e0';
+                    } else if (isOverdue) {
+                        statusBadge = '<span class="badge error">已過期</span>';
+                        borderColor = '#f44336';
+                        bgColor = '#ffebee';
+                    } else {
+                        statusBadge = '<span class="badge info">待到貨</span>';
                     }
-                    
-                    historyHTML += `<li style="margin: 0.5em 0; padding: 0.5em; background: #f8f9fa; border-left: 3px solid ${borderColor}; border-radius: 4px;">
-                        <div style="font-weight: bold;">📅 ${createdDate}</div>
-                        <div style="margin-top: 0.3em;">預計 <strong>${h.expected_date}</strong> 到 <strong>${h.quantity}</strong> 件 ${statusText}</div>
-                        ${h.po_number ? `<div style="font-size: 0.9em; color: #666;">採購單號: ${h.po_number}</div>` : ''}
-                        ${h.notes ? `<div style="font-size: 0.9em; color: #666; margin-top: 0.2em;">備註: ${h.notes}</div>` : ''}
-                    </li>`;
+
+                    const poTotalInfo = h.po_number ? ` (PO 總額分批)` : '';
+                    const receivedInfo = h.received_quantity > 0 ? `<br><small>已收: ${h.received_quantity} / 應收: ${h.quantity}</small>` : '';
+
+                    historyHTML += `
+                        <div class="delivery-item" style="margin: 0.8em 0; padding: 0.8em; background: ${bgColor}; border-left: 4px solid ${borderColor}; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div>
+                                    <div style="font-weight: bold; margin-bottom: 0.3em;">📅 預計到貨: ${h.expected_date} ${statusBadge}${poTotalInfo}</div>
+                                    <div style="font-size: 1.1em;">數量: <strong>${h.quantity}</strong> 件 ${receivedInfo}</div>
+                                    ${h.po_number ? `<div style="font-size: 0.9em; color: #666; margin-top: 0.3em;">採購單: ${h.po_number}</div>` : ''}
+                                    ${h.notes ? `<div style="font-size: 0.9em; color: #666; font-style: italic;">備註: ${h.notes}</div>` : ''}
+                                </div>
+                                <div style="display: flex; gap: 0.5em;">
+                                    ${!isCompleted ? `
+                                        <button class="small outline" onclick="editDeliverySchedule('${h.id}', '${materialId}')" title="編輯">✏️</button>
+                                        <button class="small outline error" onclick="deleteDeliverySchedule('${h.id}', '${materialId}')" title="刪除">🗑️</button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
                 });
-                historyHTML += '</ul>';
-                document.getElementById('delivery-history').innerHTML = historyHTML;
+                historyHTML += '</div>';
+                historyContainer.innerHTML = historyHTML;
             } else {
-                document.getElementById('delivery-history').innerHTML = '<p style="color: #666; font-style: italic;">尚無歷史記錄</p>';
+                historyContainer.innerHTML = '<p style="color: #666; font-style: italic; text-align: center; padding: 1em;">尚無交期計畫</p>';
             }
+
+            // 🆕 儲存到全域變數供數量試算使用
+            window.currentDeliveryHistory = data.history || [];
         })
         .catch(error => {
             console.error('載入交期資料失敗:', error);
@@ -139,7 +167,6 @@ function setupDeliveryFormEvents(materialId, materialData) {
         if (deliveryQty > 0 && deliveryDate) {
             const totalAvailable = materialData.stock_summary.unrestricted +
                 materialData.stock_summary.inspection +
-                materialData.stock_summary.on_order +
                 deliveryQty;
 
             document.getElementById('calc-available-stock').textContent = totalAvailable.toFixed(0);
@@ -172,7 +199,10 @@ function setupDeliveryFormEvents(materialId, materialData) {
     if (poSelect) {
         poSelect.addEventListener('change', function () {
             const selectedPO = this.value;
-            if (!selectedPO) return;
+            if (!selectedPO) {
+                removePOBatchHint();
+                return;
+            }
 
             // 從全域變數中查找採購單資料
             const poData = window.currentPurchaseOrders ? window.currentPurchaseOrders.find(p => p.po_number === selectedPO) : null;
@@ -182,10 +212,15 @@ function setupDeliveryFormEvents(materialId, materialData) {
                 document.getElementById('po-number').value = poData.po_number;
                 document.getElementById('supplier').value = poData.supplier || '';
 
-                // 填入未交數量
-                if (poData.outstanding_quantity > 0) {
-                    document.getElementById('delivery-qty').value = poData.outstanding_quantity;
-                }
+                // 🆕 智慧計算剩餘可分配數量
+                const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
+                const remaining = calculateRemainingPOQuantity(selectedPO, currentEditId);
+
+                // 填入數量
+                document.getElementById('delivery-qty').value = remaining > 0 ? remaining : 0;
+
+                // 設定上限提示 (供驗證使用)
+                document.getElementById('delivery-qty').dataset.maxAllowed = (remaining + (currentEditId ? 0 : 0)); // 稍後在 validator 中細化
 
                 // 填入交期 (優先使用更新後的交期)
                 const deliveryDate = poData.updated_delivery_date || poData.original_delivery_date;
@@ -193,11 +228,11 @@ function setupDeliveryFormEvents(materialId, materialData) {
                     document.getElementById('delivery-date').value = deliveryDate;
                 }
 
+                // 🆕 顯示分批資訊提示
+                showPOBatchHint(selectedPO, poData.outstanding_quantity, remaining, currentEditId);
+
                 // 觸發計算更新
                 updateCalculation();
-
-                // 提示
-                showToast('✅ 已自動填入採購單資料', 'info');
             }
         });
     }
@@ -213,8 +248,20 @@ function setupDeliveryFormEvents(materialId, materialData) {
             notes: document.getElementById('delivery-notes').value
         };
 
-        if (!formData.expected_date || !formData.quantity || isNaN(formData.quantity)) {
-            showToast('❌ 請填寫必填欄位（預計到貨日期和採購數量）', 'error');
+        // 🆕 加強型驗證：檢查採購單分配上限
+        if (formData.po_number && window.currentPurchaseOrders) {
+            const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
+            const maxRemaining = calculateRemainingPOQuantity(formData.po_number, currentEditId);
+
+            if (formData.quantity > (maxRemaining + 0.01)) { // 允許微小浮點誤差
+                if (!confirm(`⚠️ 注意：此筆交期數量 (${formData.quantity}) 已超出該採購單剩餘未分配數量 (${maxRemaining.toFixed(1)})。\n\n確定要強制儲存嗎？`)) {
+                    return;
+                }
+            }
+        }
+
+        if (!formData.expected_date || isNaN(formData.quantity) || formData.quantity <= 0) {
+            showToast('❌ 請填寫必填欄位（預計到貨日期和有效數量）', 'error');
             return;
         }
 
@@ -224,22 +271,77 @@ function setupDeliveryFormEvents(materialId, materialData) {
     // 清除按鈕
     document.getElementById('clear-delivery-btn').onclick = () => {
         if (confirm('確定要清除表單內容嗎？')) {
-            document.getElementById('delivery-form').reset();
-            document.getElementById('delivery-calculation').style.display = 'none';
+            resetDeliveryForm();
         }
     };
 }
 
+// 🆕 計算採購單剩餘可分配數量
+function calculateRemainingPOQuantity(poNumber, currentScheduleId = null) {
+    if (!poNumber || !window.currentPurchaseOrders) return 0;
+
+    const po = window.currentPurchaseOrders.find(p => p.po_number === poNumber);
+    if (!po) return 0;
+
+    const totalOutstanding = parseFloat(po.outstanding_quantity) || 0;
+
+    // 計算已分配量 (排除當前正在編輯的這一筆)
+    let alreadyAssigned = 0;
+    if (window.currentDeliveryHistory) {
+        window.currentDeliveryHistory.forEach(h => {
+            if (h.po_number === poNumber && String(h.id) !== String(currentScheduleId) && h.status !== 'cancelled') {
+                alreadyAssigned += (parseFloat(h.quantity) - parseFloat(h.received_quantity || 0));
+            }
+        });
+    }
+
+    return totalOutstanding - alreadyAssigned;
+}
+
+// 🆕 顯示 PO 分批狀態提示
+function showPOBatchHint(poNumber, total, remaining, currentEditId) {
+    const qtyInput = document.getElementById('delivery-qty');
+    const container = qtyInput.parentElement;
+
+    // 移除舊提示
+    removePOBatchHint();
+
+    const hint = document.createElement('div');
+    hint.className = 'po-batch-hint';
+    hint.style.cssText = 'font-size: 0.85em; color: #666; margin-top: 0.3em; background: #f0f7ff; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #007bff;';
+
+    // 計算該 PO 已有的分批數
+    const batchCount = window.currentDeliveryHistory ? window.currentDeliveryHistory.filter(h => h.po_number === poNumber && h.status !== 'cancelled').length : 0;
+
+    hint.innerHTML = `
+        <strong>採購單 ${poNumber}</strong> 狀態：<br>
+        • 未交總數：${total} | • 已分配分批：${batchCount} 筆<br>
+        • 本次剩餘可分配上限：<span style="color: #007bff; font-weight: bold;">${remaining.toFixed(1)}</span>
+    `;
+
+    container.appendChild(hint);
+}
+
+function removePOBatchHint() {
+    const oldHint = document.querySelector('.po-batch-hint');
+    if (oldHint) oldHint.remove();
+}
+
 // 儲存交期
 function saveDelivery(formData) {
+    // 檢查是新增還是編輯
+    const scheduleId = document.getElementById('save-delivery-btn').dataset.editId;
+    const method = scheduleId ? 'PUT' : 'POST';
+    const url = scheduleId ? `/api/delivery/${scheduleId}` : '/api/delivery';
+
     // 顯示載入中
     const saveBtn = document.getElementById('save-delivery-btn');
     const originalText = saveBtn.textContent;
-    saveBtn.textContent = '⏳ 儲存中...';
+    saveBtn.textContent = '⏳ 處理中...';
     saveBtn.disabled = true;
 
-    fetch('/api/delivery', {
-        method: 'POST',
+    fetch(url, {
+        method: method,
         headers: {
             'Content-Type': 'application/json'
         },
@@ -248,7 +350,9 @@ function saveDelivery(formData) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                showToast('✅ 交期已成功儲存', 'success');
+                showToast(scheduleId ? '✅ 交期已更新' : '✅ 交期已儲存', 'success');
+                // 重置編輯狀態
+                resetDeliveryForm();
                 // 重新載入交期資料
                 loadExistingDelivery(formData.material_id);
                 // 重新載入儀錶板以更新統計
@@ -265,6 +369,86 @@ function saveDelivery(formData) {
             saveBtn.textContent = originalText;
             saveBtn.disabled = false;
         });
+}
+
+// 🆕 編輯交期分批
+function editDeliverySchedule(id, materialId) {
+    // 從歷史記錄中找到該筆資料 (或者直接呼叫 API，這裡為了快先從 DOM 找或是重新 Fetch)
+    fetch(`/api/delivery/${materialId}`)
+        .then(resp => resp.json())
+        .then(data => {
+            const item = data.history.find(h => h.id == id);
+            if (item) {
+                // 填入表單
+                document.getElementById('delivery-date').value = item.expected_date;
+                document.getElementById('delivery-qty').value = item.quantity;
+                document.getElementById('po-number').value = item.po_number || '';
+                document.getElementById('supplier').value = item.supplier || '';
+                document.getElementById('delivery-notes').value = item.notes || '';
+
+                // 標記為編輯模式
+                const saveBtn = document.getElementById('save-delivery-btn');
+                saveBtn.textContent = '💾 更新交期';
+                saveBtn.dataset.editId = id;
+
+                // 🆕 如果有關聯採購單，顯示分批提示
+                if (item.po_number) {
+                    const poSelect = document.getElementById('po-select');
+                    if (poSelect) poSelect.value = item.po_number;
+
+                    const poData = window.currentPurchaseOrders ? window.currentPurchaseOrders.find(p => p.po_number === item.po_number) : null;
+                    if (poData) {
+                        const remaining = calculateRemainingPOQuantity(item.po_number, id);
+                        showPOBatchHint(item.po_number, poData.outstanding_quantity, remaining + parseFloat(item.quantity), id);
+                    }
+                } else {
+                    removePOBatchHint();
+                }
+
+                // 捲動到表單
+                document.getElementById('delivery-form').scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+}
+
+// 🆕 刪除交期分批
+function deleteDeliverySchedule(id, materialId) {
+    if (!confirm('確定要刪除此筆交期排程嗎？這將影響缺料試算結果。')) {
+        return;
+    }
+
+    fetch(`/api/delivery/${id}`, {
+        method: 'DELETE'
+    })
+        .then(resp => resp.json())
+        .then(data => {
+            if (data.success) {
+                showToast('✅ 交期已刪除', 'success');
+                loadExistingDelivery(materialId);
+                loadProcurementDashboard();
+            } else {
+                alert('刪除失敗: ' + (data.error || '未知錯誤'));
+            }
+        })
+        .catch(error => {
+            console.error('刪除交期失敗:', error);
+            alert('刪除失敗，請檢查網路連線');
+        });
+}
+
+// 🆕 重置交期表單
+function resetDeliveryForm() {
+    const form = document.getElementById('delivery-form');
+    if (form) form.reset();
+
+    const saveBtn = document.getElementById('save-delivery-btn');
+    if (saveBtn) {
+        saveBtn.textContent = '💾 儲存交期';
+        delete saveBtn.dataset.editId;
+    }
+
+    const calcEl = document.getElementById('delivery-calculation');
+    if (calcEl) calcEl.style.display = 'none';
 }
 
 // Toast 提示函數
@@ -347,7 +531,7 @@ function clearOverdueDelivery(materialId) {
     if (!confirm('確定要清除過期的交期嗎？清除後將自動使用下一筆有效交期（如有）。')) {
         return;
     }
-    
+
     // 這裡可以呼叫 API 清除過期交期，或直接重新載入
     // 暫時簡化處理：清空表單並重新載入
     fetch(`/api/delivery/${materialId}/clear_overdue`, {
@@ -356,22 +540,22 @@ function clearOverdueDelivery(materialId) {
             'Content-Type': 'application/json'
         }
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('✅ 已清除過期交期', 'success');
-            loadExistingDelivery(materialId);
-            loadProcurementDashboard();
-        } else {
-            showToast('❌ 清除失敗', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('清除過期交期失敗:', error);
-        // 降級處理：直接清空表單
-        document.getElementById('delivery-form').reset();
-        showToast('⚠️ 表單已清空，請填寫新的交期', 'warning');
-    });
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('✅ 已清除過期交期', 'success');
+                loadExistingDelivery(materialId);
+                loadProcurementDashboard();
+            } else {
+                showToast('❌ 清除失敗', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('清除過期交期失敗:', error);
+            // 降級處理：直接清空表單
+            document.getElementById('delivery-form').reset();
+            showToast('⚠️ 表單已清空，請填寫新的交期', 'warning');
+        });
 }
 
 // 🆕 確認並清除部分到貨標記
@@ -379,16 +563,16 @@ function clearPartialDelivery(materialId) {
     if (!confirm('確定要更新剩餘數量的交期嗎？請在表單中填寫新的交期資訊。')) {
         return;
     }
-    
+
     // 清空表單，讓使用者填寫新的交期
     document.getElementById('delivery-form').reset();
-    
+
     // 移除部分到貨的提示框
     const hint = document.querySelector('.delivery-source-hint');
     if (hint) hint.remove();
-    
+
     showToast('請填寫剩餘數量的新交期', 'info');
-    
+
     // 聚焦到交期日期欄位
     document.getElementById('delivery-date').focus();
 }
@@ -398,47 +582,47 @@ function batchClearOverdueDeliveries() {
     if (!confirm('確定要批量清除所有過期的交期嗎？\n\n此操作將清除所有已過期的手動維護交期，清除後系統會自動使用採購單交期（如有）。')) {
         return;
     }
-    
+
     // 顯示處理中
     const btn = document.getElementById('batch-clear-overdue-btn');
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = '⏳ 處理中...';
-    
+
     fetch('/api/delivery/batch-clear-overdue', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         }
     })
-    .then(response => response.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-        
-        if (data.success) {
-            showToast(`✅ 已批量清除 ${data.cleared_count} 個過期交期`, 'success');
-            // 重新載入儀表板
-            loadProcurementDashboard();
-            // 隱藏批量操作欄
-            document.getElementById('batch-actions-bar').style.display = 'none';
-        } else {
-            showToast('❌ 批量清除失敗: ' + (data.message || '未知錯誤'), 'error');
-        }
-    })
-    .catch(error => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-        console.error('批量清除過期交期失敗:', error);
-        showToast('❌ 批量清除失敗', 'error');
-    });
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+
+            if (data.success) {
+                showToast(`✅ 已批量清除 ${data.cleared_count} 個過期交期`, 'success');
+                // 重新載入儀表板
+                loadProcurementDashboard();
+                // 隱藏批量操作欄
+                document.getElementById('batch-actions-bar').style.display = 'none';
+            } else {
+                showToast('❌ 批量清除失敗: ' + (data.message || '未知錯誤'), 'error');
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            console.error('批量清除過期交期失敗:', error);
+            showToast('❌ 批量清除失敗', 'error');
+        });
 }
 
 // 🆕 切換自動清理過期交期
 function toggleAutoClearOverdue() {
     const btn = document.getElementById('auto-clear-overdue-btn');
     const isEnabled = localStorage.getItem('autoClearOverdue') === 'true';
-    
+
     if (!isEnabled) {
         if (confirm('啟用自動清理功能後，系統會在每次載入資料時自動清除過期超過 1 天的交期。\n\n確定要啟用嗎？')) {
             localStorage.setItem('autoClearOverdue', 'true');
@@ -467,15 +651,15 @@ function checkAndAutoClearOverdue() {
                 'Content-Type': 'application/json'
             }
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.cleared_count > 0) {
-                showToast(`🤖 自動清理: 已清除 ${data.cleared_count} 個過期交期`, 'info');
-            }
-        })
-        .catch(error => {
-            console.error('自動清理失敗:', error);
-        });
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.cleared_count > 0) {
+                    showToast(`🤖 自動清理: 已清除 ${data.cleared_count} 個過期交期`, 'info');
+                }
+            })
+            .catch(error => {
+                console.error('自動清理失敗:', error);
+            });
     }
 }
 
@@ -498,3 +682,6 @@ window.batchClearOverdueDeliveries = batchClearOverdueDeliveries;
 window.toggleAutoClearOverdue = toggleAutoClearOverdue;
 window.checkAndAutoClearOverdue = checkAndAutoClearOverdue;
 window.initAutoClearButton = initAutoClearButton;
+window.editDeliverySchedule = editDeliverySchedule;
+window.deleteDeliverySchedule = deleteDeliverySchedule;
+window.resetDeliveryForm = resetDeliveryForm;
