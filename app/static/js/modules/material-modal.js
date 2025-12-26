@@ -145,6 +145,9 @@ function openDetailsModal(materialId) {
                 substituteSection.innerHTML = subHTML;
             }
 
+            // 🆕 儲存需求資料到全域變數供採購單表格使用
+            window.currentDemandDetails = data.demand_details || [];
+
             // 🆕 計算並顯示缺料警示
             const shortageAlertEl = document.getElementById('shortage-alert');
             const totalAvailable = data.stock_summary.unrestricted + data.stock_summary.inspection + data.stock_summary.on_order;
@@ -486,42 +489,56 @@ function renderPurchaseOrdersTable(purchaseOrders) {
     const poTbody = document.getElementById('purchase-orders-tbody');
     if (!poTbody) return;
 
+    // 🆕 獲取需求資料(從全域變數或當前物料資料)
+    const demandDetails = window.currentDemandDetails || [];
+
+    // 🆕 找出第一筆已欠料的需求(預計剩餘存 < 0)
+    const firstShortage = demandDetails.find(d => (d['預計剩餘存'] || 0) < 0);
+
     let html = '';
     purchaseOrders.forEach(po => {
-        // 🆕 完整的狀態映射
-        const statusMap = {
-            'pending': '<span style="color: orange;">待交貨</span>',
-            'partial': '<span style="color: blue;">部分交貨</span>',
-            'completed': '<span style="color: gray;">已完成</span>',
-            'cancelled': '<span style="color: red;">已取消</span>',
-            'planned': '<span style="color: purple;">計畫中</span>',
-            'updated': '<span style="color: green;">已更新</span>'
-        };
-        const status = statusMap[po.status] || `<span>${po.status}</span>`;
+        let status = '';
+        if (po.outstanding_quantity <= 0) {
+            status = '<span style="color: #4caf50;">✓ 已完成</span>';
+        } else if (po.delivery_schedules && po.delivery_schedules.length > 0) {
+            status = `<span style="color: #2196f3;">📦 ${po.delivery_schedules.length}批</span>`;
+        } else {
+            status = '<span style="color: #ff9800;">待交貨</span>';
+        }
 
-        // 🆕 處理分批交期顯示
         let deliveryHTML = '';
         if (po.delivery_schedules && po.delivery_schedules.length > 0) {
-            // 有分批交期資料,顯示所有批次
-            const today = new Date();
             deliveryHTML = po.delivery_schedules.map((schedule, idx) => {
                 const scheduleDate = new Date(schedule.expected_date);
+                const today = new Date();
                 const diffDays = Math.ceil((scheduleDate - today) / (1000 * 60 * 60 * 24));
 
-                // 根據天數設定顏色
                 let colorStyle = '';
                 if (diffDays < 0) {
-                    colorStyle = 'color: #d32f2f; font-weight: bold;'; // 紅色 - 已延誤
+                    colorStyle = 'color: #d32f2f; font-weight: bold;';
                 } else if (diffDays <= 7) {
-                    colorStyle = 'color: #ff9800; font-weight: bold;'; // 橘色 - 7日內
+                    colorStyle = 'color: #ff9800; font-weight: bold;';
                 } else if (diffDays <= 30) {
-                    colorStyle = 'color: #4caf50; font-weight: bold;'; // 綠色 - 30日內
+                    colorStyle = 'color: #4caf50; font-weight: bold;';
                 }
 
                 const batchLabel = idx === 0 ? '' : `<small style="color: #666;">第${idx + 1}批: </small>`;
+
+                // 🆕 如果是第一批且有欠料需求,檢查是否延遲
+                let shortageInfo = '';
+                if (idx === 0 && firstShortage) {
+                    const demandDate = new Date(firstShortage['需求日期']);
+                    if (scheduleDate > demandDate) {
+                        const delayDays = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
+                        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+                        const warningColor = isDarkMode ? '#ffcdd2' : '#c62828';
+                        shortageInfo = `<br><small style="color: ${warningColor}; font-size: 0.75em;">⚠️ 工單 ${firstShortage['訂單號碼']} 需求 ${firstShortage['需求日期']} 延遲 ${delayDays}天</small>`;
+                    }
+                }
+
                 return `<div style="margin-bottom: 0.3em;">
                     ${batchLabel}<span style="${colorStyle}">${schedule.expected_date}</span> 
-                    <small style="color: #888;">(${Math.round(schedule.quantity)}件)</small>
+                    <small style="color: #888;">(${Math.round(schedule.quantity)}件)</small>${shortageInfo}
                 </div>`;
             }).join('');
         } else {

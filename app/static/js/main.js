@@ -234,14 +234,21 @@ window.renderMaterialsTable = function () {
                 // 顯示第一批的日期和數量
                 deliveryDateStr = `${firstSchedule.expected_date} (${Math.round(firstSchedule.quantity)}件)`;
 
-                // 🆕 檢查是否延遲(晚於第一筆需求日期)
+                // 🆕 檢查是否延遲(晚於第一筆欠料需求日期)
                 let delayDays = 0;
+                let firstShortageOrder = null;
                 if (m.demand_details && m.demand_details.length > 0) {
-                    const firstDemandDate = new Date(m.demand_details[0]['需求日期']);
-                    if (date > firstDemandDate) {
-                        delayDays = Math.ceil((date - firstDemandDate) / (1000 * 60 * 60 * 24));
-                        // 加入延遲警告標記
-                        deliveryDateStr += ` <span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;">⚠️ 延遲${delayDays}天</span>`;
+                    // 找出第一筆已欠料的需求
+                    const firstShortage = m.demand_details.find(d => (d['預計剩餘存'] || 0) < 0);
+
+                    if (firstShortage) {
+                        const demandDate = new Date(firstShortage['需求日期']);
+                        if (date > demandDate) {
+                            delayDays = Math.ceil((date - demandDate) / (1000 * 60 * 60 * 24));
+                            firstShortageOrder = firstShortage;
+                            // 加入延遲警告標記(包含工單資訊)
+                            deliveryDateStr += ` <span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;" title="工單 ${firstShortage['訂單號碼']} 需求 ${firstShortage['需求日期']}">⚠️ 延遲${delayDays}天</span>`;
+                        }
                     }
                 }
 
