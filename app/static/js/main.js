@@ -222,7 +222,7 @@ window.renderMaterialsTable = function () {
             let deliveryDateStr = '-';
             let dateClass = '';
             let deliveryTooltip = '';
-
+            let firstShortageOrder = null; // 🆕 移動到這裡
 
             if (m.delivery_schedules && m.delivery_schedules.length > 0) {
                 // 有分批交貨資料
@@ -236,7 +236,7 @@ window.renderMaterialsTable = function () {
 
                 // 🆕 檢查是否延遲(晚於第一筆欠料需求日期)
                 let delayDays = 0;
-                let firstShortageOrder = null;
+
                 if (m.demand_details && m.demand_details.length > 0) {
                     // 找出第一筆已欠料的需求(使用 remaining_stock 欄位)
                     const firstShortage = m.demand_details.find(d => (d.remaining_stock || 0) < 0);
