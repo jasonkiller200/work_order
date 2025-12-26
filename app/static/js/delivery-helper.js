@@ -416,17 +416,24 @@ function showPOBatchHint(poNumber, total, remaining, currentEditId) {
     // 移除舊提示
     removePOBatchHint();
 
+    // 🆕 偵測暗黑模式
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+    const bgColor = isDarkMode ? '#1a2634' : '#f0f7ff';
+    const textColor = isDarkMode ? '#bbdefb' : '#666';
+    const borderColor = isDarkMode ? '#42a5f5' : '#007bff';
+    const highlightColor = isDarkMode ? '#64b5f6' : '#007bff';
+
     const hint = document.createElement('div');
     hint.className = 'po-batch-hint';
-    hint.style.cssText = 'font-size: 0.85em; color: #666; margin-top: 0.3em; background: #f0f7ff; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #007bff;';
+    hint.style.cssText = `font-size: 0.85em; color: ${textColor}; margin-top: 0.3em; background: ${bgColor}; padding: 4px 8px; border-radius: 4px; border-left: 3px solid ${borderColor};`;
 
     // 計算該 PO 已有的分批數
     const batchCount = window.currentDeliveryHistory ? window.currentDeliveryHistory.filter(h => h.po_number === poNumber && h.status !== 'cancelled').length : 0;
 
     hint.innerHTML = `
-        <strong>採購單 ${poNumber}</strong> 狀態：<br>
-        • 未交總數：${total} | • 已分配分批：${batchCount} 筆<br>
-        • 本次剩餘可分配上限：<span style="color: #007bff; font-weight: bold;">${remaining.toFixed(1)}</span>
+        <strong>採購單 ${poNumber}</strong> 狀態:<br>
+        • 未交總數:${total} | • 已分配分批:${batchCount} 筆<br>
+        • 本次剩餘可分配上限:<span style="color: ${highlightColor}; font-weight: bold;">${remaining.toFixed(1)}</span>
     `;
 
     container.appendChild(hint);
