@@ -28,6 +28,31 @@ class DataService:
         try:
             # 載入各個 Excel 檔案
             df_inventory = pd.read_excel(FilePaths.INVENTORY_FILE)
+            
+            # 🆕 庫存資料加總邏輯：針對重複的物料 ID (不同儲位) 進行合併
+            if not df_inventory.empty:
+                # 定義要加總的欄位 (根據實際Excel欄位名稱)
+                # 假設欄位為 '未限制', '品質檢驗中', '在途和移轉', '限制使用庫存'
+                # 這裡使用 groupby Sum 來合併數量，其他文字欄位取第一筆
+                
+                # 確保數值欄位為數字類型
+                numeric_cols = ['未限制', '品質檢驗中', '在途和移轉', '限制使用庫存']
+                for col in numeric_cols:
+                    if col in df_inventory.columns:
+                        df_inventory[col] = pd.to_numeric(df_inventory[col], errors='coerce').fillna(0)
+                        
+                # 執行加總
+                # 注意：保留所有非數值欄位的第一筆資料
+                agg_dict = {col: 'sum' for col in numeric_cols if col in df_inventory.columns}
+                
+                # 對於其他欄位，保留第一筆 (除了物料本身)
+                other_cols = [c for c in df_inventory.columns if c not in numeric_cols and c != '物料']
+                for col in other_cols:
+                    agg_dict[col] = 'first'
+                    
+                df_inventory = df_inventory.groupby('物料', as_index=False).agg(agg_dict)
+                app_logger.info("已執行庫存資料合併 (Aggregation)")
+
             df_wip_parts = pd.read_excel(FilePaths.WIP_PARTS_FILE)
             df_finished_parts = pd.read_excel(FilePaths.FINISHED_PARTS_FILE)
             df_prep_semi_finished = pd.read_excel(FilePaths.PREP_SEMI_FINISHED_FILE)
