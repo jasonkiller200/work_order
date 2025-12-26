@@ -151,6 +151,10 @@
                                             class="required-mark">*</span></label>
                                     <input type="date" id="delivery-date"
                                         style="font-size: 0.85em; padding: 4px; height: auto;" required>
+                                    <small
+                                        style="color: var(--pico-muted-color); font-size: 0.7em; display: block; margin-top: 0.2em;">
+                                        💡 提示: 點擊欄位或按空白鍵開啟日期選擇器
+                                    </small>
                                     <script>
                                         // 設定日期最小值為今天
                                         document.getElementById('delivery-date').min = new Date().toISOString().split('T')[0];
