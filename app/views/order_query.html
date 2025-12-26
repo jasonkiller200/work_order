@@ -7,7 +7,7 @@
     <title>生產資訊中心 - 訂單查詢</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1226">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1232">
 </head>
 
 <body>
@@ -87,7 +87,7 @@
 
                 <!-- 左側分欄：庫存、警示與表單 -->
                 <div class="modal-left-column"
-                    style="flex: 0 0 380px; max-height: 80vh; overflow-y: auto; padding-right: 0.5em;">
+                    style="flex: 0 0 60%; max-width: 60%; min-width: 60%; max-height: 80vh; overflow-y: auto; padding-right: 0.5em;">
                     <!-- 庫存總覽區塊 -->
                     <div id="stock-summary-section">
                         <h4>📦 庫存總覽</h4>
@@ -203,8 +203,8 @@
                 </div>
 
                 <!-- 右側分欄：需求訂單與頁籤內容 -->
-                <div class="modal-right-column"
-                    style="flex: 1; min-width: 0; max-height: 80vh; overflow-y: auto; border-left: 1px solid var(--pico-border-color); padding-left: 1.5em;">
+            <div class="modal-right-column"
+                style="flex: 0 0 40%; max-width: 40%; min-width: 40%; max-height: 80vh; overflow-y: auto; border-left: 1px solid var(--pico-border-color); padding-left: 1.5em;">
                     <nav style="margin-bottom: 0.5em;">
                         <ul>
                             <li><a href="#" class="tab-link active" data-tab="tab-demand">📊 訂單需求</a></li>

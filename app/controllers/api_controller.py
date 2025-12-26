@@ -3,7 +3,7 @@
 
 import logging
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, make_response, request
 from urllib.parse import quote
 from app.services.cache_service import cache_manager

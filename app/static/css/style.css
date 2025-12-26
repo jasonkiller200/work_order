@@ -239,8 +239,8 @@ td:nth-child(2) {
 
 /* 彈出視窗 Modal 樣式 */
 #details-modal article {
-    width: 95%;
-    max-width: 1400px;
+    width: 98vw;
+    max-width: 2000px;
     padding: 1.5em;
 }
 
@@ -249,18 +249,21 @@ td:nth-child(2) {
     display: flex !important;
     gap: 1.5em;
     align-items: flex-start;
+    width: 100%;
+    flex-wrap: nowrap !important;
 }
 
 .modal-left-column {
-    flex: 0 0 380px;
-    /* 稍微縮小左側固定寬度 */
+    flex: 0 0 60% !important;
+    width: 60% !important;
     max-height: 80vh;
     overflow-y: auto;
     padding-right: 0.5em;
 }
 
 .modal-right-column {
-    flex: 1;
+    flex: 0 0 40% !important;
+    width: 40% !important;
     min-width: 0;
     max-height: 80vh;
     overflow-y: auto;
