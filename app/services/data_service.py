@@ -588,13 +588,16 @@ class DataService:
             # 加入需求事件
             demand_details = demand_details_map.get(material_id, [])
             for demand in demand_details:
-                demand_date = demand.get('需求日期')
-                if pd.notna(demand_date) and demand_date <= cutoff_date:
-                    timeline_events.append({
-                        'date': demand_date,
-                        'type': 'demand',
-                        'quantity': float(demand.get('未結數量 (EINHEIT)', 0))
-                    })
+                demand_date_str = demand.get('需求日期')
+                if demand_date_str and demand_date_str != '':
+                    # 🆕 將字串轉換回 Timestamp
+                    demand_date = pd.Timestamp(demand_date_str)
+                    if demand_date <= cutoff_date:
+                        timeline_events.append({
+                            'date': demand_date,
+                            'type': 'demand',
+                            'quantity': float(demand.get('未結數量 (EINHEIT)', 0))
+                        })
             
             # 加入到貨事件 (🆕 分批交期)
             schedules = delivery_schedules_map.get(material_id, [])
