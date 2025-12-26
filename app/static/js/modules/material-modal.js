@@ -3,8 +3,18 @@
  * 處理物料詳情彈窗的顯示和互動
  */
 
+// 避免重複綁定
+if (!window.setupModal) {
+    window.setupModal = setupModal;
+}
+
+if (!window.openDetailsModal) {
+    window.openDetailsModal = openDetailsModal;
+}
+
 function setupModal() {
     const modal = document.getElementById('details-modal');
+    // ... code continues ...
     if (!modal) return;
 
     const closeModalBtn = document.getElementById('close-modal-btn');
@@ -29,6 +39,16 @@ function setupModal() {
             document.getElementById(tabId).classList.add('active');
         });
     });
+
+    // 🆕 設定採購人員編輯模態視窗的關閉邏輯
+    const buyerModal = document.getElementById('buyer-modal');
+    if (buyerModal) {
+        const closeBuyerModalBtn = document.getElementById('close-buyer-modal');
+        const closeBuyerModal = () => buyerModal.close();
+        if (closeBuyerModalBtn) {
+            closeBuyerModalBtn.addEventListener('click', (e) => { e.preventDefault(); closeBuyerModal(); });
+        }
+    }
 }
 
 
@@ -253,18 +273,16 @@ function openDetailsModal(materialId) {
         });
 }
 
+// 明確指定給 window 物件
+window.openBuyerReferenceModal = openBuyerReferenceModal;
+
 function openBuyerReferenceModal(materialId) {
-    const modal = document.getElementById('details-modal');
-    document.getElementById('modal-title').textContent = `採購人員參考清單: ${materialId}`;
+    // 🆕 改用獨立的 buyer-modal
+    const modal = document.getElementById('buyer-modal');
+    if (!modal) return;
 
-    document.getElementById('stock-summary-section').style.display = 'none';
-    document.getElementById('tab-demand').innerHTML = '<p>載入中...</p>';
-    document.getElementById('tab-substitute').innerHTML = '';
-
-    modal.querySelectorAll('.tab-link').forEach(l => l.classList.add('hidden'));
-    document.querySelector('.tab-link[data-tab="tab-demand"]').classList.remove('hidden');
-    modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.getElementById('tab-demand').classList.add('active');
+    // 清空並顯示載入中
+    document.getElementById('buyer-modal-content').innerHTML = '<p>載入中...</p>';
 
     modal.showModal();
 
@@ -307,7 +325,9 @@ function openBuyerReferenceModal(materialId) {
                     }
 
                     buyerHTML += '</tbody></table>';
-                    document.getElementById('tab-demand').innerHTML = buyerHTML;
+                    buyerHTML += '</tbody></table>';
+                    // 🆕 渲染到 buyer-modal-content
+                    document.getElementById('buyer-modal-content').innerHTML = buyerHTML;
 
                     // 綁定下拉選單變更事件
                     bindBuyerSelectEvents();
@@ -331,12 +351,14 @@ function openBuyerReferenceModal(materialId) {
 
                     buyerHTML += '</tbody></table>';
                     buyerHTML += '<p style="color: orange;">無法載入採購人員清單，顯示為唯讀模式。</p>';
-                    document.getElementById('tab-demand').innerHTML = buyerHTML;
+                    // 🆕 渲染到 buyer-modal-content
+                    document.getElementById('buyer-modal-content').innerHTML = buyerHTML;
                 });
         })
         .catch(error => {
             console.error('Error fetching buyer reference:', error);
-            document.getElementById('tab-demand').innerHTML = '<p style="color:red;">載入採購人員參考時發生錯誤。</p>';
+            // 🆕 渲染到 buyer-modal-content
+            document.getElementById('buyer-modal-content').innerHTML = '<p style="color:red;">載入採購人員參考時發生錯誤。</p>';
         });
 }
 
