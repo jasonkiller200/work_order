@@ -937,8 +937,11 @@ def add_part_drawing():
         if not part_number or not drawing_number:
             return jsonify({"success": False, "error": "品號和圖號不能為空"}), 400
         
+        # 🆕 只使用前10碼
+        part_number_prefix = part_number[:10] if len(part_number) >= 10 else part_number
+        
         # 檢查是否已存在
-        existing = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+        existing = PartDrawingMapping.query.filter_by(part_number=part_number_prefix).first()
         
         if existing:
             return jsonify({
@@ -949,13 +952,13 @@ def add_part_drawing():
         
         # 新增記錄
         mapping = PartDrawingMapping(
-            part_number=part_number,
+            part_number=part_number_prefix,  # 🆕 只儲存前10碼
             drawing_number=drawing_number
         )
         db.session.add(mapping)
         db.session.commit()
         
-        app_logger.info(f"新增品號-圖號對照: {part_number} -> {drawing_number}")
+        app_logger.info(f"新增品號-圖號對照: {part_number_prefix} -> {drawing_number}")
         
         return jsonify({
             "success": True,
@@ -1046,7 +1049,10 @@ def update_part_drawing(part_number):
         if not new_drawing_number:
             return jsonify({"success": False, "error": "圖號不能為空"}), 400
         
-        mapping = PartDrawingMapping.query.filter_by(part_number=part_number).first()
+        # 🆕 確保只使用前10碼(雖然前端已處理,但為了安全起見)
+        part_number_prefix = part_number[:10] if len(part_number) >= 10 else part_number
+        
+        mapping = PartDrawingMapping.query.filter_by(part_number=part_number_prefix).first()
         
         if not mapping:
             return jsonify({"success": False, "error": "找不到該品號"}), 404
@@ -1056,7 +1062,7 @@ def update_part_drawing(part_number):
         mapping.updated_at = get_taiwan_time()
         db.session.commit()
         
-        app_logger.info(f"更新品號 {part_number} 的圖號: {old_drawing_number} -> {new_drawing_number}")
+        app_logger.info(f"更新品號 {part_number_prefix} 的圖號: {old_drawing_number} -> {new_drawing_number}")
         
         return jsonify({
             "success": True,

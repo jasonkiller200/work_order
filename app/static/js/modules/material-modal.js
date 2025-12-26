@@ -661,8 +661,11 @@ function promptUpdateDrawingNumber(partNumber, currentDrawing) {
     // 如果沒變，就不處理
     if (newDrawing === currentDrawing) return;
 
+    // 🆕 只使用前10碼
+    const partNumberPrefix = partNumber.length >= 10 ? partNumber.substring(0, 10) : partNumber;
+
     // 呼叫 API 更新
-    fetch(`/api/part-drawing/${partNumber}`, {
+    fetch(`/api/part-drawing/${partNumberPrefix}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -681,7 +684,7 @@ function promptUpdateDrawingNumber(partNumber, currentDrawing) {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            part_number: partNumber,
+                            part_number: partNumberPrefix,  // 🆕 只儲存前10碼
                             drawing_number: newDrawing
                         })
                     }).then(res => res.json());
@@ -691,19 +694,17 @@ function promptUpdateDrawingNumber(partNumber, currentDrawing) {
             return response.json();
         })
         .then(data => {
-            if (data.success) {
-                // 更新成功，重新整理詳情彈窗內容
-                openDetailsModal(partNumber);
-
-                // 同時更新主畫面快取（如果有的話）
-                updateMainCacheDrawing(partNumber, newDrawing);
+            if (data.error) {
+                alert(`更新失敗: ${data.error}`);
             } else {
-                alert('更新失敗: ' + (data.error || '未知錯誤'));
+                alert('圖號已更新');
+                // 重新載入物料詳情以顯示最新資料
+                location.reload();
             }
         })
         .catch(error => {
-            console.error('Error updating drawing:', error);
-            alert('更新圖號時發生錯誤: ' + (error.error || error.message || '連線失敗'));
+            console.error('更新圖號失敗:', error);
+            alert('更新失敗,請稍後再試');
         });
 }
 
