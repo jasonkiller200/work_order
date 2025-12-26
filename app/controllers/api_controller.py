@@ -159,8 +159,7 @@ def get_material_details(material_id):
             if running_stock < 0 and not shortage_triggered:
                 shortage_triggered = True
             item['is_shortage_point'] = shortage_triggered
-            if pd.notna(item['需求日期']):
-                item['需求日期'] = item['需求日期'].strftime('%Y-%m-%d')
+            # 🆕 需求日期已經是字串格式,不需要再轉換
         
         # 4. 獲取替代品庫存
         substitute_inventory = []
