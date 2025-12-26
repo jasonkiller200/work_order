@@ -193,8 +193,11 @@ def get_material_details(material_id):
                     'total_demand': total_demand
                 })
         
-        # 🆕 取得圖號資訊
-        drawing_mapping = PartDrawingMapping.query.filter_by(part_number=material_id).first()
+        # 🆕 取得圖號資訊(只使用前10碼比對)
+        material_id_prefix = material_id[:10] if len(material_id) >= 10 else material_id
+        drawing_mapping = PartDrawingMapping.query.filter(
+            PartDrawingMapping.part_number.like(f'{material_id_prefix}%')
+        ).first()
         drawing_number = drawing_mapping.drawing_number if drawing_mapping else None
         
         return jsonify({

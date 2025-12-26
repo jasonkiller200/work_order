@@ -492,8 +492,8 @@ function renderPurchaseOrdersTable(purchaseOrders) {
     // 🆕 獲取需求資料(從全域變數或當前物料資料)
     const demandDetails = window.currentDemandDetails || [];
 
-    // 🆕 找出第一筆已欠料的需求(預計剩餘存 < 0)
-    const firstShortage = demandDetails.find(d => (d['預計剩餘存'] || 0) < 0);
+    // 🆕 找出第一筆已欠料的需求(預計剩餘庫存 < 0)
+    const firstShortage = demandDetails.find(d => (d.remaining_stock || 0) < 0);
 
     let html = '';
     purchaseOrders.forEach(po => {

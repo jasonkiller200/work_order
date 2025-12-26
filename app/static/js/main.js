@@ -238,8 +238,8 @@ window.renderMaterialsTable = function () {
                 let delayDays = 0;
                 let firstShortageOrder = null;
                 if (m.demand_details && m.demand_details.length > 0) {
-                    // 找出第一筆已欠料的需求
-                    const firstShortage = m.demand_details.find(d => (d['預計剩餘存'] || 0) < 0);
+                    // 找出第一筆已欠料的需求(使用 remaining_stock 欄位)
+                    const firstShortage = m.demand_details.find(d => (d.remaining_stock || 0) < 0);
 
                     if (firstShortage) {
                         const demandDate = new Date(firstShortage['需求日期']);
