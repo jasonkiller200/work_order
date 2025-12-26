@@ -524,16 +524,28 @@ function renderPurchaseOrdersTable(purchaseOrders) {
 
                 const batchLabel = idx === 0 ? '' : `<small style="color: #666;">第${idx + 1}批: </small>`;
 
-                // 🆕 如果是第一批且有欠料需求,檢查是否延遲
+                // 🆕 如果是第一筆且有欠料需求,檢查是否延遲
                 let shortageInfo = '';
                 if (idx === 0 && firstShortage) {
+                    console.log('🔍 檢查延遲:', {
+                        firstShortage,
+                        scheduleDate: schedule.expected_date,
+                        demandDate: firstShortage['需求日期'],
+                        remaining_stock: firstShortage.remaining_stock
+                    });
+
                     const demandDate = new Date(firstShortage['需求日期']);
                     if (scheduleDate > demandDate) {
                         const delayDays = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
                         const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
                         const warningColor = isDarkMode ? '#ffcdd2' : '#c62828';
                         shortageInfo = `<br><small style="color: ${warningColor}; font-size: 0.75em;">⚠️ 工單 ${firstShortage['訂單']} 需求 ${firstShortage['需求日期']} 延遲 ${delayDays}天</small>`;
+                        console.log('✅ 延遲警告已生成:', shortageInfo);
+                    } else {
+                        console.log('❌ 交期未延遲');
                     }
+                } else {
+                    console.log('❌ 無延遲檢查:', { idx, hasFirstShortage: !!firstShortage });
                 }
 
                 return `<div style="margin-bottom: 0.3em;">
