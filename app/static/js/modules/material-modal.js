@@ -422,15 +422,18 @@ function loadPurchaseOrders(materialId) {
     poSection.style.display = 'block';
     poTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">載入中...</td></tr>';
 
-    fetch(`/api/purchase_orders/${materialId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                poTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">${data.error}</td></tr>`;
+    // 🆕 同時載入採購單和分批交期資料
+    Promise.all([
+        fetch(`/api/purchase_orders/${materialId}`).then(r => r.json()),
+        fetch(`/api/delivery/${materialId}`).then(r => r.json())
+    ])
+        .then(([purchaseOrders, deliveryData]) => {
+            if (purchaseOrders.error) {
+                poTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">${purchaseOrders.error}</td></tr>`;
                 return;
             }
 
-            if (data.length === 0) {
+            if (purchaseOrders.length === 0) {
                 // 🆕 友善的無採購單提示
                 poTbody.innerHTML = `
                     <tr>
@@ -458,11 +461,20 @@ function loadPurchaseOrders(materialId) {
                 return;
             }
 
+            // 🆕 將分批交期資料附加到採購單上
+            const deliveryHistory = deliveryData.history || [];
+            purchaseOrders.forEach(po => {
+                // 找出該採購單的所有分批交期(按日期排序)
+                po.delivery_schedules = deliveryHistory
+                    .filter(d => d.po_number === po.po_number && d.status !== 'completed' && d.status !== 'cancelled')
+                    .sort((a, b) => new Date(a.expected_date) - new Date(b.expected_date));
+            });
+
             // 渲染表格
-            renderPurchaseOrdersTable(data);
+            renderPurchaseOrdersTable(purchaseOrders);
 
             // 填充選擇器
-            populatePOSelect(data);
+            populatePOSelect(purchaseOrders);
         })
         .catch(error => {
             console.error('Error loading purchase orders:', error);
@@ -476,7 +488,6 @@ function renderPurchaseOrdersTable(purchaseOrders) {
 
     let html = '';
     purchaseOrders.forEach(po => {
-        const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '-';
         // 🆕 完整的狀態映射
         const statusMap = {
             'pending': '<span style="color: orange;">待交貨</span>',
@@ -488,6 +499,37 @@ function renderPurchaseOrdersTable(purchaseOrders) {
         };
         const status = statusMap[po.status] || `<span>${po.status}</span>`;
 
+        // 🆕 處理分批交期顯示
+        let deliveryHTML = '';
+        if (po.delivery_schedules && po.delivery_schedules.length > 0) {
+            // 有分批交期資料,顯示所有批次
+            const today = new Date();
+            deliveryHTML = po.delivery_schedules.map((schedule, idx) => {
+                const scheduleDate = new Date(schedule.expected_date);
+                const diffDays = Math.ceil((scheduleDate - today) / (1000 * 60 * 60 * 24));
+
+                // 根據天數設定顏色
+                let colorStyle = '';
+                if (diffDays < 0) {
+                    colorStyle = 'color: #d32f2f; font-weight: bold;'; // 紅色 - 已延誤
+                } else if (diffDays <= 7) {
+                    colorStyle = 'color: #ff9800; font-weight: bold;'; // 橘色 - 7日內
+                } else if (diffDays <= 30) {
+                    colorStyle = 'color: #4caf50; font-weight: bold;'; // 綠色 - 30日內
+                }
+
+                const batchLabel = idx === 0 ? '' : `<small style="color: #666;">第${idx + 1}批: </small>`;
+                return `<div style="margin-bottom: 0.3em;">
+                    ${batchLabel}<span style="${colorStyle}">${schedule.expected_date}</span> 
+                    <small style="color: #888;">(${Math.round(schedule.quantity)}件)</small>
+                </div>`;
+            }).join('');
+        } else {
+            // 沒有分批交期,顯示原始交期
+            const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '-';
+            deliveryHTML = deliveryDate;
+        }
+
         html += `
             <tr>
                 <td>${po.po_number}</td>
@@ -496,7 +538,7 @@ function renderPurchaseOrdersTable(purchaseOrders) {
                     訂購: ${po.ordered_quantity}<br>
                     <small style="color: #666;">未交: ${po.outstanding_quantity}</small>
                 </td>
-                <td>${deliveryDate}</td>
+                <td style="min-width: 180px;">${deliveryHTML}</td>
                 <td>${status}</td>
                 <td>
                     <button class="small secondary" onclick="fillDeliveryFormFromPO('${po.po_number}')">

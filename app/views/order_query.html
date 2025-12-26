@@ -151,6 +151,10 @@
                                             class="required-mark">*</span></label>
                                     <input type="date" id="delivery-date"
                                         style="font-size: 0.85em; padding: 4px; height: auto;" required>
+                                    <script>
+                                        // 設定日期最小值為今天
+                                        document.getElementById('delivery-date').min = new Date().toISOString().split('T')[0];
+                                    </script>
                                 </div>
                                 <div>
                                     <label for="delivery-qty" style="font-size: 0.85em; margin-bottom: 2px;">數量 <span
@@ -203,8 +207,8 @@
                 </div>
 
                 <!-- 右側分欄：需求訂單與頁籤內容 -->
-            <div class="modal-right-column"
-                style="flex: 0 0 40%; max-width: 40%; min-width: 40%; max-height: 80vh; overflow-y: auto; border-left: 1px solid var(--pico-border-color); padding-left: 1.5em;">
+                <div class="modal-right-column"
+                    style="flex: 0 0 40%; max-width: 40%; min-width: 40%; max-height: 80vh; overflow-y: auto; border-left: 1px solid var(--pico-border-color); padding-left: 1.5em;">
                     <nav style="margin-bottom: 0.5em;">
                         <ul>
                             <li><a href="#" class="tab-link active" data-tab="tab-demand">📊 訂單需求</a></li>

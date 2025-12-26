@@ -542,42 +542,36 @@ def get_all_demand_details():
 
 @api_bp.route('/delivery/all')
 def get_all_deliveries():
-    """取得所有交期資料 用於統計 (分批)"""
+    """取得所有交期資料 用於統計 (分批) - 🆕 回傳所有分批資料"""
     try:
         from datetime import datetime, timedelta
         today = get_taiwan_time().date()
-        yesterday = today - timedelta(days=1)
         
         # 查詢所有未完成且未取消的交期
         all_schedules = DeliverySchedule.query.filter(
             DeliverySchedule.status.notin_(['completed', 'cancelled'])
-        ).order_by(DeliverySchedule.expected_date).all()
+        ).order_by(DeliverySchedule.material_id, DeliverySchedule.expected_date).all()
         
-        # 整理為每個物料一筆最優先交期 (與原邏輯一致)
+        # 🆕 整理為每個物料的所有分批資料 (陣列格式)
         schedules = {}
         for s in all_schedules:
-            if s.material_id in schedules:
-                continue # 已經有更早的分批了
-                
-            delivery_date = s.expected_date
+            if s.material_id not in schedules:
+                schedules[s.material_id] = []
             
-            if delivery_date >= today:
-                schedules[s.material_id] = {
-                    "id": s.id,
-                    "expected_date": delivery_date.strftime('%Y-%m-%d'),
-                    "quantity": float(s.quantity),
-                    "po_number": s.po_number or '',
-                    "status": s.status
-                }
-            elif delivery_date == yesterday:
-                schedules[s.material_id] = {
-                    "id": s.id,
-                    "expected_date": delivery_date.strftime('%Y-%m-%d'),
-                    "quantity": float(s.quantity),
-                    "po_number": s.po_number or '',
-                    "status": "overdue"
-                }
+            # 判斷狀態
+            status = s.status
+            if s.expected_date < today:
+                status = 'overdue'
             
+            schedules[s.material_id].append({
+                "id": s.id,
+                "expected_date": s.expected_date.strftime('%Y-%m-%d'),
+                "quantity": float(s.quantity),
+                "po_number": s.po_number or '',
+                "supplier": s.supplier or '',
+                "status": status
+            })
+        
         return jsonify({
             "schedules": schedules,
             "total": len(schedules)

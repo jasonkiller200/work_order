@@ -17,12 +17,19 @@ function loadExistingDelivery(materialId) {
                 const oldHint = deliveryFormContainer.querySelector('.delivery-source-hint');
                 if (oldHint) oldHint.remove();
 
+                // 🆕 偵測暗黑模式
+                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+
                 let hintHTML = '';
 
                 // 如果有採購單交期
                 if (data.po_delivery) {
+                    const bgColor = isDarkMode ? '#1a2634' : '#e3f2fd';
+                    const borderColor = isDarkMode ? '#42a5f5' : '#2196f3';
+                    const textColor = isDarkMode ? '#e0e0e0' : '#333';
+
                     hintHTML = `
-                        <div class="delivery-source-hint" style="padding: 0.5em; margin-bottom: 0.5em; background: #e3f2fd; border-left: 3px solid #2196f3; border-radius: 4px;">
+                        <div class="delivery-source-hint" style="padding: 0.5em; margin-bottom: 0.5em; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px; color: ${textColor};">
                             ℹ️ 目前使用採購單交期：<strong>${data.po_delivery.po_number}</strong>
                             （${data.po_delivery.expected_date}，${data.po_delivery.quantity} 件）
                         </div>
@@ -34,8 +41,12 @@ function loadExistingDelivery(materialId) {
                     // 🆕 檢查是否為部分到貨狀態
                     if (data.manual_delivery.status === 'partial_received') {
                         isPartialReceived = true;
+                        const bgColor = isDarkMode ? '#3d2f1f' : '#fff3e0';
+                        const borderColor = isDarkMode ? '#ffa726' : '#ff9800';
+                        const textColor = isDarkMode ? '#e0e0e0' : '#333';
+
                         hintHTML = `
-                            <div class="delivery-source-hint" style="padding: 0.5em; margin-bottom: 0.5em; background: #fff3e0; border-left: 3px solid #ff9800; border-radius: 4px;">
+                            <div class="delivery-source-hint" style="padding: 0.5em; margin-bottom: 0.5em; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px; color: ${textColor};">
                                 ⚠️ <strong>採購單已部分到貨</strong><br>
                                 <small>${data.manual_delivery.partial_note || '請確認剩餘數量的新交期'}</small><br>
                                 <button type="button" class="small" onclick="clearPartialDelivery('${materialId}')" style="margin-top: 0.3em;">
@@ -46,8 +57,12 @@ function loadExistingDelivery(materialId) {
                     }
                     else if (data.manual_delivery.status === 'overdue') {
                         isOverdue = true;
+                        const bgColor = isDarkMode ? '#3d2f1f' : '#fff3e0';
+                        const borderColor = isDarkMode ? '#ffa726' : '#ff9800';
+                        const textColor = isDarkMode ? '#e0e0e0' : '#333';
+
                         hintHTML = `
-                            <div class="delivery-source-hint" style="padding: 0.5em; margin-bottom: 0.5em; background: #fff3e0; border-left: 3px solid #ff9800; border-radius: 4px;">
+                            <div class="delivery-source-hint" style="padding: 0.5em; margin-bottom: 0.5em; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px; color: ${textColor};">
                                 ⚠️ 交期已過期（${data.manual_delivery.expected_date}），請更新或清除
                                 <button type="button" class="small" onclick="clearOverdueDelivery('${materialId}')" style="margin-left: 0.5em;">
                                     🗑️ 清除過期交期
@@ -87,6 +102,9 @@ function loadExistingDelivery(materialId) {
             // 🆕 顯示交期排程清單 (原歷史記錄區塊)
             const historyContainer = document.getElementById('delivery-history');
             if (data.history && data.history.length > 0) {
+                // 🆕 偵測暗黑模式
+                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+
                 let historyHTML = '<div class="delivery-schedule-list">';
                 data.history.forEach(h => {
                     const deliveryDate = new Date(h.expected_date);
@@ -100,34 +118,44 @@ function loadExistingDelivery(materialId) {
                     let statusBadge = '';
                     let borderColor = '#2196f3';
                     let bgColor = '#f8f9fa';
+                    let textColor = '#333';
 
+                    // 🆕 根據狀態和主題設定顏色
                     if (isCompleted) {
                         statusBadge = '<span class="badge success">已到貨</span>';
                         borderColor = '#4caf50';
-                        bgColor = '#f1f8e9';
+                        bgColor = isDarkMode ? '#1b2e1b' : '#f1f8e9';
+                        textColor = isDarkMode ? '#c8e6c9' : '#333';
                     } else if (isPartial) {
                         statusBadge = '<span class="badge warning">部分到貨</span>';
                         borderColor = '#ff9800';
-                        bgColor = '#fff3e0';
+                        bgColor = isDarkMode ? '#3d2f1f' : '#fff3e0';
+                        textColor = isDarkMode ? '#ffcc80' : '#333';
                     } else if (isOverdue) {
                         statusBadge = '<span class="badge error">已過期</span>';
                         borderColor = '#f44336';
-                        bgColor = '#ffebee';
+                        bgColor = isDarkMode ? '#4a2020' : '#ffebee';
+                        textColor = isDarkMode ? '#ffcdd2' : '#333';
                     } else {
                         statusBadge = '<span class="badge info">待到貨</span>';
+                        borderColor = isDarkMode ? '#42a5f5' : '#2196f3';
+                        bgColor = isDarkMode ? '#1a2634' : '#f8f9fa';
+                        textColor = isDarkMode ? '#bbdefb' : '#333';
                     }
 
                     const poTotalInfo = h.po_number ? ` (PO 總額分批)` : '';
                     const receivedInfo = h.received_quantity > 0 ? `<br><small>已收: ${h.received_quantity} / 應收: ${h.quantity}</small>` : '';
 
+                    const secondaryTextColor = isDarkMode ? '#999' : '#666';
+
                     historyHTML += `
-                        <div class="delivery-item" style="margin: 0.8em 0; padding: 0.8em; background: ${bgColor}; border-left: 4px solid ${borderColor}; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div class="delivery-item" style="margin: 0.8em 0; padding: 0.8em; background: ${bgColor}; border-left: 4px solid ${borderColor}; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); color: ${textColor};">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                 <div>
                                     <div style="font-weight: bold; margin-bottom: 0.3em;">📅 預計到貨: ${h.expected_date} ${statusBadge}${poTotalInfo}</div>
                                     <div style="font-size: 1.1em;">數量: <strong>${h.quantity}</strong> 件 ${receivedInfo}</div>
-                                    ${h.po_number ? `<div style="font-size: 0.9em; color: #666; margin-top: 0.3em;">採購單: ${h.po_number}</div>` : ''}
-                                    ${h.notes ? `<div style="font-size: 0.9em; color: #666; font-style: italic;">備註: ${h.notes}</div>` : ''}
+                                    ${h.po_number ? `<div style="font-size: 0.9em; color: ${secondaryTextColor}; margin-top: 0.3em;">採購單: ${h.po_number}</div>` : ''}
+                                    ${h.notes ? `<div style="font-size: 0.9em; color: ${secondaryTextColor}; font-style: italic;">備註: ${h.notes}</div>` : ''}
                                 </div>
                                 <div style="display: flex; gap: 0.5em;">
                                     ${!isCompleted ? `
@@ -142,7 +170,9 @@ function loadExistingDelivery(materialId) {
                 historyHTML += '</div>';
                 historyContainer.innerHTML = historyHTML;
             } else {
-                historyContainer.innerHTML = '<p style="color: #666; font-style: italic; text-align: center; padding: 1em;">尚無交期計畫</p>';
+                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+                const textColor = isDarkMode ? '#999' : '#666';
+                historyContainer.innerHTML = `<p style="color: ${textColor}; font-style: italic; text-align: center; padding: 1em;">尚無交期計畫</p>`;
             }
 
             // 🆕 儲存到全域變數供數量試算使用
@@ -164,12 +194,79 @@ function setupDeliveryFormEvents(materialId, materialData) {
         const deliveryQty = parseFloat(qtyInput.value) || 0;
         const deliveryDate = dateInput.value;
 
+        // 🆕 移除舊的延遲警告
+        const oldWarning = dateInput.parentElement.querySelector('.delivery-delay-warning');
+        if (oldWarning) oldWarning.remove();
+
+        // 🆕 移除舊的過去日期警告
+        const oldPastWarning = dateInput.parentElement.querySelector('.past-date-warning');
+        if (oldPastWarning) oldPastWarning.remove();
+
+        // 🆕 檢查是否選擇了過去的日期
+        if (deliveryDate) {
+            const selectedDate = new Date(deliveryDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            selectedDate.setHours(0, 0, 0, 0);
+
+            if (selectedDate < today) {
+                // 偵測暗黑模式
+                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+                const bgColor = isDarkMode ? '#4a2020' : '#ffebee';
+                const borderColor = isDarkMode ? '#ef5350' : '#f44336';
+                const textColor = isDarkMode ? '#ffcdd2' : '#c62828';
+
+                // 顯示過去日期警告
+                const warning = document.createElement('div');
+                warning.className = 'past-date-warning';
+                warning.style.cssText = `padding: 0.5em; margin-top: 0.5em; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px; color: ${textColor}; font-size: 0.9em; font-weight: bold;`;
+                warning.innerHTML = `
+                    ❌ <strong>不能選擇過去的日期</strong><br>
+                    請選擇今天或未來的日期
+                `;
+                dateInput.parentElement.appendChild(warning);
+
+                // 清空日期欄位
+                dateInput.value = '';
+                dateInput.focus();
+                return;
+            }
+        }
+
         if (deliveryQty > 0 && deliveryDate) {
             const totalAvailable = materialData.stock_summary.unrestricted +
                 materialData.stock_summary.inspection +
                 deliveryQty;
 
             document.getElementById('calc-available-stock').textContent = totalAvailable.toFixed(0);
+
+            // 🆕 檢查交期是否晚於第一筆需求日期
+            if (materialData.demand_details && materialData.demand_details.length > 0) {
+                const firstDemandDate = new Date(materialData.demand_details[0]['需求日期']);
+                const deliveryDateObj = new Date(deliveryDate);
+
+                if (deliveryDateObj > firstDemandDate) {
+                    // 計算延遲天數
+                    const delayDays = Math.ceil((deliveryDateObj - firstDemandDate) / (1000 * 60 * 60 * 24));
+
+                    // 偵測暗黑模式
+                    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+                    const bgColor = isDarkMode ? '#4a2020' : '#ffebee';
+                    const borderColor = isDarkMode ? '#ef5350' : '#f44336';
+                    const textColor = isDarkMode ? '#ffcdd2' : '#c62828';
+
+                    // 顯示警告
+                    const warning = document.createElement('div');
+                    warning.className = 'delivery-delay-warning';
+                    warning.style.cssText = `padding: 0.5em; margin-top: 0.5em; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px; color: ${textColor}; font-size: 0.9em;`;
+                    warning.innerHTML = `
+                        ⚠️ <strong>交期延遲警告</strong><br>
+                        預計交期 (${deliveryDate}) 晚於第一筆需求日期 (${materialData.demand_details[0]['需求日期']})<br>
+                        <strong style="font-size: 1.1em;">延遲 ${delayDays} 天</strong>
+                    `;
+                    dateInput.parentElement.appendChild(warning);
+                }
+            }
 
             // 計算能滿足到哪個需求
             let runningStock = totalAvailable;
@@ -248,21 +345,34 @@ function setupDeliveryFormEvents(materialId, materialData) {
             notes: document.getElementById('delivery-notes').value
         };
 
-        // 🆕 加強型驗證：檢查採購單分配上限
+        // 🆕 驗證必填欄位
+        if (!formData.expected_date || isNaN(formData.quantity) || formData.quantity <= 0) {
+            showToast('❌ 請填寫必填欄位(預計到貨日期和有效數量)', 'error');
+            return;
+        }
+
+        // 🆕 驗證日期不能是過去
+        const selectedDate = new Date(formData.expected_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        selectedDate.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+            showToast('❌ 不能選擇過去的日期,請選擇今天或未來的日期', 'error');
+            document.getElementById('delivery-date').focus();
+            return;
+        }
+
+        // 🆕 加強型驗證:檢查採購單分配上限
         if (formData.po_number && window.currentPurchaseOrders) {
             const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
             const maxRemaining = calculateRemainingPOQuantity(formData.po_number, currentEditId);
 
             if (formData.quantity > (maxRemaining + 0.01)) { // 允許微小浮點誤差
-                if (!confirm(`⚠️ 注意：此筆交期數量 (${formData.quantity}) 已超出該採購單剩餘未分配數量 (${maxRemaining.toFixed(1)})。\n\n確定要強制儲存嗎？`)) {
+                if (!confirm(`⚠️ 注意:此筆交期數量 (${formData.quantity}) 已超出該採購單剩餘未分配數量 (${maxRemaining.toFixed(1)})。\n\n確定要強制儲存嗎?`)) {
                     return;
                 }
             }
-        }
-
-        if (!formData.expected_date || isNaN(formData.quantity) || formData.quantity <= 0) {
-            showToast('❌ 請填寫必填欄位（預計到貨日期和有效數量）', 'error');
-            return;
         }
 
         saveDelivery(formData);
@@ -355,6 +465,10 @@ function saveDelivery(formData) {
                 resetDeliveryForm();
                 // 重新載入交期資料
                 loadExistingDelivery(formData.material_id);
+                // 🆕 重新載入採購單列表以更新交期顯示
+                if (typeof loadPurchaseOrders === 'function') {
+                    loadPurchaseOrders(formData.material_id);
+                }
                 // 重新載入儀錶板以更新統計
                 loadProcurementDashboard();
             } else {
@@ -425,6 +539,10 @@ function deleteDeliverySchedule(id, materialId) {
             if (data.success) {
                 showToast('✅ 交期已刪除', 'success');
                 loadExistingDelivery(materialId);
+                // 🆕 重新載入採購單列表以更新交期顯示
+                if (typeof loadPurchaseOrders === 'function') {
+                    loadPurchaseOrders(materialId);
+                }
                 loadProcurementDashboard();
             } else {
                 alert('刪除失敗: ' + (data.error || '未知錯誤'));
@@ -449,6 +567,20 @@ function resetDeliveryForm() {
 
     const calcEl = document.getElementById('delivery-calculation');
     if (calcEl) calcEl.style.display = 'none';
+
+    // 🆕 清除延遲警告
+    const delayWarning = document.querySelector('.delivery-delay-warning');
+    if (delayWarning) delayWarning.remove();
+
+    // 🆕 清除 PO 分批提示
+    removePOBatchHint();
+
+    // 🆕 重置日期欄位樣式
+    const dateInput = document.getElementById('delivery-date');
+    if (dateInput) {
+        dateInput.style.borderColor = '';
+        dateInput.style.backgroundColor = '';
+    }
 }
 
 // Toast 提示函數

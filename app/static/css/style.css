@@ -191,6 +191,11 @@ table {
     /* 稍微縮小字體讓更多內容可見 */
 }
 
+/* 🆕 允許 tooltip 溢出表格 */
+table tbody {
+    overflow: visible;
+}
+
 /* 表格欄位寬度優化 */
 th,
 td {
@@ -1122,4 +1127,94 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
 [data-theme="dark"] .current-material-row {
     background-color: #3d2f1f !important;
     /* 暗黑模式下的深橘黃色 */
+}
+
+/* ========================================
+   🆕 分批交貨 Tooltip 樣式
+   ======================================== */
+
+/* 交貨日期欄位的 tooltip */
+.delivery-date-cell {
+    position: relative;
+    cursor: help;
+    overflow: visible !important;
+    /* 🆕 確保 tooltip 不被截斷 */
+}
+
+/* 🆕 可點擊的交貨日期欄位 */
+.clickable-delivery {
+    cursor: pointer !important;
+    transition: background-color 0.2s ease;
+}
+
+.clickable-delivery:hover {
+    background-color: var(--pico-muted-background-color, #f0f0f0);
+    text-decoration: underline;
+}
+
+[data-theme="dark"] .clickable-delivery:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 🆕 改為向下顯示 tooltip,避免在表格中被截斷 */
+.delivery-date-cell[data-tooltip]:not([data-tooltip=""]):hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 0;
+    top: 100%;
+    /* 向下顯示 */
+    margin-top: 8px;
+    padding: 0.8em 1em;
+    background-color: rgba(0, 0, 0, 0.95);
+    color: white;
+    font-size: 0.85em;
+    font-weight: normal;
+    white-space: pre-line;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    min-width: 280px;
+    max-width: 400px;
+    line-height: 1.6;
+    text-align: left;
+    pointer-events: none;
+}
+
+/* Tooltip 箭頭 - 指向上方 */
+.delivery-date-cell[data-tooltip]:not([data-tooltip=""]):hover::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 100%;
+    margin-top: 2px;
+    border: 6px solid transparent;
+    border-bottom-color: rgba(0, 0, 0, 0.95);
+    z-index: 10001;
+    pointer-events: none;
+}
+
+/* 暗黑模式下的 tooltip 樣式調整 */
+[data-theme="dark"] .delivery-date-cell[data-tooltip]:not([data-tooltip=""]):hover::after {
+    background-color: rgba(255, 255, 255, 0.95);
+    color: #1a1a1a;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="dark"] .delivery-date-cell[data-tooltip]:not([data-tooltip=""]):hover::before {
+    border-bottom-color: rgba(255, 255, 255, 0.95);
+}
+
+/* 響應式調整 - 小螢幕上 tooltip 樣式 */
+@media (max-width: 768px) {
+    .delivery-date-cell[data-tooltip]:not([data-tooltip=""]):hover::after {
+        min-width: 250px;
+        max-width: 90vw;
+        left: auto;
+        right: 0;
+    }
+
+    .delivery-date-cell[data-tooltip]:not([data-tooltip=""]):hover::before {
+        left: auto;
+        right: 20px;
+    }
 }

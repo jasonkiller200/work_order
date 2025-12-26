@@ -204,9 +204,12 @@
                     <div id="stock-summary-section">
                         <h4>📦 庫存總覽</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-bottom: 0.5em;">
-                            <p style="margin: 0; font-size: 0.9em;">可用庫存: <span id="unrestricted-stock" style="font-weight: bold; color: var(--color-success);">-</span></p>
-                            <p style="margin: 0; font-size: 0.9em;">待檢庫存: <span id="inspection-stock" style="font-weight: bold; color: var(--color-warning);">-</span></p>
-                            <p style="margin: 0; font-size: 0.9em;">在途庫存: <span id="on-order-stock" style="font-weight: bold; color: var(--color-info);">-</span></p>
+                            <p style="margin: 0; font-size: 0.9em;">可用庫存: <span id="unrestricted-stock"
+                                    style="font-weight: bold; color: var(--color-success);">-</span></p>
+                            <p style="margin: 0; font-size: 0.9em;">待檢庫存: <span id="inspection-stock"
+                                    style="font-weight: bold; color: var(--color-warning);">-</span></p>
+                            <p style="margin: 0; font-size: 0.9em;">在途庫存: <span id="on-order-stock"
+                                    style="font-weight: bold; color: var(--color-info);">-</span></p>
                         </div>
 
                         <!-- 🆕 缺料警示 -->
@@ -259,6 +262,10 @@
                                             class="required-mark">*</span></label>
                                     <input type="date" id="delivery-date" style="font-size: 0.9em; padding: 0.4em;"
                                         required>
+                                    <script>
+                                        // 設定日期最小值為今天
+                                        document.getElementById('delivery-date').min = new Date().toISOString().split('T')[0];
+                                    </script>
                                 </div>
                                 <div>
                                     <label for="delivery-qty" style="font-size: 0.9em;">數量 <span
@@ -268,8 +275,7 @@
                                 </div>
                             </div>
 
-                            <div
-                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8em; margin-top: 0.5em;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8em; margin-top: 0.5em;">
                                 <div>
                                     <label for="po-number" style="font-size: 0.85em;">採購單號</label>
                                     <input type="text" id="po-number" style="font-size: 0.9em; padding: 0.4em;">

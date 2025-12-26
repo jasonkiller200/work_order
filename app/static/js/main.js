@@ -72,6 +72,21 @@ let finishedDashboardItemsPerPage = 20;
 
 
 
+// 🆕 狀態文字轉換函式
+function getStatusText(status) {
+    const statusMap = {
+        'pending': '待交貨',
+        'partial': '部分交貨',
+        'completed': '已完成',
+        'cancelled': '已取消',
+        'overdue': '已延誤',
+        'planned': '計畫中',
+        'updated': '已更新'
+    };
+    return statusMap[status] || status;
+}
+
+
 
 
 window.renderMaterialsTable = function () {
@@ -203,23 +218,74 @@ window.renderMaterialsTable = function () {
             const shortage30Days = m.shortage_within_30_days || false;
             const rowClass = shortage30Days ? ' class="shortage-30-days"' : '';
 
-            // 🆕 格式化預計交貨日期
+            // 🆕 格式化預計交貨日期 (支援分批顯示)
             let deliveryDateStr = '-';
             let dateClass = '';
-            if (m.delivery_date) {
+            let deliveryTooltip = '';
+
+
+            if (m.delivery_schedules && m.delivery_schedules.length > 0) {
+                // 有分批交貨資料
+                const firstSchedule = m.delivery_schedules[0];
+                const date = new Date(firstSchedule.expected_date);
+                const today = new Date();
+                const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
+
+                // 顯示第一批的日期和數量
+                deliveryDateStr = `${firstSchedule.expected_date} (${Math.round(firstSchedule.quantity)}件)`;
+
+                // 🆕 檢查是否延遲(晚於第一筆需求日期)
+                let delayDays = 0;
+                if (m.demand_details && m.demand_details.length > 0) {
+                    const firstDemandDate = new Date(m.demand_details[0]['需求日期']);
+                    if (date > firstDemandDate) {
+                        delayDays = Math.ceil((date - firstDemandDate) / (1000 * 60 * 60 * 24));
+                        // 加入延遲警告標記
+                        deliveryDateStr += ` <span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;">⚠️ 延遲${delayDays}天</span>`;
+                    }
+                }
+
+                // 如果有多批次,顯示批次數量標記
+                if (m.delivery_schedules.length > 1) {
+                    deliveryDateStr += ` <span style="background: #3b82f6; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;">+${m.delivery_schedules.length - 1}批</span>`;
+                }
+
+                // 根據天數設定顏色 (如果有延遲,優先顯示紅色)
+                if (delayDays > 0) {
+                    dateClass = ' style="color: #d32f2f; font-weight: bold;"';
+                } else if (diffDays < 0) {
+                    dateClass = ' style="color: #d32f2f; font-weight: bold;"';
+                } else if (diffDays <= 7) {
+                    dateClass = ' style="color: #ff9800; font-weight: bold;"';
+                } else if (diffDays <= 30) {
+                    dateClass = ' style="color: #4caf50; font-weight: bold;"';
+                }
+
+                // 🆕 建立 tooltip 內容 (最多顯示5筆)
+                const displaySchedules = m.delivery_schedules.slice(0, 5);
+                deliveryTooltip = displaySchedules.map((s, idx) => {
+                    const statusText = getStatusText(s.status);
+                    return `第${idx + 1}批: ${s.expected_date} (${Math.round(s.quantity)}件) - ${statusText}`;
+                }).join('\n'); // 使用換行符號
+
+                if (m.delivery_schedules.length > 5) {
+                    deliveryTooltip += `\n... 還有 ${m.delivery_schedules.length - 5} 批 (點擊物料查看完整清單)`;
+                }
+
+            } else if (m.delivery_date) {
+                // 向下相容:舊資料格式
                 const date = new Date(m.delivery_date);
                 const today = new Date();
                 const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
 
                 deliveryDateStr = date.toISOString().split('T')[0];
 
-                // 根據天數設定顏色
                 if (diffDays < 0) {
-                    dateClass = ' style="color: #d32f2f; font-weight: bold;" title="已延誤"';
+                    dateClass = ' style="color: #d32f2f; font-weight: bold;"';
                 } else if (diffDays <= 7) {
-                    dateClass = ' style="color: #ff9800; font-weight: bold;" title="7日內到貨"';
+                    dateClass = ' style="color: #ff9800; font-weight: bold;"';
                 } else if (diffDays <= 30) {
-                    dateClass = ' style="color: #4caf50; font-weight: bold;" title="30日內到貨"';
+                    dateClass = ' style="color: #4caf50; font-weight: bold;"';
                 }
             }
 
@@ -228,7 +294,7 @@ window.renderMaterialsTable = function () {
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
-                    <td${dateClass}>${deliveryDateStr}</td>
+                    <td${dateClass} class="delivery-date-cell${m.delivery_schedules && m.delivery_schedules.length > 0 ? ' clickable-delivery' : ''}" data-schedules='${m.delivery_schedules ? JSON.stringify(m.delivery_schedules) : '[]'}' data-first-demand="${m.demand_details && m.demand_details.length > 0 ? m.demand_details[0]['需求日期'] : ''}">${deliveryDateStr}</td>
                     <td>${m.total_demand.toFixed(0)}</td>
                     <td>${m.unrestricted_stock.toFixed(0)}</td>
                     <td>${m.inspection_stock.toFixed(0)}</td>
@@ -285,7 +351,119 @@ window.renderMaterialsTable = function () {
     addSortEventListeners(); // 添加排序事件監聽
     addMaterialLinkListeners(); // 添加物料連結事件監聽
     addBuyerCellListeners(); // 添加採購人員點擊事件監聽
+    addDeliveryDateClickListeners(); // 🆕 添加交貨日期點擊事件監聽
     updateSortIcons(); // 更新排序圖示
+}
+
+// 🆕 添加交貨日期點擊事件監聽器
+function addDeliveryDateClickListeners() {
+    const deliveryCells = document.querySelectorAll('.clickable-delivery');
+    deliveryCells.forEach(cell => {
+        cell.addEventListener('click', function () {
+            const schedulesData = this.getAttribute('data-schedules');
+            const firstDemandDate = this.getAttribute('data-first-demand');
+            if (schedulesData) {
+                try {
+                    const schedules = JSON.parse(schedulesData);
+                    showDeliverySchedulesModal(schedules, firstDemandDate);
+                } catch (e) {
+                    console.error('Failed to parse delivery schedules:', e);
+                }
+            }
+        });
+    });
+}
+
+// 🆕 顯示分批交貨詳情彈出框
+function showDeliverySchedulesModal(schedules, firstDemandDate) {
+    if (!schedules || schedules.length === 0) return;
+
+    const today = new Date();
+    const firstDemand = firstDemandDate ? new Date(firstDemandDate) : null;
+
+    let modalHTML = '<div style="max-height: 400px; overflow-y: auto;"><table style="width: 100%; font-size: 0.9em;"><thead><tr><th>批次</th><th>預計交貨日</th><th>數量</th><th>狀態</th>';
+
+    // 🆕 如果有第一筆需求日期,加入延遲欄位
+    if (firstDemand) {
+        modalHTML += '<th>延遲</th>';
+    }
+
+    modalHTML += '</tr></thead><tbody>';
+
+    schedules.forEach((s, idx) => {
+        const scheduleDate = new Date(s.expected_date);
+        const diffDays = Math.ceil((scheduleDate - today) / (1000 * 60 * 60 * 24));
+
+        let colorStyle = '';
+        if (diffDays < 0) {
+            colorStyle = 'color: #d32f2f; font-weight: bold;';
+        } else if (diffDays <= 7) {
+            colorStyle = 'color: #ff9800; font-weight: bold;';
+        } else if (diffDays <= 30) {
+            colorStyle = 'color: #4caf50; font-weight: bold;';
+        }
+
+        const statusText = getStatusText(s.status);
+
+        // 🆕 計算延遲天數
+        let delayCell = '';
+        if (firstDemand) {
+            if (scheduleDate > firstDemand) {
+                const delayDays = Math.ceil((scheduleDate - firstDemand) / (1000 * 60 * 60 * 24));
+                delayCell = `<td style="color: #f44336; font-weight: bold;">⚠️ ${delayDays}天</td>`;
+            } else {
+                delayCell = '<td style="color: #4caf50;">✓ 準時</td>';
+            }
+        }
+
+        modalHTML += `<tr>
+            <td>第 ${idx + 1} 批</td>
+            <td style="${colorStyle}">${s.expected_date}</td>
+            <td>${Math.round(s.quantity)} 件</td>
+            <td>${statusText}</td>
+            ${delayCell}
+        </tr>`;
+    });
+
+    modalHTML += '</tbody></table></div>';
+
+    // 使用 Pico.css 的 dialog 或自訂彈出框
+    showSimpleAlert('分批交貨詳情', modalHTML);
+}
+
+// 🆕 簡單的彈出框函數
+function showSimpleAlert(title, content) {
+    // 🆕 偵測暗黑模式
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    // 創建遮罩層
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,${isDarkMode ? '0.7' : '0.5'}); z-index: 9999; display: flex; align-items: center; justify-content: center;`;
+
+    // 創建彈出框
+    const modal = document.createElement('div');
+    const bgColor = isDarkMode ? '#1e1e1e' : 'white';
+    const textColor = isDarkMode ? '#e0e0e0' : '#333';
+    const borderColor = isDarkMode ? '#404040' : '#e0e0e0';
+
+    modal.style.cssText = `background: ${bgColor}; color: ${textColor}; padding: 2em; border-radius: 8px; max-width: 600px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border: 1px solid ${borderColor};`;
+    modal.innerHTML = `
+        <h3 style="margin-top: 0; color: ${textColor};">${title}</h3>
+        ${content}
+        <div style="text-align: right; margin-top: 1.5em;">
+            <button onclick="this.closest('[style*=fixed]').remove()" class="secondary">關閉</button>
+        </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // 點擊遮罩層關閉
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
 }
 
 // 切換頁面函數
