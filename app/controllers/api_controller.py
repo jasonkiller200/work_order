@@ -147,19 +147,16 @@ def get_material_details(material_id):
             app_logger.warning(f"物料 {material_id} 過濾後沒有需求，使用原始資料")
             demand_details = [d.copy() for d in demand_map.get(material_id, [])]
         
-        demand_details.sort(key=lambda x: x.get('需求日期') or pd.Timestamp.max, reverse=False)
+        demand_details.sort(key=lambda x: x.get('需求日期') or '', reverse=False)
         
-        # 3. 執行庫存消耗計算
-        running_stock = total_available_stock
+        # 🆕 不再重新計算 remaining_stock,直接使用快取資料中的值
+        # 這確保了與採購儀表板顯示的一致性
         shortage_triggered = False
         for item in demand_details:
-            demand_qty = item.get('未結數量 (EINHEIT)', 0)
-            running_stock -= demand_qty
-            item['remaining_stock'] = running_stock
-            if running_stock < 0 and not shortage_triggered:
+            # 檢查是否已欠料(使用快取資料中的 remaining_stock)
+            if item.get('remaining_stock', 0) < 0 and not shortage_triggered:
                 shortage_triggered = True
             item['is_shortage_point'] = shortage_triggered
-            # 🆕 需求日期已經是字串格式,不需要再轉換
         
         # 4. 獲取替代品庫存
         substitute_inventory = []
