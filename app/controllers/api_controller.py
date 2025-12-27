@@ -1172,9 +1172,9 @@ def get_open_purchase_orders():
             PurchaseOrder.status.notin_(['completed', 'cancelled'])
         )
         
-        # 採購人員篩選
+        # 採購人員篩選 (使用 purchase_group = User.id)
         if buyer_id:
-            query = query.filter(PurchaseOrder.buyer_id == buyer_id)
+            query = query.filter(PurchaseOrder.purchase_group == buyer_id)
         
         # 日期篩選 (根據 updated_at)
         if date_start:
@@ -1225,6 +1225,13 @@ def get_open_purchase_orders():
             ).all()
             drawing_map = {d.part_number: d.drawing_number for d in drawings}
         
+        # 建立 purchase_group -> User 對照表
+        purchase_groups = list(set([po.purchase_group for po in pagination.items if po.purchase_group]))
+        user_map = {}
+        if purchase_groups:
+            users = User.query.filter(User.id.in_(purchase_groups)).all()
+            user_map = {u.id: u.full_name or u.username for u in users}
+        
         # 組裝結果
         results = []
         for po in pagination.items:
@@ -1243,8 +1250,8 @@ def get_open_purchase_orders():
             base_id = po.material_id[:10] if po.material_id else ''
             drawing_number = drawing_map.get(base_id, '')
             
-            # 取得採購人員名稱
-            buyer_name = po.buyer.full_name if po.buyer else ''
+            # 取得採購人員名稱 (使用 purchase_group 對應)
+            buyer_name = user_map.get(po.purchase_group, '')
             
             results.append({
                 'po_number': po.po_number,
@@ -1280,16 +1287,16 @@ def get_open_purchase_orders():
 def get_purchase_order_buyers():
     """取得有未結案採購單的採購人員清單 (用於篩選下拉)"""
     try:
-        # 取得有未結案採購單的 buyer_id
-        buyer_ids = db.session.query(PurchaseOrder.buyer_id).filter(
+        # 使用 purchase_group 欄位對應採購人員 (purchase_group = User.id)
+        purchase_groups = db.session.query(PurchaseOrder.purchase_group).filter(
             PurchaseOrder.status.notin_(['completed', 'cancelled']),
-            PurchaseOrder.buyer_id.isnot(None)
+            PurchaseOrder.purchase_group.isnot(None)
         ).distinct().all()
         
-        buyer_ids = [b[0] for b in buyer_ids if b[0]]
+        purchase_groups = [b[0] for b in purchase_groups if b[0]]
         
         # 取得對應的使用者資訊
-        buyers = User.query.filter(User.id.in_(buyer_ids)).all()
+        buyers = User.query.filter(User.id.in_(purchase_groups)).all()
         
         result = [{'id': u.id, 'name': u.full_name or u.username} for u in buyers]
         result.sort(key=lambda x: x['name'])
