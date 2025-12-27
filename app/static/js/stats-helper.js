@@ -1,5 +1,29 @@
 // 統計圖卡和排序相關函數
 
+// 🆕 全域變數：儲存從 API 載入的替代品通知資料
+// 格式：{ material_id: [substitute_material_ids...], ... }
+window.notifiedSubstitutesMap = {};
+
+// 🆕 從 API 載入替代品通知資料
+window.loadNotifiedSubstitutes = async function () {
+    try {
+        const response = await fetch('/api/substitute_notification/all');
+        const data = await response.json();
+        window.notifiedSubstitutesMap = data.notified_substitutes_map || {};
+        console.log('替代品通知資料載入完成:', Object.keys(window.notifiedSubstitutesMap).length, '筆');
+    } catch (error) {
+        console.error('載入替代品通知資料失敗:', error);
+        window.notifiedSubstitutesMap = {};
+    }
+};
+
+// 🆕 檢查某物料是否有已通知的替代品
+window.hasNotifiedSubstitute = function (materialId) {
+    if (!materialId) return false;
+    // 檢查這個物料是否有已啟用通知的替代品
+    return window.notifiedSubstitutesMap.hasOwnProperty(materialId) &&
+        window.notifiedSubstitutesMap[materialId].length > 0;
+};
 // 增強物料資料(加入預計交貨日期資訊) - 🆕 支援分批顯示
 window.enhanceMaterialsData = function (materialsData, demandDetailsData, deliveryData) {
     return materialsData.map(material => {
@@ -177,16 +201,9 @@ function calculateStats(materials, deliveryData) {
             stats.sufficient++;
         }
 
-        // 🆕 替代用料通知（檢查是否有已勾選的替代用料）
-        const materialBase = m['物料'] ? m['物料'].substring(0, 10) : '';
-        if (materialBase) {
-            const notifiedSubstitutes = typeof getNotifiedSubstitutes === 'function' ? getNotifiedSubstitutes() : [];
-            const hasNotifiedSubstitute = notifiedSubstitutes.some(notifiedId =>
-                notifiedId.substring(0, 10) === materialBase && notifiedId !== m['物料']
-            );
-            if (hasNotifiedSubstitute) {
-                stats.substituteNotify++;
-            }
+        // 🆕 替代用料通知（檢查該物料是否有已啟用通知的替代品）
+        if (window.hasNotifiedSubstitute(m['物料'])) {
+            stats.substituteNotify++;
         }
 
         // 🆕 品檢中（品檢中數量 > 0）
@@ -274,12 +291,7 @@ window.filterMaterialsByStats = function (materials) {
                 return !hasShortage;
 
             case 'substitute-notify':
-                const materialBase = m['物料'] ? m['物料'].substring(0, 10) : '';
-                if (!materialBase) return false;
-                const notifiedSubstitutes = typeof getNotifiedSubstitutes === 'function' ? getNotifiedSubstitutes() : [];
-                return notifiedSubstitutes.some(notifiedId =>
-                    notifiedId.substring(0, 10) === materialBase && notifiedId !== m['物料']
-                );
+                return window.hasNotifiedSubstitute(m['物料']);
 
             case 'in-inspection':
                 const inspectionStock = m.inspection_stock || m['品質檢驗中'] || 0;

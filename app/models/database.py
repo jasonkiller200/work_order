@@ -276,3 +276,27 @@ class DeliverySchedule(db.Model):
     
     def __repr__(self):
         return f'<DeliverySchedule {self.material_id} - {self.expected_date}>'
+
+
+class SubstituteNotification(db.Model):
+    """替代品通知選擇記錄"""
+    __tablename__ = 'substitute_notifications'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    # 主物料 ID (被查詢的物料)
+    material_id = db.Column(db.String(50), db.ForeignKey('materials.material_id'), nullable=False, index=True)
+    # 被選中的替代物料 ID
+    substitute_material_id = db.Column(db.String(50), nullable=False, index=True)
+    # 是否啟用通知
+    is_notified = db.Column(db.Boolean, default=True)
+    # 系統欄位
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
+    
+    # 複合唯一索引：確保每個主物料的每個替代品只有一筆記錄
+    __table_args__ = (
+        db.UniqueConstraint('material_id', 'substitute_material_id', name='uq_material_substitute'),
+    )
+    
+    def __repr__(self):
+        return f'<SubstituteNotification {self.material_id} -> {self.substitute_material_id}>'

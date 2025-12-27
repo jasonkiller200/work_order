@@ -10,9 +10,10 @@ document.addEventListener('DOMContentLoaded', function () {
         setupDashboardTabs(); // 設定儀表板頁籤切換
         setupStatsCardEvents(); // 🆕 設定統計圖卡事件
         setupItemsPerPageHandler(); // 🆕 設定每頁顯示數量選擇器的全域事件處理
-        setTimeout(() => {
+        // 🆕 先載入替代品通知資料，再載入儀表板
+        window.loadNotifiedSubstitutes().then(() => {
             loadProcurementDashboard(); // 載入採購儀表板資料
-        }, 0);
+        });
 
     } else if (window.location.pathname === '/order_query') {
         // All setup is now in order-query.js

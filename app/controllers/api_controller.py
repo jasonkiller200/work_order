@@ -13,7 +13,7 @@ from app.models.material import MaterialDAO
 from app.models.order import OrderDAO
 from app.models.traffic import TrafficDAO
 # 匯入資料庫模型
-from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping, DeliverySchedule
+from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping, DeliverySchedule, SubstituteNotification
 from app.utils.decorators import cache_required
 from app.utils.helpers import format_date, get_taiwan_time
 
@@ -1313,4 +1313,84 @@ def get_purchase_order_buyers():
     
     except Exception as e:
         app_logger.error(f"取得採購人員清單失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/substitute_notification/toggle', methods=['POST'])
+def toggle_substitute_notification():
+    """切換替代品的通知狀態"""
+    try:
+        data = request.get_json()
+        material_id = data.get('material_id')
+        substitute_material_id = data.get('substitute_material_id')
+        
+        if not material_id or not substitute_material_id:
+            return jsonify({'error': '缺少必要參數'}), 400
+        
+        # 查找現有記錄
+        notification = SubstituteNotification.query.filter_by(
+            material_id=material_id,
+            substitute_material_id=substitute_material_id
+        ).first()
+        
+        if notification:
+            # 切換狀態
+            notification.is_notified = not notification.is_notified
+            notification.updated_at = get_taiwan_time()
+        else:
+            # 新增記錄（預設啟用）
+            notification = SubstituteNotification(
+                material_id=material_id,
+                substitute_material_id=substitute_material_id,
+                is_notified=True
+            )
+            db.session.add(notification)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'is_notified': notification.is_notified
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"切換替代品通知失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/substitute_notification/list/<material_id>')
+def get_substitute_notifications(material_id):
+    """取得某物料的所有替代品通知設定"""
+    try:
+        notifications = SubstituteNotification.query.filter_by(
+            material_id=material_id,
+            is_notified=True
+        ).all()
+        
+        result = [n.substitute_material_id for n in notifications]
+        return jsonify({'notified_substitutes': result})
+    
+    except Exception as e:
+        app_logger.error(f"取得替代品通知清單失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/substitute_notification/all')
+def get_all_notified_substitutes():
+    """取得所有已啟用通知的替代品 (用於儀表板篩選)"""
+    try:
+        notifications = SubstituteNotification.query.filter_by(is_notified=True).all()
+        
+        # 回傳格式：{material_id: [substitute_ids...], ...}
+        result = {}
+        for n in notifications:
+            if n.material_id not in result:
+                result[n.material_id] = []
+            result[n.material_id].append(n.substitute_material_id)
+        
+        return jsonify({'notified_substitutes_map': result})
+    
+    except Exception as e:
+        app_logger.error(f"取得所有替代品通知失敗: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500

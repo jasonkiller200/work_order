@@ -134,31 +134,29 @@ function openDetailsModal(materialId) {
             document.getElementById('inspection-stock').textContent = data.stock_summary.inspection.toFixed(0);
             document.getElementById('on-order-stock').textContent = data.stock_summary.on_order.toFixed(0);
 
-            // 顯示替代品資訊在庫存總覽下方
-            let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
-            if (data.substitute_inventory && data.substitute_inventory.length > 0) {
-                subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>通知</th><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th><th>總需求數</th></tr></thead><tbody>';
-                data.substitute_inventory.forEach(s => {
-                    const totalDemand = s.total_demand || 0;
-                    const isNotified = localStorage.getItem(`notify_${s['物料']}`) === 'true';
-                    const checkedAttr = isNotified ? 'checked' : '';
-                    subHTML += `<tr>
-                        <td><input type="checkbox" ${checkedAttr} onchange="toggleSubstituteNotify('${s['物料']}')"></td>
-                        <td>${s['物料']}</td>
-                        <td>${s['物料說明']}</td>
-                        <td>${s.unrestricted_stock.toFixed(0)}</td>
-                        <td>${s.inspection_stock.toFixed(0)}</td>
-                        <td>${totalDemand.toFixed(0)}</td>
-                    </tr>`;
-                });
-                subHTML += '</tbody></table>';
-            } else {
-                subHTML += '<p style="font-size: 0.9em; color: var(--pico-muted-color);">沒有找到可用的替代版本。</p>';
-            }
+            // 🆕 儲存當前物料 ID 到全域變數供 toggle 函數使用
+            window.currentModalMaterialId = materialId;
 
-            const substituteSection = document.getElementById('substitute-section');
-            if (substituteSection) {
-                substituteSection.innerHTML = subHTML;
+            // 顯示替代品資訊在庫存總覽下方 (先載入通知狀態再顯示)
+            if (data.substitute_inventory && data.substitute_inventory.length > 0) {
+                // 從 API 載入該物料的替代品通知設定
+                fetch(`/api/substitute_notification/list/${materialId}`)
+                    .then(res => res.json())
+                    .then(notifyData => {
+                        const notifiedList = notifyData.notified_substitutes || [];
+                        renderSubstituteSection(data.substitute_inventory, notifiedList, materialId);
+                    })
+                    .catch(err => {
+                        console.error('Error loading substitute notifications:', err);
+                        renderSubstituteSection(data.substitute_inventory, [], materialId);
+                    });
+            } else {
+                let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
+                subHTML += '<p style="font-size: 0.9em; color: var(--pico-muted-color);">沒有找到可用的替代版本。</p>';
+                const substituteSection = document.getElementById('substitute-section');
+                if (substituteSection) {
+                    substituteSection.innerHTML = subHTML;
+                }
             }
 
             // 🆕 儲存需求資料到全域變數供採購單表格使用
@@ -789,3 +787,63 @@ document.addEventListener('DOMContentLoaded', function () {
     setupModal();
 });
 
+// 🆕 渲染替代品區塊 (已載入通知狀態)
+function renderSubstituteSection(substituteInventory, notifiedList, materialId) {
+    let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
+    subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>通知</th><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th><th>總需求數</th></tr></thead><tbody>';
+
+    substituteInventory.forEach(s => {
+        const totalDemand = s.total_demand || 0;
+        const isNotified = notifiedList.includes(s['物料']);
+        const checkedAttr = isNotified ? 'checked' : '';
+        subHTML += `<tr>
+            <td><input type="checkbox" ${checkedAttr} onchange="window.toggleSubstituteNotify('${materialId}', '${s['物料']}', this)"></td>
+            <td>${s['物料']}</td>
+            <td>${s['物料說明']}</td>
+            <td>${s.unrestricted_stock.toFixed(0)}</td>
+            <td>${s.inspection_stock.toFixed(0)}</td>
+            <td>${totalDemand.toFixed(0)}</td>
+        </tr>`;
+    });
+    subHTML += '</tbody></table>';
+
+    const substituteSection = document.getElementById('substitute-section');
+    if (substituteSection) {
+        substituteSection.innerHTML = subHTML;
+    }
+}
+
+// 🆕 切換替代品通知狀態 (儲存到資料庫)
+window.toggleSubstituteNotify = function (materialId, substituteMaterialId, checkbox) {
+    fetch('/api/substitute_notification/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            material_id: materialId,
+            substitute_material_id: substituteMaterialId
+        })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                console.log(`替代品 ${substituteMaterialId} 通知狀態: ${data.is_notified ? '啟用' : '停用'}`);
+                // 更新 checkbox 狀態 (以防 API 回傳的狀態與 UI 不同步)
+                if (checkbox) {
+                    checkbox.checked = data.is_notified;
+                }
+            } else {
+                console.error('Toggle failed:', data.error);
+                // 復原 checkbox 狀態
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Toggle API error:', err);
+            // 復原 checkbox 狀態
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+            }
+        });
+};
