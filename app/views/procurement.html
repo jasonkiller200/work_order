@@ -7,7 +7,9 @@
     <title>生產資訊中心 - 採購儀表板</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1232">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1234">
+    <!-- Flatpickr 日期選擇器 (Dark Theme) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr-dark.css') }}">
     <!-- ExcelJS for Excel export with full styling support (本地版本) -->
     <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
@@ -261,16 +263,12 @@
                                 <div>
                                     <label for="delivery-date" style="font-size: 0.9em;">預計到貨 <span
                                             class="required-mark">*</span></label>
-                                    <input type="date" id="delivery-date" style="font-size: 0.9em; padding: 0.4em;"
-                                        required>
+                                    <input type="text" id="delivery-date" style="font-size: 0.9em; padding: 0.4em;"
+                                        placeholder="選擇日期..." required>
                                     <small
                                         style="color: var(--pico-muted-color); font-size: 0.75em; display: block; margin-top: 0.2em;">
-                                        💡 提示: 點擊欄位或按空白鍵開啟日期選擇器
+                                        💡 提示: 點擊欄位開啟日期選擇器
                                     </small>
-                                    <script>
-                                        // 設定日期最小值為今天
-                                        document.getElementById('delivery-date').min = new Date().toISOString().split('T')[0];
-                                    </script>
                                 </div>
                                 <div>
                                     <label for="delivery-qty" style="font-size: 0.9em;">數量 <span
@@ -372,7 +370,10 @@
     <script src="{{ url_for('static', filename='js/stats-helper.js') }}?v=1232"></script>
     <script src="{{ url_for('static', filename='js/delivery-helper.js') }}?v=1232"></script>
     <script src="{{ url_for('static', filename='js/services/api-service.js') }}?v=1232"></script>
-    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}?v=1232"></script>
+    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}?v=1234"></script>
+    <!-- Flatpickr JS (載入供 material-modal.js 使用) -->
+    <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
 
 </body>
 

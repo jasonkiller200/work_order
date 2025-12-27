@@ -8,8 +8,8 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1233">
-    <!-- Flatpickr 日期選擇器 -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr.min.css') }}">
+    <!-- Flatpickr 日期選擇器 (Dark Theme) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr-dark.css') }}">
     <!-- ExcelJS for Excel export -->
     <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
@@ -71,7 +71,8 @@
                     <div style="display: flex; gap: 0.5em;">
                         <button id="apply-filter-btn">🔍 查詢</button>
                         <button id="clear-filter-btn" class="secondary">清除篩選</button>
-                        <button id="export-excel-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出 Excel</button>
+                        <button id="export-excel-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
+                            Excel</button>
                     </div>
                 </div>
             </div>
@@ -109,7 +110,8 @@
             </div>
 
             <!-- 分頁控制 -->
-            <div id="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em;">
+            <div id="pagination-controls"
+                style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em;">
                 <div>
                     <label for="per-page-select">每頁顯示：</label>
                     <select id="per-page-select" style="width: auto; display: inline-block;">
@@ -131,9 +133,9 @@
     <!-- Flatpickr JS -->
     <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
-    
+
     <!-- 頁面專用 JS -->
-    <script src="{{ url_for('static', filename='js/open-po.js') }}?v=1233"></script>
+    <script src="{{ url_for('static', filename='js/open-po.js') }}?v=1234"></script>
 </body>
 
 </html>

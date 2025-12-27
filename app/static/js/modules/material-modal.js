@@ -239,6 +239,28 @@ function openDetailsModal(materialId) {
                 setupDeliveryFormEvents(materialId, data);
             }
 
+            // 🆕 初始化交期日期選擇器 (Flatpickr)
+            const deliveryDateEl = document.getElementById('delivery-date');
+            const modal = document.getElementById('details-modal');
+            if (deliveryDateEl && typeof flatpickr !== 'undefined') {
+                // 如果已有 flatpickr 實例，先銷毀
+                if (deliveryDateEl._flatpickr) {
+                    deliveryDateEl._flatpickr.destroy();
+                }
+                // 找到 modal 內的 article 元素作為 appendTo 目標
+                // 這樣 calendar 會在 dialog 的 top-layer 內渲染，不會被遮住
+                const modalArticle = modal ? modal.querySelector('article') : null;
+                flatpickr(deliveryDateEl, {
+                    locale: 'zh_tw',
+                    dateFormat: 'Y-m-d',
+                    minDate: 'today',
+                    allowInput: true,
+                    defaultDate: deliveryDateEl.value || null,
+                    appendTo: modalArticle || document.body,  // 附加到 modal 內
+                    static: true  // 使用 static 定位，相對於 input 位置
+                });
+            }
+
             // 顯示需求訂單
             let demandHTML = '<table><thead><tr><th>訂單號碼</th><th>未結數量</th><th>需求日期</th><th>預計剩餘庫存</th></tr></thead><tbody>';
             if (data.demand_details && data.demand_details.length > 0) {
