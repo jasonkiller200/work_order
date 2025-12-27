@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生產資訊中心 - 未結案採購單查詢</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1233">
+    <!-- Flatpickr 日期選擇器 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr.min.css') }}">
+    <!-- ExcelJS for Excel export -->
+    <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
+</head>
+
+<body>
+    <main class="container">
+        <header>
+            <h1>生產資訊中心</h1>
+            <p>一個整合工單料況、庫存與規格的查詢系統</p>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="/procurement">採購儀表板</a></li>
+                <li><a href="/order_query">訂單查詢</a></li>
+                <li><a href="/open-purchase-orders" class="active">未結案採購單</a></li>
+                <li><a href="/admin_dashboard">後台管理</a></li>
+                <li><a href="/part-drawing-management">品號-圖號維護</a></li>
+            </ul>
+        </nav>
+
+        <hr>
+
+        <section id="open-po-section">
+            <h2>📋 未結案採購單查詢</h2>
+
+            <!-- 篩選區塊 -->
+            <div class="filter-controls" style="margin-bottom: 1.5em;">
+                <div class="filter-row" style="display: flex; gap: 1em; flex-wrap: wrap; align-items: flex-end;">
+                    <!-- 搜尋 -->
+                    <div style="flex: 1; min-width: 200px;">
+                        <label for="search-input">搜尋 (單號/物料)</label>
+                        <input type="text" id="search-input" placeholder="輸入採購單號或物料編號...">
+                    </div>
+
+                    <!-- 採購人員篩選 -->
+                    <div style="min-width: 150px;">
+                        <label for="buyer-filter">採購人員</label>
+                        <select id="buyer-filter">
+                            <option value="">全部</option>
+                            <!-- 動態載入 -->
+                        </select>
+                    </div>
+
+                    <!-- 維護日期起始 -->
+                    <div style="min-width: 150px;">
+                        <label for="date-start">維護日期 (起)</label>
+                        <input type="text" id="date-start" placeholder="選擇日期...">
+                    </div>
+
+                    <!-- 維護日期結束 -->
+                    <div style="min-width: 150px;">
+                        <label for="date-end">維護日期 (迄)</label>
+                        <input type="text" id="date-end" placeholder="選擇日期...">
+                    </div>
+
+                    <!-- 操作按鈕 -->
+                    <div style="display: flex; gap: 0.5em;">
+                        <button id="apply-filter-btn">🔍 查詢</button>
+                        <button id="clear-filter-btn" class="secondary">清除篩選</button>
+                        <button id="export-excel-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出 Excel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 統計資訊 -->
+            <div id="stats-info" style="margin-bottom: 1em; color: var(--pico-muted-color);">
+                <span id="total-count">載入中...</span>
+            </div>
+
+            <!-- 資料表格 -->
+            <div style="overflow-x: auto;">
+                <table id="po-table">
+                    <thead>
+                        <tr>
+                            <th>採購單號</th>
+                            <th>物料</th>
+                            <th>圖號</th>
+                            <th>物料說明</th>
+                            <th>採購人員</th>
+                            <th>供應商</th>
+                            <th>訂購數量</th>
+                            <th>未結數量</th>
+                            <th>原始交期</th>
+                            <th>更新交期</th>
+                            <th>分批交期</th>
+                            <th>維護時間</th>
+                        </tr>
+                    </thead>
+                    <tbody id="po-tbody">
+                        <tr>
+                            <td colspan="12" style="text-align: center;">載入中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分頁控制 -->
+            <div id="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em;">
+                <div>
+                    <label for="per-page-select">每頁顯示：</label>
+                    <select id="per-page-select" style="width: auto; display: inline-block;">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+                <div id="page-info" style="display: flex; align-items: center; gap: 0.5em;">
+                    <button id="prev-page-btn" class="outline" disabled>◀ 上一頁</button>
+                    <span id="page-indicator">第 1 頁 / 共 1 頁</span>
+                    <button id="next-page-btn" class="outline" disabled>下一頁 ▶</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Flatpickr JS -->
+    <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
+    
+    <!-- 頁面專用 JS -->
+    <script src="{{ url_for('static', filename='js/open-po.js') }}?v=1233"></script>
+</body>
+
+</html>

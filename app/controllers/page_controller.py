@@ -37,3 +37,9 @@ def part_drawing_management():
     """品號-圖號維護頁面"""
     TrafficService.record_page_view('part_drawing_management.html', request.remote_addr)
     return render_template('part_drawing_management.html')
+
+@page_bp.route('/open-purchase-orders')
+def open_purchase_orders():
+    """未結案採購單查詢頁面"""
+    TrafficService.record_page_view('open_purchase_orders.html', request.remote_addr)
+    return render_template('open_purchase_orders.html')

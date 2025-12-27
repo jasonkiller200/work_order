@@ -1148,3 +1148,154 @@ def list_part_drawing():
         app_logger.error(f"列出品號-圖號對照失敗: {e}", exc_info=True)
         return jsonify({"error": "查詢失敗"}), 500
 
+
+# =====================================================
+# 未結案採購單查詢 API
+# =====================================================
+
+@api_bp.route('/purchase_orders/open')
+def get_open_purchase_orders():
+    """取得未結案採購單清單 (支援分頁、篩選)"""
+    try:
+        # 分頁參數
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 100, type=int)
+        
+        # 篩選參數
+        buyer_id = request.args.get('buyer_id', '').strip()
+        date_start = request.args.get('date_start', '').strip()
+        date_end = request.args.get('date_end', '').strip()
+        search = request.args.get('search', '').strip()
+        
+        # 基本查詢：未完成且未取消的採購單
+        query = PurchaseOrder.query.filter(
+            PurchaseOrder.status.notin_(['completed', 'cancelled'])
+        )
+        
+        # 採購人員篩選
+        if buyer_id:
+            query = query.filter(PurchaseOrder.buyer_id == buyer_id)
+        
+        # 日期篩選 (根據 updated_at)
+        if date_start:
+            try:
+                start_date = datetime.strptime(date_start, '%Y-%m-%d')
+                query = query.filter(PurchaseOrder.updated_at >= start_date)
+            except ValueError:
+                pass
+        
+        if date_end:
+            try:
+                end_date = datetime.strptime(date_end, '%Y-%m-%d') + timedelta(days=1)
+                query = query.filter(PurchaseOrder.updated_at < end_date)
+            except ValueError:
+                pass
+        
+        # 搜尋 (採購單號或物料)
+        if search:
+            query = query.filter(
+                db.or_(
+                    PurchaseOrder.po_number.like(f'%{search}%'),
+                    PurchaseOrder.material_id.like(f'%{search}%')
+                )
+            )
+        
+        # 載入關聯資料
+        query = query.options(
+            db.joinedload(PurchaseOrder.buyer),
+            db.joinedload(PurchaseOrder.material),
+            db.joinedload(PurchaseOrder.delivery_schedules)
+        )
+        
+        # 分頁查詢
+        pagination = query.order_by(PurchaseOrder.updated_at.desc()).paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+        
+        # 取得圖號對照
+        material_ids = [po.material_id for po in pagination.items]
+        # 使用物料前10碼匹配圖號
+        base_material_ids = list(set([m[:10] if m else '' for m in material_ids]))
+        drawing_map = {}
+        if base_material_ids:
+            drawings = PartDrawingMapping.query.filter(
+                PartDrawingMapping.part_number.in_(base_material_ids)
+            ).all()
+            drawing_map = {d.part_number: d.drawing_number for d in drawings}
+        
+        # 組裝結果
+        results = []
+        for po in pagination.items:
+            # 取得分批交期資訊
+            schedules = []
+            for s in po.delivery_schedules:
+                if s.status not in ['completed', 'cancelled']:
+                    schedules.append({
+                        'id': s.id,
+                        'expected_date': s.expected_date.strftime('%Y-%m-%d') if s.expected_date else '',
+                        'quantity': float(s.quantity),
+                        'status': s.status
+                    })
+            
+            # 取得圖號
+            base_id = po.material_id[:10] if po.material_id else ''
+            drawing_number = drawing_map.get(base_id, '')
+            
+            # 取得採購人員名稱
+            buyer_name = po.buyer.full_name if po.buyer else ''
+            
+            results.append({
+                'po_number': po.po_number,
+                'material_id': po.material_id,
+                'description': po.description or (po.material.description if po.material else ''),
+                'drawing_number': drawing_number,
+                'buyer_id': po.buyer_id or '',
+                'buyer_name': buyer_name,
+                'supplier': po.supplier or '',
+                'ordered_quantity': float(po.ordered_quantity) if po.ordered_quantity else 0,
+                'outstanding_quantity': float(po.outstanding_quantity) if po.outstanding_quantity else 0,
+                'original_delivery_date': po.original_delivery_date.strftime('%Y-%m-%d') if po.original_delivery_date else '',
+                'updated_delivery_date': po.updated_delivery_date.strftime('%Y-%m-%d') if po.updated_delivery_date else '',
+                'status': po.status,
+                'delivery_schedules': schedules,
+                'updated_at': po.updated_at.strftime('%Y-%m-%d %H:%M:%S') if po.updated_at else ''
+            })
+        
+        return jsonify({
+            'results': results,
+            'total': pagination.total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': pagination.pages
+        })
+    
+    except Exception as e:
+        app_logger.error(f"取得未結案採購單失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/purchase_orders/buyers')
+def get_purchase_order_buyers():
+    """取得有未結案採購單的採購人員清單 (用於篩選下拉)"""
+    try:
+        # 取得有未結案採購單的 buyer_id
+        buyer_ids = db.session.query(PurchaseOrder.buyer_id).filter(
+            PurchaseOrder.status.notin_(['completed', 'cancelled']),
+            PurchaseOrder.buyer_id.isnot(None)
+        ).distinct().all()
+        
+        buyer_ids = [b[0] for b in buyer_ids if b[0]]
+        
+        # 取得對應的使用者資訊
+        buyers = User.query.filter(User.id.in_(buyer_ids)).all()
+        
+        result = [{'id': u.id, 'name': u.full_name or u.username} for u in buyers]
+        result.sort(key=lambda x: x['name'])
+        
+        return jsonify({'buyers': result})
+    
+    except Exception as e:
+        app_logger.error(f"取得採購人員清單失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
