@@ -1237,14 +1237,19 @@ def get_open_purchase_orders():
         for po in pagination.items:
             # 取得分批交期資訊
             schedules = []
+            latest_schedule_update = None
             for s in po.delivery_schedules:
                 if s.status not in ['completed', 'cancelled']:
                     schedules.append({
                         'id': s.id,
                         'expected_date': s.expected_date.strftime('%Y-%m-%d') if s.expected_date else '',
                         'quantity': float(s.quantity),
-                        'status': s.status
+                        'status': s.status,
+                        'updated_at': s.updated_at.strftime('%Y-%m-%d %H:%M:%S') if s.updated_at else ''
                     })
+                    # 追蹤最新的交期維護時間
+                    if s.updated_at and (latest_schedule_update is None or s.updated_at > latest_schedule_update):
+                        latest_schedule_update = s.updated_at
             
             # 取得圖號
             base_id = po.material_id[:10] if po.material_id else ''
@@ -1252,6 +1257,9 @@ def get_open_purchase_orders():
             
             # 取得採購人員名稱 (使用 purchase_group 對應)
             buyer_name = user_map.get(po.purchase_group, '')
+            
+            # 維護時間 = 交期分批的最新更新時間 (代表使用者在物料詳情中維護的時間)
+            delivery_maintained_at = latest_schedule_update.strftime('%Y-%m-%d %H:%M:%S') if latest_schedule_update else ''
             
             results.append({
                 'po_number': po.po_number,
@@ -1267,7 +1275,7 @@ def get_open_purchase_orders():
                 'updated_delivery_date': po.updated_delivery_date.strftime('%Y-%m-%d') if po.updated_delivery_date else '',
                 'status': po.status,
                 'delivery_schedules': schedules,
-                'updated_at': po.updated_at.strftime('%Y-%m-%d %H:%M:%S') if po.updated_at else ''
+                'delivery_maintained_at': delivery_maintained_at  # 維護時間 (交期設定時間)
             })
         
         return jsonify({

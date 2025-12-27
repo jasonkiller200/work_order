@@ -94,38 +94,55 @@ function renderTable(results) {
     const tbody = document.getElementById('po-tbody');
 
     if (!results || results.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align: center;">沒有找到符合條件的資料</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align: center;">沒有找到符合條件的資料</td></tr>';
         return;
     }
 
     let html = '';
     results.forEach(po => {
-        // 處理分批交期顯示
-        let schedulesHtml = '-';
-        if (po.delivery_schedules && po.delivery_schedules.length > 0) {
-            if (po.delivery_schedules.length === 1) {
-                schedulesHtml = po.delivery_schedules[0].expected_date;
-            } else {
-                // 多批次：顯示摘要
-                const dates = po.delivery_schedules.map(s => s.expected_date).join(', ');
-                schedulesHtml = `<span title="${dates}" style="cursor: help; border-bottom: 1px dashed;">共 ${po.delivery_schedules.length} 批</span>`;
-            }
-        }
+        // 判斷是否有分批交期需要展開
+        const hasSchedules = po.delivery_schedules && po.delivery_schedules.length > 0;
 
-        html += `<tr>
-            <td>${po.po_number}</td>
-            <td>${po.material_id}</td>
-            <td>${po.drawing_number || '-'}</td>
-            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${po.description || ''}">${po.description || '-'}</td>
-            <td>${po.buyer_name || '-'}</td>
-            <td>${po.supplier || '-'}</td>
-            <td style="text-align: right;">${Math.round(po.ordered_quantity)}</td>
-            <td style="text-align: right;">${Math.round(po.outstanding_quantity)}</td>
-            <td>${po.original_delivery_date || '-'}</td>
-            <td>${po.updated_delivery_date || '-'}</td>
-            <td>${schedulesHtml}</td>
-            <td>${po.updated_at || '-'}</td>
-        </tr>`;
+        if (hasSchedules) {
+            // 有分批交期：每批展開為獨立行
+            po.delivery_schedules.forEach((schedule, idx) => {
+                const isFirstRow = (idx === 0);
+                const rowStyle = isFirstRow ? '' : 'style="background-color: rgba(255,255,255,0.03);"';
+
+                html += `<tr ${rowStyle}>
+                    <td>${po.po_number}</td>
+                    <td>${po.material_id}</td>
+                    <td>${po.drawing_number || '-'}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${po.description || ''}">${po.description || '-'}</td>
+                    <td>${po.buyer_name || '-'}</td>
+                    <td>${po.supplier || '-'}</td>
+                    <td style="text-align: right;">${Math.round(po.ordered_quantity)}</td>
+                    <td style="text-align: right;">${Math.round(po.outstanding_quantity)}</td>
+                    <td>${po.original_delivery_date || '-'}</td>
+                    <td>${po.updated_delivery_date || '-'}</td>
+                    <td>${schedule.expected_date || '-'}</td>
+                    <td style="text-align: right;">${Math.round(schedule.quantity)}</td>
+                    <td>${schedule.updated_at || '-'}</td>
+                </tr>`;
+            });
+        } else {
+            // 沒有分批交期：顯示單行
+            html += `<tr>
+                <td>${po.po_number}</td>
+                <td>${po.material_id}</td>
+                <td>${po.drawing_number || '-'}</td>
+                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${po.description || ''}">${po.description || '-'}</td>
+                <td>${po.buyer_name || '-'}</td>
+                <td>${po.supplier || '-'}</td>
+                <td style="text-align: right;">${Math.round(po.ordered_quantity)}</td>
+                <td style="text-align: right;">${Math.round(po.outstanding_quantity)}</td>
+                <td>${po.original_delivery_date || '-'}</td>
+                <td>${po.updated_delivery_date || '-'}</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+            </tr>`;
+        }
     });
 
     tbody.innerHTML = html;
@@ -212,7 +229,7 @@ async function exportToExcel() {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('未結案採購單');
 
-        // 定義欄位
+        // 定義欄位 (包含分批日期和分批數量)
         worksheet.columns = [
             { header: '採購單號', key: 'po_number', width: 15 },
             { header: '物料', key: 'material_id', width: 18 },
@@ -224,24 +241,52 @@ async function exportToExcel() {
             { header: '未結數量', key: 'outstanding_quantity', width: 12 },
             { header: '原始交期', key: 'original_delivery_date', width: 12 },
             { header: '更新交期', key: 'updated_delivery_date', width: 12 },
-            { header: '維護時間', key: 'updated_at', width: 18 }
+            { header: '分批日期', key: 'schedule_date', width: 12 },
+            { header: '分批數量', key: 'schedule_quantity', width: 12 },
+            { header: '維護時間', key: 'maintained_at', width: 18 }
         ];
 
-        // 加入資料
+        // 加入資料 (展開分批交期為獨立行)
         allData.forEach(po => {
-            worksheet.addRow({
-                po_number: po.po_number,
-                material_id: po.material_id,
-                drawing_number: po.drawing_number || '',
-                description: po.description || '',
-                buyer_name: po.buyer_name || '',
-                supplier: po.supplier || '',
-                ordered_quantity: Math.round(po.ordered_quantity),
-                outstanding_quantity: Math.round(po.outstanding_quantity),
-                original_delivery_date: po.original_delivery_date || '',
-                updated_delivery_date: po.updated_delivery_date || '',
-                updated_at: po.updated_at || ''
-            });
+            const hasSchedules = po.delivery_schedules && po.delivery_schedules.length > 0;
+
+            if (hasSchedules) {
+                // 每批交期展開為獨立行
+                po.delivery_schedules.forEach(schedule => {
+                    worksheet.addRow({
+                        po_number: po.po_number,
+                        material_id: po.material_id,
+                        drawing_number: po.drawing_number || '',
+                        description: po.description || '',
+                        buyer_name: po.buyer_name || '',
+                        supplier: po.supplier || '',
+                        ordered_quantity: Math.round(po.ordered_quantity),
+                        outstanding_quantity: Math.round(po.outstanding_quantity),
+                        original_delivery_date: po.original_delivery_date || '',
+                        updated_delivery_date: po.updated_delivery_date || '',
+                        schedule_date: schedule.expected_date || '',
+                        schedule_quantity: Math.round(schedule.quantity),
+                        maintained_at: schedule.updated_at || ''
+                    });
+                });
+            } else {
+                // 沒有分批資料時輸出單行
+                worksheet.addRow({
+                    po_number: po.po_number,
+                    material_id: po.material_id,
+                    drawing_number: po.drawing_number || '',
+                    description: po.description || '',
+                    buyer_name: po.buyer_name || '',
+                    supplier: po.supplier || '',
+                    ordered_quantity: Math.round(po.ordered_quantity),
+                    outstanding_quantity: Math.round(po.outstanding_quantity),
+                    original_delivery_date: po.original_delivery_date || '',
+                    updated_delivery_date: po.updated_delivery_date || '',
+                    schedule_date: '',
+                    schedule_quantity: '',
+                    maintained_at: ''
+                });
+            }
         });
 
         // 設定標題列樣式
