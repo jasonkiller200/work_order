@@ -64,9 +64,9 @@ let currentSortOrder = 'asc'; // 'asc' 或 'desc'
 
 // 全局變數來儲存分頁狀態
 let mainDashboardPage = 1;
-let mainDashboardItemsPerPage = 20;
+let mainDashboardItemsPerPage = 100;
 let finishedDashboardPage = 1;
-let finishedDashboardItemsPerPage = 20;
+let finishedDashboardItemsPerPage = 100;
 
 
 
