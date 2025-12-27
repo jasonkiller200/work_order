@@ -787,23 +787,82 @@ document.addEventListener('DOMContentLoaded', function () {
     setupModal();
 });
 
-// 🆕 渲染替代品區塊 (已載入通知狀態)
+// 🆕 渲染替代品區塊 (已載入通知狀態，並顯示可替代的工單需求)
 function renderSubstituteSection(substituteInventory, notifiedList, materialId) {
     let subHTML = '<h4 style="margin-top: 1em; margin-bottom: 0.5em; color: var(--pico-primary);">可替代版本</h4>';
-    subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>通知</th><th>物料</th><th>說明</th><th>庫存</th><th>品檢中</th><th>總需求數</th></tr></thead><tbody>';
+    subHTML += '<table style="font-size: 0.9em;"><thead><tr><th>通知</th><th>物料</th><th>說明</th><th>可用庫存</th><th>品檢中</th><th>可替代需求</th></tr></thead><tbody>';
 
-    substituteInventory.forEach(s => {
-        const totalDemand = s.total_demand || 0;
+    // 取得當前物料的需求資料（已儲存在全域變數）
+    const demandDetails = window.currentDemandDetails || [];
+
+    substituteInventory.forEach((s, idx) => {
+        const availableStock = s.unrestricted_stock || 0;
+        const inspectionStock = s.inspection_stock || 0;
         const isNotified = notifiedList.includes(s['物料']);
         const checkedAttr = isNotified ? 'checked' : '';
+
+        // 計算此替代品可以滿足多少需求
+        const coverageInfo = calculateSubstituteCoverage(demandDetails, availableStock);
+        const coverageText = coverageInfo.coveredCount > 0
+            ? `可滿足 ${coverageInfo.coveredCount} 筆工單`
+            : '-';
+        const coverageStyle = coverageInfo.coveredCount > 0
+            ? 'color: var(--pico-primary); font-weight: bold;'
+            : '';
+
         subHTML += `<tr>
-            <td><input type="checkbox" ${checkedAttr} onchange="window.toggleSubstituteNotify('${materialId}', '${s['物料']}', this)"></td>
+            <td><input type="checkbox" ${checkedAttr} 
+                data-substitute-id="${s['物料']}" 
+                data-substitute-idx="${idx}"
+                onchange="window.toggleSubstituteNotify('${materialId}', '${s['物料']}', this)"></td>
             <td>${s['物料']}</td>
             <td>${s['物料說明']}</td>
-            <td>${s.unrestricted_stock.toFixed(0)}</td>
-            <td>${s.inspection_stock.toFixed(0)}</td>
-            <td>${totalDemand.toFixed(0)}</td>
+            <td>${availableStock.toFixed(0)}</td>
+            <td>${inspectionStock.toFixed(0)}</td>
+            <td style="${coverageStyle}">${coverageText}</td>
         </tr>`;
+
+        // 如果已勾選，顯示詳細的工單需求替代表格
+        if (isNotified && coverageInfo.coveredOrders.length > 0) {
+            subHTML += `<tr><td colspan="6" style="padding: 0;">
+                <div style="margin-left: 2em; margin-bottom: 0.5em; background: rgba(255,255,255,0.03); padding: 0.5em; border-radius: 4px;">
+                    <strong style="color: var(--pico-primary);">🔄 可替代工單需求 (庫存 ${availableStock.toFixed(0)} 可滿足)：</strong>
+                    <table style="font-size: 0.85em; margin-top: 0.3em;">
+                        <thead><tr><th>工單</th><th>需求日期</th><th>需求數量</th><th>滿足狀態</th></tr></thead>
+                        <tbody>`;
+
+            let remainingStock = availableStock;
+            coverageInfo.coveredOrders.forEach(order => {
+                const orderNum = order['訂單'] || order['order_number'] || '-';
+                const demandDate = order['需求日期'] || '-';
+                const demandQty = order['未結數量 (EINHEIT)'] || 0;
+
+                let statusText, statusStyle;
+                if (remainingStock >= demandQty) {
+                    statusText = '✅ 完全滿足';
+                    statusStyle = 'color: #28a745;';
+                    remainingStock -= demandQty;
+                } else if (remainingStock > 0) {
+                    statusText = `⚠️ 部分滿足 (${remainingStock.toFixed(0)})`;
+                    statusStyle = 'color: #ffc107;';
+                    remainingStock = 0;
+                } else {
+                    statusText = '❌ 無法滿足';
+                    statusStyle = 'color: #dc3545;';
+                }
+
+                subHTML += `<tr>
+                    <td>${orderNum}</td>
+                    <td>${demandDate}</td>
+                    <td style="text-align: right;">${demandQty.toFixed(0)}</td>
+                    <td style="${statusStyle}">${statusText}</td>
+                </tr>`;
+            });
+
+            subHTML += `</tbody></table>
+                </div>
+            </td></tr>`;
+        }
     });
     subHTML += '</tbody></table>';
 
@@ -812,6 +871,49 @@ function renderSubstituteSection(substituteInventory, notifiedList, materialId) 
         substituteSection.innerHTML = subHTML;
     }
 }
+
+// 🆕 計算替代品可覆蓋的工單需求
+function calculateSubstituteCoverage(demandDetails, availableStock) {
+    if (!demandDetails || demandDetails.length === 0 || availableStock <= 0) {
+        return { coveredCount: 0, coveredOrders: [], totalCoverable: 0 };
+    }
+
+    // 按需求日期排序（最早的先滿足）
+    const sortedDemands = [...demandDetails]
+        .filter(d => (d['未結數量 (EINHEIT)'] || 0) > 0)
+        .sort((a, b) => {
+            const dateA = a['需求日期'] || '';
+            const dateB = b['需求日期'] || '';
+            return dateA.localeCompare(dateB);
+        });
+
+    let remainingStock = availableStock;
+    let coveredCount = 0;
+    let totalCoverable = 0;
+    const coveredOrders = [];
+
+    for (const demand of sortedDemands) {
+        const demandQty = demand['未結數量 (EINHEIT)'] || 0;
+        if (remainingStock >= demandQty) {
+            // 完全滿足
+            coveredCount++;
+            totalCoverable += demandQty;
+            remainingStock -= demandQty;
+            coveredOrders.push(demand);
+        } else if (remainingStock > 0) {
+            // 部分滿足
+            totalCoverable += remainingStock;
+            coveredOrders.push(demand);
+            remainingStock = 0;
+            break;
+        } else {
+            break;
+        }
+    }
+
+    return { coveredCount, coveredOrders, totalCoverable };
+}
+
 
 // 🆕 切換替代品通知狀態 (儲存到資料庫)
 window.toggleSubstituteNotify = function (materialId, substituteMaterialId, checkbox) {
