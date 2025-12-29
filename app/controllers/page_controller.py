@@ -43,3 +43,10 @@ def open_purchase_orders():
     """未結案採購單查詢頁面"""
     TrafficService.record_page_view('open_purchase_orders.html', request.remote_addr)
     return render_template('open_purchase_orders.html')
+
+@page_bp.route('/component-requirements')
+@login_required
+def component_requirements():
+    """成品組件需求維護頁面"""
+    TrafficService.record_page_view('component_requirements.html', request.remote_addr)
+    return render_template('component_requirements.html')

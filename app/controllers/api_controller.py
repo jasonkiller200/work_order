@@ -13,7 +13,7 @@ from app.models.material import MaterialDAO
 from app.models.order import OrderDAO
 from app.models.traffic import TrafficDAO
 # 匯入資料庫模型
-from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping, DeliverySchedule, SubstituteNotification
+from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping, DeliverySchedule, SubstituteNotification, ComponentRequirement
 from app.utils.decorators import cache_required
 from app.utils.helpers import format_date, get_taiwan_time
 
@@ -1393,4 +1393,168 @@ def get_all_notified_substitutes():
     
     except Exception as e:
         app_logger.error(f"取得所有替代品通知失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+# =================== 成品組件需求管理 API ===================
+
+@api_bp.route('/component_requirements')
+def get_component_requirements():
+    """取得所有成品組件需求"""
+    try:
+        items = ComponentRequirement.query.order_by(ComponentRequirement.updated_at.desc()).all()
+        result = []
+        for item in items:
+            result.append({
+                'id': item.id,
+                'material_id': item.material_id,
+                'base_material_id': item.base_material_id,
+                'description': item.description,
+                'note': item.note,
+                'created_at': item.created_at.strftime('%Y-%m-%d %H:%M:%S') if item.created_at else None,
+                'updated_at': item.updated_at.strftime('%Y-%m-%d %H:%M:%S') if item.updated_at else None
+            })
+        return jsonify({'items': result})
+    except Exception as e:
+        app_logger.error(f"取得成品組件需求失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/component_requirements', methods=['POST'])
+def create_component_requirement():
+    """新增成品組件需求"""
+    try:
+        data = request.get_json()
+        material_id = data.get('material_id', '').strip()
+        
+        if not material_id:
+            return jsonify({'error': '物料編號為必填'}), 400
+        
+        # 檢查是否已存在
+        existing = ComponentRequirement.query.filter_by(material_id=material_id).first()
+        if existing:
+            return jsonify({'error': '此物料編號已存在'}), 400
+        
+        item = ComponentRequirement(
+            material_id=material_id,
+            base_material_id=data.get('base_material_id', material_id[:10]),
+            description=data.get('description', ''),
+            note=data.get('note', '')
+        )
+        db.session.add(item)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'id': item.id})
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"新增成品組件需求失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/component_requirements/<int:id>', methods=['PUT'])
+def update_component_requirement(id):
+    """更新成品組件需求"""
+    try:
+        item = ComponentRequirement.query.get(id)
+        if not item:
+            return jsonify({'error': '找不到此項目'}), 404
+        
+        data = request.get_json()
+        
+        if 'material_id' in data:
+            # 檢查新物料編號是否與其他項目重複
+            new_material_id = data['material_id'].strip()
+            existing = ComponentRequirement.query.filter(
+                ComponentRequirement.material_id == new_material_id,
+                ComponentRequirement.id != id
+            ).first()
+            if existing:
+                return jsonify({'error': '此物料編號已被其他項目使用'}), 400
+            item.material_id = new_material_id
+        
+        if 'base_material_id' in data:
+            item.base_material_id = data['base_material_id']
+        if 'description' in data:
+            item.description = data['description']
+        if 'note' in data:
+            item.note = data['note']
+        
+        item.updated_at = get_taiwan_time()
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"更新成品組件需求失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/component_requirements/<int:id>', methods=['DELETE'])
+def delete_component_requirement(id):
+    """刪除成品組件需求"""
+    try:
+        item = ComponentRequirement.query.get(id)
+        if not item:
+            return jsonify({'error': '找不到此項目'}), 404
+        
+        db.session.delete(item)
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"刪除成品組件需求失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/component_requirements/batch', methods=['POST'])
+def batch_import_component_requirements():
+    """批量匯入成品組件需求"""
+    try:
+        data = request.get_json()
+        items = data.get('items', [])
+        
+        if not items:
+            return jsonify({'error': '沒有資料可匯入'}), 400
+        
+        inserted = 0
+        updated = 0
+        
+        for item_data in items:
+            material_id = item_data.get('material_id', '').strip()
+            if not material_id:
+                continue
+            
+            existing = ComponentRequirement.query.filter_by(material_id=material_id).first()
+            
+            if existing:
+                # 更新現有記錄
+                existing.base_material_id = item_data.get('base_material_id', material_id[:10])
+                if item_data.get('description'):
+                    existing.description = item_data['description']
+                if item_data.get('note'):
+                    existing.note = item_data['note']
+                existing.updated_at = get_taiwan_time()
+                updated += 1
+            else:
+                # 新增記錄
+                new_item = ComponentRequirement(
+                    material_id=material_id,
+                    base_material_id=item_data.get('base_material_id', material_id[:10]),
+                    description=item_data.get('description', ''),
+                    note=item_data.get('note', '')
+                )
+                db.session.add(new_item)
+                inserted += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'inserted': inserted,
+            'updated': updated
+        })
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"批量匯入成品組件需求失敗: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
