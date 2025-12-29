@@ -240,31 +240,46 @@ function setupDeliveryFormEvents(materialId, materialData) {
 
             document.getElementById('calc-available-stock').textContent = totalAvailable.toFixed(0);
 
-            // 🆕 檢查交期是否晚於第一筆需求日期
+            // 🆕 檢查交期是否晚於第一筆「缺料」需求日期 (remaining_stock < 0 的那筆)
             if (materialData.demand_details && materialData.demand_details.length > 0) {
-                const firstDemandDate = new Date(materialData.demand_details[0]['需求日期']);
-                const deliveryDateObj = new Date(deliveryDate);
+                // 找出第一筆缺料需求 (預計剩餘庫存為負的那筆)
+                let firstShortageDemand = null;
+                let runningStockCheck = materialData.stock_summary.unrestricted + materialData.stock_summary.inspection;
 
-                if (deliveryDateObj > firstDemandDate) {
-                    // 計算延遲天數
-                    const delayDays = Math.ceil((deliveryDateObj - firstDemandDate) / (1000 * 60 * 60 * 24));
+                for (const demand of materialData.demand_details) {
+                    runningStockCheck -= (demand['未結數量 (EINHEIT)'] || 0);
+                    if (runningStockCheck < 0) {
+                        firstShortageDemand = demand;
+                        break;
+                    }
+                }
 
-                    // 偵測暗黑模式
-                    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-                    const bgColor = isDarkMode ? '#4a2020' : '#ffebee';
-                    const borderColor = isDarkMode ? '#ef5350' : '#f44336';
-                    const textColor = isDarkMode ? '#ffcdd2' : '#c62828';
+                // 只有在有缺料需求時才顯示延遲警告
+                if (firstShortageDemand) {
+                    const shortageDemandDate = new Date(firstShortageDemand['需求日期']);
+                    const deliveryDateObj = new Date(deliveryDate);
 
-                    // 顯示警告
-                    const warning = document.createElement('div');
-                    warning.className = 'delivery-delay-warning';
-                    warning.style.cssText = `padding: 0.5em; margin-top: 0.5em; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px; color: ${textColor}; font-size: 0.9em;`;
-                    warning.innerHTML = `
-                        ⚠️ <strong>交期延遲警告</strong><br>
-                        預計交期 (${deliveryDate}) 晚於第一筆需求日期 (${materialData.demand_details[0]['需求日期']})<br>
-                        <strong style="font-size: 1.1em;">延遲 ${delayDays} 天</strong>
-                    `;
-                    dateInput.parentElement.appendChild(warning);
+                    if (deliveryDateObj > shortageDemandDate) {
+                        // 計算延遲天數
+                        const delayDays = Math.ceil((deliveryDateObj - shortageDemandDate) / (1000 * 60 * 60 * 24));
+
+                        // 偵測暗黑模式
+                        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+                        const bgColor = isDarkMode ? '#4a2020' : '#ffebee';
+                        const borderColor = isDarkMode ? '#ef5350' : '#f44336';
+                        const textColor = isDarkMode ? '#ffcdd2' : '#c62828';
+
+                        // 顯示警告
+                        const warning = document.createElement('div');
+                        warning.className = 'delivery-delay-warning';
+                        warning.style.cssText = `padding: 0.5em; margin-top: 0.5em; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px; color: ${textColor}; font-size: 0.9em;`;
+                        warning.innerHTML = `
+                            ⚠️ <strong>交期延遲警告</strong><br>
+                            預計交期 (${deliveryDate}) 晚於第一筆缺料需求日期 (${firstShortageDemand['需求日期']})<br>
+                            <strong style="font-size: 1.1em;">延遲 ${delayDays} 天</strong>
+                        `;
+                        dateInput.parentElement.appendChild(warning);
+                    }
                 }
             }
 
