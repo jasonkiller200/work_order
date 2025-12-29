@@ -220,12 +220,47 @@ function bindEvents() {
 
 // 匯出 Excel
 async function exportToExcel() {
-    if (!allData || allData.length === 0) {
-        alert('沒有資料可匯出');
-        return;
-    }
-
     try {
+        // 先取得目前的篩選條件
+        const search = document.getElementById('search-input').value.trim();
+        const buyerId = document.getElementById('buyer-filter').value;
+        const dateStart = document.getElementById('date-start').value;
+        const dateEnd = document.getElementById('date-end').value;
+
+        // 組裝查詢參數 (不分頁，取得所有資料)
+        const params = new URLSearchParams({
+            page: 1,
+            per_page: 99999  // 取得所有資料
+        });
+
+        if (search) params.append('search', search);
+        if (buyerId) params.append('buyer_id', buyerId);
+        if (dateStart) params.append('date_start', dateStart);
+        if (dateEnd) params.append('date_end', dateEnd);
+
+        // 顯示載入中提示
+        const exportBtn = document.getElementById('export-excel-btn');
+        const originalText = exportBtn.innerHTML;
+        exportBtn.innerHTML = '匯出中...';
+        exportBtn.disabled = true;
+
+        // 從 API 取得所有篩選後的資料
+        const response = await fetch(`/api/purchase_orders/open?${params.toString()}`);
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        const exportData = data.results || [];
+
+        if (exportData.length === 0) {
+            alert('沒有資料可匯出');
+            exportBtn.innerHTML = originalText;
+            exportBtn.disabled = false;
+            return;
+        }
+
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('未結案採購單');
 
@@ -247,7 +282,7 @@ async function exportToExcel() {
         ];
 
         // 加入資料 (展開分批交期為獨立行)
-        allData.forEach(po => {
+        exportData.forEach(po => {
             const hasSchedules = po.delivery_schedules && po.delivery_schedules.length > 0;
 
             if (hasSchedules) {
@@ -306,8 +341,17 @@ async function exportToExcel() {
         const today = new Date().toISOString().split('T')[0];
         saveAs(blob, `未結案採購單_${today}.xlsx`);
 
+        // 還原按鈕
+        exportBtn.innerHTML = originalText;
+        exportBtn.disabled = false;
+
     } catch (error) {
         console.error('匯出 Excel 失敗:', error);
         alert('匯出失敗: ' + error.message);
+
+        // 還原按鈕
+        const exportBtn = document.getElementById('export-excel-btn');
+        exportBtn.innerHTML = '📊 匯出 Excel';
+        exportBtn.disabled = false;
     }
 }

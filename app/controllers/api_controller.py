@@ -1176,20 +1176,31 @@ def get_open_purchase_orders():
         if buyer_id:
             query = query.filter(PurchaseOrder.purchase_group == buyer_id)
         
-        # 日期篩選 (根據 updated_at)
-        if date_start:
-            try:
-                start_date = datetime.strptime(date_start, '%Y-%m-%d')
-                query = query.filter(PurchaseOrder.updated_at >= start_date)
-            except ValueError:
-                pass
-        
-        if date_end:
-            try:
-                end_date = datetime.strptime(date_end, '%Y-%m-%d') + timedelta(days=1)
-                query = query.filter(PurchaseOrder.updated_at < end_date)
-            except ValueError:
-                pass
+        # 日期篩選 (根據 DeliverySchedule.updated_at - 使用者維護交期的時間)
+        # 篩選有任何交期分批在指定日期範圍內被維護過的採購單
+        if date_start or date_end:
+            from sqlalchemy import exists
+            
+            schedule_subquery = db.session.query(DeliverySchedule.purchase_order_id).filter(
+                DeliverySchedule.updated_at.isnot(None)
+            )
+            
+            if date_start:
+                try:
+                    start_date = datetime.strptime(date_start, '%Y-%m-%d')
+                    schedule_subquery = schedule_subquery.filter(DeliverySchedule.updated_at >= start_date)
+                except ValueError:
+                    pass
+            
+            if date_end:
+                try:
+                    end_date = datetime.strptime(date_end, '%Y-%m-%d') + timedelta(days=1)
+                    schedule_subquery = schedule_subquery.filter(DeliverySchedule.updated_at < end_date)
+                except ValueError:
+                    pass
+            
+            # 只查詢有符合條件交期的採購單
+            query = query.filter(PurchaseOrder.id.in_(schedule_subquery))
         
         # 搜尋 (採購單號或物料)
         if search:
