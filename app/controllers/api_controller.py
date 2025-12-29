@@ -1179,10 +1179,10 @@ def get_open_purchase_orders():
         # 日期篩選 (根據 DeliverySchedule.updated_at - 使用者維護交期的時間)
         # 篩選有任何交期分批在指定日期範圍內被維護過的採購單
         if date_start or date_end:
-            from sqlalchemy import exists
-            
-            schedule_subquery = db.session.query(DeliverySchedule.purchase_order_id).filter(
-                DeliverySchedule.updated_at.isnot(None)
+            # 使用 po_number 作為關聯欄位 (DeliverySchedule 使用 po_number FK)
+            schedule_subquery = db.session.query(DeliverySchedule.po_number).filter(
+                DeliverySchedule.updated_at.isnot(None),
+                DeliverySchedule.po_number.isnot(None)
             )
             
             if date_start:
@@ -1199,8 +1199,8 @@ def get_open_purchase_orders():
                 except ValueError:
                     pass
             
-            # 只查詢有符合條件交期的採購單
-            query = query.filter(PurchaseOrder.id.in_(schedule_subquery))
+            # 只查詢有符合條件交期的採購單 (使用 po_number 比對)
+            query = query.filter(PurchaseOrder.po_number.in_(schedule_subquery))
         
         # 搜尋 (採購單號或物料)
         if search:
