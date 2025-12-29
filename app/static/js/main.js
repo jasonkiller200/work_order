@@ -24,6 +24,9 @@ function checkApiStatus() {
     const badge = document.querySelector('.status-indicator');
     const badgeText = document.getElementById('status-badge-text');
 
+    // 如果頁面沒有這些元素，直接返回
+    if (!badge || !badgeText) return;
+
     fetch('/api/status')
         .then(response => response.json())
         .then(data => {
@@ -43,8 +46,8 @@ function checkApiStatus() {
         })
         .catch(error => {
             console.error('Error fetching status:', error);
-            badge.className = 'status-indicator error';
-            badgeText.textContent = '❌ 連線失敗';
+            if (badge) badge.className = 'status-indicator error';
+            if (badgeText) badgeText.textContent = '❌ 連線失敗';
         });
 }
 
