@@ -1,11 +1,15 @@
 # app/controllers/page_controller.py
 # 頁面控制器
 
-from flask import Blueprint, render_template, redirect, url_for, request
+from flask import Blueprint, render_template, redirect, url_for, request, session
 from app.services.traffic_service import TrafficService
 from app.utils.decorators import login_required
 
 page_bp = Blueprint('page', __name__)
+
+def get_is_admin():
+    """取得當前使用者是否為管理員（已登入）"""
+    return session.get('logged_in', False)
 
 @page_bp.route('/')
 def root():
@@ -16,37 +20,37 @@ def root():
 def procurement():
     """採購頁面"""
     TrafficService.record_page_view('procurement.html', request.remote_addr)
-    return render_template('procurement.html')
+    return render_template('procurement.html', is_admin=get_is_admin())
 
 @page_bp.route('/order_query')
 def order_query():
     """訂單查詢頁面"""
     TrafficService.record_page_view('order_query.html', request.remote_addr)
-    return render_template('order_query.html')
+    return render_template('order_query.html', is_admin=get_is_admin())
 
 @page_bp.route('/admin_dashboard')
 @login_required
 def admin_dashboard():
     """管理後台頁面"""
     TrafficService.record_page_view('admin_dashboard.html', request.remote_addr)
-    return render_template('admin_dashboard.html')
+    return render_template('admin_dashboard.html', is_admin=True)
 
 @page_bp.route('/part-drawing-management')
 @login_required
 def part_drawing_management():
     """品號-圖號維護頁面"""
     TrafficService.record_page_view('part_drawing_management.html', request.remote_addr)
-    return render_template('part_drawing_management.html')
+    return render_template('part_drawing_management.html', is_admin=True)
 
 @page_bp.route('/open-purchase-orders')
 def open_purchase_orders():
     """未結案採購單查詢頁面"""
     TrafficService.record_page_view('open_purchase_orders.html', request.remote_addr)
-    return render_template('open_purchase_orders.html')
+    return render_template('open_purchase_orders.html', is_admin=get_is_admin())
 
 @page_bp.route('/component-requirements')
 @login_required
 def component_requirements():
     """成品組件需求維護頁面"""
     TrafficService.record_page_view('component_requirements.html', request.remote_addr)
-    return render_template('component_requirements.html')
+    return render_template('component_requirements.html', is_admin=True)

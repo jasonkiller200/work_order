@@ -86,8 +86,10 @@
                 <li><a href="/procurement">採購儀表板</a></li>
                 <li><a href="/order_query">訂單查詢</a></li>
                 <li><a href="/admin_dashboard">後台管理</a></li>
+                {% if is_admin %}
                 <li><a href="/part-drawing-management" class="active">品號-圖號維護</a></li>
                 <li><a href="/component-requirements">成品組件需求</a></li>
+                {% endif %}
             </ul>
         </nav>
 
