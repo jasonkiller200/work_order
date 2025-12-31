@@ -71,13 +71,26 @@ class WorkOrderStatsService:
             result = {}
             for _, row in df.iterrows():
                 order_id = row['半品工單號碼']
-                result[order_id] = {
-                    '品名': str(row.get('品號說明', '')) if pd.notna(row.get('品號說明')) else '',
-                    '需求日期': row['生產開始'].strftime('%Y-%m-%d') if pd.notna(row.get('生產開始')) else '',
-                    '對應成品': str(row.get('成品工單號碼', '')) if pd.notna(row.get('成品工單號碼')) else '',
-                    '機型': str(row.get('品號說明.1', '')) if pd.notna(row.get('品號說明.1')) else '',
-                    '成品出貨日': row['生產結束.1'].strftime('%Y-%m-%d') if pd.notna(row.get('生產結束.1')) else ''
-                }
+                
+                # 檢查成品工單號碼是否為空
+                finished_order = str(row.get('成品工單號碼', '')) if pd.notna(row.get('成品工單號碼')) else ''
+                
+                if finished_order:  # 成品工單號碼不為空
+                    result[order_id] = {
+                        '品名': str(row.get('品號說明', '')) if pd.notna(row.get('品號說明')) else '',
+                        '對應成品': finished_order,
+                        '機型': str(row.get('品號說明.1', '')) if pd.notna(row.get('品號說明.1')) else '',
+                        '成品出貨日': row['生產結束.1'].strftime('%Y-%m-%d') if pd.notna(row.get('生產結束.1')) else '',
+                        '在半品總表': True
+                    }
+                else:  # 成品工單號碼為空，使用訂單號碼和客戶名稱
+                    result[order_id] = {
+                        '品名': str(row.get('品號說明', '')) if pd.notna(row.get('品號說明')) else '',
+                        '對應成品': str(row.get('訂單號碼', '')) if pd.notna(row.get('訂單號碼')) else '',
+                        '機型': str(row.get('客戶名稱', '')) if pd.notna(row.get('客戶名稱')) else '',
+                        '成品出貨日': row['生產結束.1'].strftime('%Y-%m-%d') if pd.notna(row.get('生產結束.1')) else '',
+                        '在半品總表': True
+                    }
             
             cls._semi_finished_cache['data'] = result
             cls._semi_finished_cache['last_loaded'] = get_taiwan_time()
@@ -133,15 +146,29 @@ class WorkOrderStatsService:
                 # 從半品總表取得對應資訊
                 semi_info = semi_finished_map.get(order_id, {})
                 
-                orders_list.append({
-                    '工單號碼': order_id,
-                    '品名': semi_info.get('品名', ''),
-                    '需求日期': semi_info.get('需求日期', '') or stats.get('earliest_date', ''),
-                    '缺料筆數': stats.get('shortage_count', 0),
-                    '對應成品': semi_info.get('對應成品', ''),
-                    '機型': semi_info.get('機型', ''),
-                    '成品出貨日': semi_info.get('成品出貨日', '')
-                })
+                # 判斷是否在半品總表內
+                if semi_info.get('在半品總表'):
+                    # 在半品總表內，使用半品總表的資訊
+                    orders_list.append({
+                        '工單號碼': order_id,
+                        '品名': semi_info.get('品名', ''),
+                        '需求日期': stats.get('earliest_date', ''),  # 使用元件需求日期
+                        '缺料筆數': stats.get('shortage_count', 0),
+                        '對應成品': semi_info.get('對應成品', ''),
+                        '機型': semi_info.get('機型', ''),
+                        '成品出貨日': semi_info.get('成品出貨日', '')
+                    })
+                else:
+                    # 不在半品總表內，機型顯示"預備用料"
+                    orders_list.append({
+                        '工單號碼': order_id,
+                        '品名': '',
+                        '需求日期': stats.get('earliest_date', ''),
+                        '缺料筆數': stats.get('shortage_count', 0),
+                        '對應成品': '',
+                        '機型': '預備用料',
+                        '成品出貨日': ''
+                    })
             
             # 搜尋過濾
             if search:
