@@ -466,25 +466,31 @@ function loadPurchaseOrders(materialId) {
     poSection.style.display = 'block';
     poTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">載入中...</td></tr>';
 
-    // 🆕 同時載入採購單和分批交期資料
+    // 🆕 同時載入採購單、鑄件訂單和分批交期資料
     Promise.all([
         fetch(`/api/purchase_orders/${materialId}`).then(r => r.json()),
+        fetch(`/api/casting_orders/${materialId}`).then(r => r.json()),
         fetch(`/api/delivery/${materialId}`).then(r => r.json())
     ])
-        .then(([purchaseOrders, deliveryData]) => {
+        .then(([purchaseOrders, castingOrders, deliveryData]) => {
             if (purchaseOrders.error) {
-                poTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">${purchaseOrders.error}</td></tr>`;
-                return;
+                purchaseOrders = [];
+            }
+            if (castingOrders.error) {
+                castingOrders = [];
             }
 
-            if (purchaseOrders.length === 0) {
+            const hasPurchaseOrders = purchaseOrders.length > 0;
+            const hasCastingOrders = castingOrders.length > 0;
+
+            if (!hasPurchaseOrders && !hasCastingOrders) {
                 // 🆕 友善的無採購單提示
                 poTbody.innerHTML = `
                     <tr>
                         <td colspan="6" style="text-align: center; padding: 2em;">
                             <div style="background: var(--pico-card-background-color, #1a1f36); padding: 1.5em; border-radius: 8px; border: 1px solid var(--pico-muted-border-color);">
                                 <div style="font-size: 2em; margin-bottom: 0.5em;">📋</div>
-                                <div style="font-weight: bold; margin-bottom: 0.5em; color: var(--pico-primary, #3b82f6); font-size: 1.1em;">此物料目前無採購單記錄</div>
+                                <div style="font-weight: bold; margin-bottom: 0.5em; color: var(--pico-primary, #3b82f6); font-size: 1.1em;">此物料目前無採購單/鑄件訂單記錄</div>
                                 <div style="font-size: 0.9em; color: var(--pico-color, #d1d5db);">
                                     您可以在下方「📅 交期維護」中直接填寫預計交期<br>
                                     <small style="color: var(--pico-muted-color, #9ca3af); margin-top: 0.3em; display: inline-block;">
@@ -514,8 +520,8 @@ function loadPurchaseOrders(materialId) {
                     .sort((a, b) => new Date(a.expected_date) - new Date(b.expected_date));
             });
 
-            // 渲染表格
-            renderPurchaseOrdersTable(purchaseOrders);
+            // 渲染表格 (包含採購單和鑄件訂單)
+            renderPurchaseOrdersTable(purchaseOrders, castingOrders);
 
             // 填充選擇器
             populatePOSelect(purchaseOrders);
@@ -526,7 +532,7 @@ function loadPurchaseOrders(materialId) {
         });
 }
 
-function renderPurchaseOrdersTable(purchaseOrders) {
+function renderPurchaseOrdersTable(purchaseOrders, castingOrders = []) {
     const poTbody = document.getElementById('purchase-orders-tbody');
     if (!poTbody) return;
 
@@ -537,22 +543,31 @@ function renderPurchaseOrdersTable(purchaseOrders) {
     const firstShortage = demandDetails.find(d => (d.remaining_stock || 0) < 0);
 
     let html = '';
-    purchaseOrders.forEach(po => {
-        let status = '';
-        if (po.outstanding_quantity <= 0) {
-            status = '<span style="color: #4caf50;">✓ 已完成</span>';
-        } else if (po.delivery_schedules && po.delivery_schedules.length > 0) {
-            status = `<span style="color: #2196f3;">📦 ${po.delivery_schedules.length}批</span>`;
-        } else {
-            status = '<span style="color: #ff9800;">待交貨</span>';
-        }
 
-        let deliveryHTML = '';
-        if (po.delivery_schedules && po.delivery_schedules.length > 0) {
-            deliveryHTML = po.delivery_schedules.map((schedule, idx) => {
-                const scheduleDate = new Date(schedule.expected_date);
+    // 🆕 如果有鑄件訂單，先顯示鑄件訂單區塊
+    if (castingOrders && castingOrders.length > 0) {
+        html += `
+            <tr>
+                <td colspan="6" style="background: rgba(255, 152, 0, 0.1); padding: 0.5em 1em; font-weight: bold; color: #ff9800;">
+                    🔧 鑄件訂單（4開頭）- 共 ${castingOrders.length} 筆
+                </td>
+            </tr>
+        `;
+
+        castingOrders.forEach(co => {
+            let status = '';
+            if (co.outstanding_quantity <= 0) {
+                status = '<span style="color: #4caf50;">✓ 已完成</span>';
+            } else {
+                status = '<span style="color: #ff9800;">待交貨</span>';
+            }
+
+            // 計算預計完成日期與今天的差距
+            let deliveryHTML = '-';
+            if (co.expected_date) {
+                const expectedDate = new Date(co.expected_date);
                 const today = new Date();
-                const diffDays = Math.ceil((scheduleDate - today) / (1000 * 60 * 60 * 24));
+                const diffDays = Math.ceil((expectedDate - today) / (1000 * 60 * 60 * 24));
 
                 let colorStyle = '';
                 if (diffDays < 0) {
@@ -563,61 +578,110 @@ function renderPurchaseOrdersTable(purchaseOrders) {
                     colorStyle = 'color: #4caf50; font-weight: bold;';
                 }
 
-                const batchLabel = idx === 0 ? '' : `<small style="color: #666;">第${idx + 1}批: </small>`;
+                deliveryHTML = `<span style="${colorStyle}">${co.expected_date}</span>`;
+            }
 
-                // 🆕 如果是第一筆且有欠料需求,檢查是否延遲
-                let shortageInfo = '';
-                if (idx === 0 && firstShortage) {
-                    console.log('🔍 檢查延遲:', {
-                        firstShortage,
-                        scheduleDate: schedule.expected_date,
-                        demandDate: firstShortage['需求日期'],
-                        remaining_stock: firstShortage.remaining_stock
-                    });
+            html += `
+                <tr style="background: rgba(255, 152, 0, 0.03);">
+                    <td>${co.order_number}</td>
+                    <td><small style="color: #888;">鑄件生產</small></td>
+                    <td>
+                        訂購: ${co.ordered_quantity}<br>
+                        <small style="color: #666;">未交: ${co.outstanding_quantity}</small>
+                    </td>
+                    <td style="min-width: 180px;">${deliveryHTML}</td>
+                    <td>${status}</td>
+                    <td>
+                        <small style="color: #888;">${co.system_status || '-'}</small>
+                    </td>
+                </tr>
+            `;
+        });
+    }
 
-                    const demandDate = new Date(firstShortage['需求日期']);
-                    if (scheduleDate > demandDate) {
-                        const delayDays = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
-                        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-                        const warningColor = isDarkMode ? '#ffcdd2' : '#c62828';
-                        shortageInfo = `<br><small style="color: ${warningColor}; font-size: 0.75em;">⚠️ 工單 ${firstShortage['訂單']} 需求 ${firstShortage['需求日期']} 延遲 ${delayDays}天</small>`;
-                        console.log('✅ 延遲警告已生成:', shortageInfo);
-                    } else {
-                        console.log('❌ 交期未延遲');
-                    }
-                } else {
-                    console.log('❌ 無延遲檢查:', { idx, hasFirstShortage: !!firstShortage });
-                }
-
-                return `<div style="margin-bottom: 0.3em;">
-                    ${batchLabel}<span style="${colorStyle}">${schedule.expected_date}</span> 
-                    <small style="color: #888;">(${Math.round(schedule.quantity)}件)</small>${shortageInfo}
-                </div>`;
-            }).join('');
-        } else {
-            // 沒有分批交期,顯示原始交期
-            const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '-';
-            deliveryHTML = deliveryDate;
+    // 🆕 如果有採購單，顯示採購單區塊
+    if (purchaseOrders && purchaseOrders.length > 0) {
+        if (castingOrders && castingOrders.length > 0) {
+            // 如果有鑄件訂單，加個分隔標題
+            html += `
+                <tr>
+                    <td colspan="6" style="background: rgba(33, 150, 243, 0.1); padding: 0.5em 1em; font-weight: bold; color: #2196f3;">
+                        📦 採購單 - 共 ${purchaseOrders.length} 筆
+                    </td>
+                </tr>
+            `;
         }
 
-        html += `
-            <tr>
-                <td>${po.po_number}</td>
-                <td>${po.supplier || '-'}</td>
-                <td>
-                    訂購: ${po.ordered_quantity}<br>
-                    <small style="color: #666;">未交: ${po.outstanding_quantity}</small>
-                </td>
-                <td style="min-width: 180px;">${deliveryHTML}</td>
-                <td>${status}</td>
-                <td>
-                    <button class="small secondary" onclick="fillDeliveryFormFromPO('${po.po_number}')">
-                        帶入
-                    </button>
-                </td>
-            </tr>
-        `;
-    });
+        purchaseOrders.forEach(po => {
+            let status = '';
+            if (po.outstanding_quantity <= 0) {
+                status = '<span style="color: #4caf50;">✓ 已完成</span>';
+            } else if (po.delivery_schedules && po.delivery_schedules.length > 0) {
+                status = `<span style="color: #2196f3;">📦 ${po.delivery_schedules.length}批</span>`;
+            } else {
+                status = '<span style="color: #ff9800;">待交貨</span>';
+            }
+
+            let deliveryHTML = '';
+            if (po.delivery_schedules && po.delivery_schedules.length > 0) {
+                deliveryHTML = po.delivery_schedules.map((schedule, idx) => {
+                    const scheduleDate = new Date(schedule.expected_date);
+                    const today = new Date();
+                    const diffDays = Math.ceil((scheduleDate - today) / (1000 * 60 * 60 * 24));
+
+                    let colorStyle = '';
+                    if (diffDays < 0) {
+                        colorStyle = 'color: #d32f2f; font-weight: bold;';
+                    } else if (diffDays <= 7) {
+                        colorStyle = 'color: #ff9800; font-weight: bold;';
+                    } else if (diffDays <= 30) {
+                        colorStyle = 'color: #4caf50; font-weight: bold;';
+                    }
+
+                    const batchLabel = idx === 0 ? '' : `<small style="color: #666;">第${idx + 1}批: </small>`;
+
+                    // 如果是第一筆且有欠料需求,檢查是否延遲
+                    let shortageInfo = '';
+                    if (idx === 0 && firstShortage) {
+                        const demandDate = new Date(firstShortage['需求日期']);
+                        if (scheduleDate > demandDate) {
+                            const delayDays = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
+                            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+                            const warningColor = isDarkMode ? '#ffcdd2' : '#c62828';
+                            shortageInfo = `<br><small style="color: ${warningColor}; font-size: 0.75em;">⚠️ 工單 ${firstShortage['訂單']} 需求 ${firstShortage['需求日期']} 延遲 ${delayDays}天</small>`;
+                        }
+                    }
+
+                    return `<div style="margin-bottom: 0.3em;">
+                        ${batchLabel}<span style="${colorStyle}">${schedule.expected_date}</span> 
+                        <small style="color: #888;">(${Math.round(schedule.quantity)}件)</small>${shortageInfo}
+                    </div>`;
+                }).join('');
+            } else {
+                // 沒有分批交期,顯示原始交期
+                const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '-';
+                deliveryHTML = deliveryDate;
+            }
+
+            html += `
+                <tr>
+                    <td>${po.po_number}</td>
+                    <td>${po.supplier || '-'}</td>
+                    <td>
+                        訂購: ${po.ordered_quantity}<br>
+                        <small style="color: #666;">未交: ${po.outstanding_quantity}</small>
+                    </td>
+                    <td style="min-width: 180px;">${deliveryHTML}</td>
+                    <td>${status}</td>
+                    <td>
+                        <button class="small secondary" onclick="fillDeliveryFormFromPO('${po.po_number}')">
+                            帶入
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
 
     poTbody.innerHTML = html;
 
