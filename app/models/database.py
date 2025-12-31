@@ -300,3 +300,42 @@ class SubstituteNotification(db.Model):
     
     def __repr__(self):
         return f'<SubstituteNotification {self.material_id} -> {self.substitute_material_id}>'
+
+
+class CastingOrder(db.Model):
+    """鑄件訂單（鑄件未交）"""
+    __tablename__ = 'casting_orders'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    order_number = db.Column(db.String(50), unique=True, nullable=False, index=True)  # 4開頭訂單號
+    material_id = db.Column(db.String(50), nullable=False, index=True)  # 物料編號
+    
+    # 訂單資訊
+    description = db.Column(db.String(500))  # 物料說明
+    order_type = db.Column(db.String(20))  # 訂單類型 (ZP04)
+    ordered_quantity = db.Column(db.Numeric(15, 3), nullable=False)  # 訂單數量
+    received_quantity = db.Column(db.Numeric(15, 3), default=0)  # 已交貨數量
+    outstanding_quantity = db.Column(db.Numeric(15, 3), nullable=False)  # 未交數量
+    
+    # 日期資訊
+    issue_date = db.Column(db.Date)  # 核發日期（實際）
+    start_date = db.Column(db.Date)  # 基本開始日期
+    expected_date = db.Column(db.Date)  # 基本完成日期
+    create_date = db.Column(db.Date)  # 建立日期
+    
+    # 其他資訊
+    system_status = db.Column(db.String(100))  # 系統狀態
+    creator = db.Column(db.String(50))  # 輸入者
+    mrp_area = db.Column(db.String(20))  # MRP 範圍
+    storage_location = db.Column(db.String(10))  # 儲存地點
+    
+    # 狀態
+    status = db.Column(db.String(20), default='pending')  # pending, partial, completed
+    
+    # 系統欄位
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
+    
+    def __repr__(self):
+        return f'<CastingOrder {self.order_number}>'
+

@@ -360,25 +360,141 @@ class DataService:
     
     @staticmethod
     def _load_on_order_data():
-        """載入已訂未交資料並同步到資料庫"""
+        """載入已訂未交資料並同步到資料庫（包含鑄件未交）"""
         on_order_path = FilePaths.ON_ORDER_FILE
+        casting_order_path = FilePaths.CASTING_ORDER_FILE
         
+        # 載入已訂未交
         if not os.path.exists(on_order_path):
             app_logger.warning("警告：找不到 '已訂未交.XLSX' 檔案。")
-            return pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
+            df_on_order = pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
+        else:
+            df_on_order = pd.read_excel(on_order_path)
+            app_logger.info(f"已讀取 {len(df_on_order)} 筆採購單資料")
+            
+            # 同步到資料庫
+            try:
+                DataService._sync_purchase_orders_to_db(df_on_order)
+                app_logger.info("採購單同步完成")
+            except Exception as e:
+                app_logger.error(f"採購單同步失敗: {e}", exc_info=True)
         
-        # 讀取 Excel 檔案
-        df_on_order = pd.read_excel(on_order_path)
-        app_logger.info(f"已讀取 {len(df_on_order)} 筆採購單資料")
+        # 載入鑄件未交
+        df_casting = pd.DataFrame()
+        if os.path.exists(casting_order_path):
+            try:
+                df_casting = pd.read_excel(casting_order_path)
+                app_logger.info(f"已讀取 {len(df_casting)} 筆鑄件訂單資料")
+                
+                # 計算未交數量
+                df_casting['未交數量'] = df_casting['訂單數量 (GMEIN)'] - df_casting['已交貨數量 (GMEIN)']
+                df_casting = df_casting[df_casting['未交數量'] > 0]  # 只保留有未交的
+                
+                # 同步到資料庫
+                DataService._sync_casting_orders_to_db(df_casting)
+                app_logger.info("鑄件訂單同步完成")
+                
+            except Exception as e:
+                app_logger.error(f"載入鑄件未交失敗: {e}", exc_info=True)
+        else:
+            app_logger.warning("警告：找不到 '鑄件未交.XLSX' 檔案。")
         
-        # 同步到資料庫
-        try:
-            DataService._sync_purchase_orders_to_db(df_on_order)
-            app_logger.info("採購單同步完成")
-        except Exception as e:
-            app_logger.error(f"採購單同步失敗: {e}", exc_info=True)
+        # 合併統計用資料
+        # 已訂未交使用 '仍待交貨〈數量〉'
+        # 鑄件未交使用計算的 '未交數量'
+        combined_data = []
         
-        return df_on_order
+        if not df_on_order.empty and '物料' in df_on_order.columns and '仍待交貨〈數量〉' in df_on_order.columns:
+            for _, row in df_on_order.iterrows():
+                combined_data.append({
+                    '物料': str(row['物料']),
+                    '仍待交貨〈數量〉': float(row['仍待交貨〈數量〉'] or 0)
+                })
+        
+        if not df_casting.empty:
+            for _, row in df_casting.iterrows():
+                combined_data.append({
+                    '物料': str(row['物料']),
+                    '仍待交貨〈數量〉': float(row['未交數量'] or 0)
+                })
+        
+        if combined_data:
+            df_combined = pd.DataFrame(combined_data)
+            app_logger.info(f"合併已訂未交統計：採購單 {len(df_on_order)} + 鑄件 {len(df_casting)} = {len(df_combined)} 筆")
+            return df_combined
+        
+        return pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
+    
+    @staticmethod
+    def _sync_casting_orders_to_db(df_casting):
+        """同步鑄件訂單到資料庫"""
+        from app.models.database import db, CastingOrder
+        
+        existing_orders = {co.order_number: co for co in CastingOrder.query.all()}
+        excel_order_numbers = set()
+        
+        for _, row in df_casting.iterrows():
+            order_number = str(row['訂單'])
+            excel_order_numbers.add(order_number)
+            
+            material_id = str(row['物料'])
+            ordered_qty = float(row.get('訂單數量 (GMEIN)', 0) or 0)
+            received_qty = float(row.get('已交貨數量 (GMEIN)', 0) or 0)
+            outstanding_qty = ordered_qty - received_qty
+            
+            # 日期處理
+            issue_date = pd.to_datetime(row.get('核發日期（實際）'), errors='coerce')
+            start_date = pd.to_datetime(row.get('基本開始日期'), errors='coerce')
+            expected_date = pd.to_datetime(row.get('基本完成日期'), errors='coerce')
+            create_date = pd.to_datetime(row.get('建立日期'), errors='coerce')
+            
+            if order_number in existing_orders:
+                # 更新現有記錄
+                co = existing_orders[order_number]
+                co.material_id = material_id
+                co.description = str(row.get('物料說明', ''))
+                co.order_type = str(row.get('訂單類型', ''))
+                co.ordered_quantity = ordered_qty
+                co.received_quantity = received_qty
+                co.outstanding_quantity = outstanding_qty
+                co.issue_date = issue_date.date() if pd.notna(issue_date) else None
+                co.start_date = start_date.date() if pd.notna(start_date) else None
+                co.expected_date = expected_date.date() if pd.notna(expected_date) else None
+                co.create_date = create_date.date() if pd.notna(create_date) else None
+                co.system_status = str(row.get('系統狀態', ''))
+                co.creator = str(row.get('輸入者', ''))
+                co.mrp_area = str(row.get('MRP 範圍', ''))
+                co.storage_location = str(row.get('儲存地點', ''))
+                co.status = 'pending' if outstanding_qty > 0 else 'completed'
+            else:
+                # 新增記錄
+                new_co = CastingOrder(
+                    order_number=order_number,
+                    material_id=material_id,
+                    description=str(row.get('物料說明', '')),
+                    order_type=str(row.get('訂單類型', '')),
+                    ordered_quantity=ordered_qty,
+                    received_quantity=received_qty,
+                    outstanding_quantity=outstanding_qty,
+                    issue_date=issue_date.date() if pd.notna(issue_date) else None,
+                    start_date=start_date.date() if pd.notna(start_date) else None,
+                    expected_date=expected_date.date() if pd.notna(expected_date) else None,
+                    create_date=create_date.date() if pd.notna(create_date) else None,
+                    system_status=str(row.get('系統狀態', '')),
+                    creator=str(row.get('輸入者', '')),
+                    mrp_area=str(row.get('MRP 範圍', '')),
+                    storage_location=str(row.get('儲存地點', '')),
+                    status='pending' if outstanding_qty > 0 else 'completed'
+                )
+                db.session.add(new_co)
+        
+        # 標記已完成的訂單（不在 Excel 中的）
+        for order_number, co in existing_orders.items():
+            if order_number not in excel_order_numbers and co.status != 'completed':
+                co.status = 'completed'
+                app_logger.info(f"鑄件訂單 {order_number} 已從清單中移除，標記為已完成")
+        
+        db.session.commit()
     
     @staticmethod
     def _build_main_dataframe(df_total_demand, df_inventory, df_total_on_order, df_demand, material_buyer_map=None, demand_details_map=None, part_drawing_map=None, delivery_schedules_map=None):

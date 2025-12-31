@@ -862,8 +862,55 @@ def get_purchase_order_detail(po_number):
 
 
 # ============================================================================
+# 鑄件訂單 API
+# ============================================================================
+
+@api_bp.route('/casting_orders/<material_id>')
+@cache_required
+def get_casting_orders_by_material(material_id):
+    """
+    根據物料編號查詢相關的鑄件訂單（4開頭訂單）
+    只顯示未結案的訂單 (status != 'completed')
+    """
+    try:
+        from app.models.database import CastingOrder
+        
+        # 查詢該物料的所有「未結案」鑄件訂單，按預計完成日期排序
+        casting_orders = CastingOrder.query.filter(
+            CastingOrder.material_id == material_id,
+            CastingOrder.status != 'completed'
+        ).order_by(CastingOrder.expected_date).all()
+        
+        result = []
+        for co in casting_orders:
+            result.append({
+                'order_number': co.order_number,
+                'description': co.description,
+                'order_type': co.order_type,
+                'ordered_quantity': float(co.ordered_quantity),
+                'received_quantity': float(co.received_quantity or 0),
+                'outstanding_quantity': float(co.outstanding_quantity),
+                'issue_date': co.issue_date.strftime('%Y-%m-%d') if co.issue_date else '',
+                'start_date': co.start_date.strftime('%Y-%m-%d') if co.start_date else '',
+                'expected_date': co.expected_date.strftime('%Y-%m-%d') if co.expected_date else '',
+                'system_status': co.system_status,
+                'creator': co.creator,
+                'mrp_area': co.mrp_area,
+                'storage_location': co.storage_location,
+                'status': co.status
+            })
+            
+        return jsonify(result)
+        
+    except Exception as e:
+        app_logger.error(f"查詢物料 {material_id} 的鑄件訂單失敗: {e}", exc_info=True)
+        return jsonify({"error": "查詢鑄件訂單失敗"}), 500
+
+
+# ============================================================================
 # 品號-圖號對照表 API
 # ============================================================================
+
 
 @api_bp.route('/part-drawing/<part_number>')
 def get_part_drawing(part_number):
