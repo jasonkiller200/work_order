@@ -28,3 +28,8 @@ class Config:
     USERS = {
         "admin": "password123"
     }
+    
+    # 工單總表下載設定
+    WORK_ORDER_BOOK_NAME = "工單總表2025.xls"
+    WORK_ORDER_DOWNLOAD_URL = "http://eip.hartford.com.tw/DocLib1/"
+

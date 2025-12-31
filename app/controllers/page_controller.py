@@ -54,3 +54,10 @@ def component_requirements():
     """成品組件需求維護頁面"""
     TrafficService.record_page_view('component_requirements.html', request.remote_addr)
     return render_template('component_requirements.html', is_admin=True)
+
+@page_bp.route('/work-order-statistics')
+def work_order_statistics():
+    """工單詳情統計頁面"""
+    TrafficService.record_page_view('work_order_statistics.html', request.remote_addr)
+    return render_template('work_order_statistics.html', is_admin=get_is_admin())
+

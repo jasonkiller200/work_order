@@ -304,24 +304,57 @@ class DataService:
     
     @staticmethod
     def _load_work_order_summary():
-        """載入工單總表"""
-        work_order_summary_path = FilePaths.WORK_ORDER_SUMMARY_FILE
+        """載入工單總表（從 URL 下載）"""
+        import requests
+        from io import BytesIO
+        from app.config.settings import Config
+        
         df_work_order_summary = pd.DataFrame()
         
-        if os.path.exists(work_order_summary_path):
-            try:
-                df_work_order_summary = pd.read_excel(
-                    work_order_summary_path, 
-                    sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET
-                )
-                # 重新命名欄位以匹配預期
-                if '品號說明' in df_work_order_summary.columns and '物料說明' not in df_work_order_summary.columns:
-                    df_work_order_summary.rename(columns={'品號說明': '物料說明'}, inplace=True)
-                app_logger.info(f"DEBUG: df_work_order_summary 欄位: {df_work_order_summary.columns.tolist()}")
-            except Exception as e:
-                app_logger.error(f"載入 '{work_order_summary_path}' 的 '{FilePaths.WORK_ORDER_SUMMARY_SHEET}' 頁籤時發生錯誤: {e}")
-        else:
-            app_logger.warning(f"警告：找不到 '{work_order_summary_path}' 檔案。工單摘要資訊將無法載入。")
+        try:
+            # 從設定取得檔案名稱和 URL
+            bookname = Config.WORK_ORDER_BOOK_NAME
+            base_url = Config.WORK_ORDER_DOWNLOAD_URL
+            url = f"{base_url}{bookname}"
+            
+            app_logger.info(f"正在從 URL 下載工單總表: {url}")
+            
+            # 下載檔案
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            
+            # 從記憶體讀取 Excel
+            excel_data = BytesIO(response.content)
+            df_work_order_summary = pd.read_excel(
+                excel_data, 
+                sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET
+            )
+            
+            # 重新命名欄位以匹配預期
+            if '品號說明' in df_work_order_summary.columns and '物料說明' not in df_work_order_summary.columns:
+                df_work_order_summary.rename(columns={'品號說明': '物料說明'}, inplace=True)
+            
+            app_logger.info(f"工單總表下載成功，共 {len(df_work_order_summary)} 筆資料")
+            app_logger.info(f"DEBUG: df_work_order_summary 欄位: {df_work_order_summary.columns.tolist()}")
+            
+        except requests.exceptions.RequestException as e:
+            app_logger.error(f"下載工單總表失敗: {e}")
+            # 嘗試讀取本地備份
+            local_path = FilePaths.WORK_ORDER_SUMMARY_FILE
+            if os.path.exists(local_path):
+                app_logger.info(f"嘗試讀取本地檔案: {local_path}")
+                try:
+                    df_work_order_summary = pd.read_excel(
+                        local_path, 
+                        sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET
+                    )
+                    if '品號說明' in df_work_order_summary.columns and '物料說明' not in df_work_order_summary.columns:
+                        df_work_order_summary.rename(columns={'品號說明': '物料說明'}, inplace=True)
+                    app_logger.info(f"本地檔案讀取成功")
+                except Exception as ex:
+                    app_logger.error(f"讀取本地檔案也失敗: {ex}")
+        except Exception as e:
+            app_logger.error(f"載入工單總表時發生錯誤: {e}")
         
         return df_work_order_summary
     

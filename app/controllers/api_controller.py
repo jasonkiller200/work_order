@@ -1569,3 +1569,73 @@ def batch_import_component_requirements():
         db.session.rollback()
         app_logger.error(f"批量匯入成品組件需求失敗: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+# =================== 工單詳情統計 API ===================
+
+@api_bp.route('/work-order-statistics')
+def get_work_order_statistics():
+    """取得工單詳情統計資料"""
+    try:
+        from app.services.work_order_stats_service import WorkOrderStatsService
+        
+        # 取得查詢參數
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        search = request.args.get('search', '')
+        sort_by = request.args.get('sort_by', '生產開始')
+        sort_order = request.args.get('sort_order', 'asc')
+        
+        result = WorkOrderStatsService.get_work_order_statistics(
+            page=page,
+            per_page=per_page,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        
+        return jsonify(result)
+    
+    except Exception as e:
+        app_logger.error(f"取得工單統計失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/work-order-statistics/<order_id>/shortage-details')
+def get_order_shortage_details(order_id):
+    """取得特定工單的缺料物料明細"""
+    try:
+        from app.services.work_order_stats_service import WorkOrderStatsService
+        
+        details = WorkOrderStatsService.get_order_shortage_details(order_id)
+        
+        return jsonify({
+            'order_id': order_id,
+            'shortage_count': len([d for d in details if d.get('是否缺料')]),
+            'total_materials': len(details),
+            'details': details
+        })
+    
+    except Exception as e:
+        app_logger.error(f"取得工單缺料明細失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/work-order-statistics/export')
+def export_work_order_statistics():
+    """匯出工單統計資料供 Excel 下載"""
+    try:
+        from app.services.work_order_stats_service import WorkOrderStatsService
+        
+        search = request.args.get('search', '')
+        data = WorkOrderStatsService.get_all_data_for_export(search=search)
+        
+        return jsonify({
+            'data': data,
+            'total': len(data)
+        })
+    
+    except Exception as e:
+        app_logger.error(f"匯出工單統計失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+

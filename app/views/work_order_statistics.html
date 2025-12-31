@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工單詳情統計 - 生產資訊中心</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1234">
+    <!-- ExcelJS for Excel export -->
+    <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
+    <style>
+        .shortage-badge {
+            display: inline-block;
+            padding: 0.25em 0.6em;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .shortage-badge.has-shortage {
+            background: rgba(211, 47, 47, 0.2);
+            color: #f44336;
+        }
+        .shortage-badge.no-shortage {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+        .clickable-order {
+            cursor: pointer;
+            color: var(--pico-primary);
+            text-decoration: underline;
+        }
+        .clickable-order:hover {
+            color: var(--pico-primary-hover);
+        }
+        .clickable-material {
+            cursor: pointer;
+            color: var(--pico-primary);
+        }
+        .clickable-material:hover {
+            text-decoration: underline;
+        }
+        .shortage-row {
+            background: rgba(211, 47, 47, 0.1);
+        }
+        .filter-controls {
+            margin-bottom: 1.5em;
+        }
+        .filter-row {
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+        #shortage-details-tbody tr.shortage-row td:first-child::before {
+            content: "⚠️ ";
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <header>
+            <h1>生產資訊中心</h1>
+            <p>一個整合工單料況、庫存與規格的查詢系統</p>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="/procurement">採購儀表板</a></li>
+                <li><a href="/order_query">訂單查詢</a></li>
+                <li><a href="/open-purchase-orders">未結案採購單</a></li>
+                <li><a href="/admin_dashboard">後台管理</a></li>
+                {% if is_admin %}
+                <li><a href="/part-drawing-management">品號-圖號維護</a></li>
+                <li><a href="/component-requirements">成品組件需求</a></li>
+                {% endif %}
+                <li><a href="/work-order-statistics" class="active">工單詳情統計</a></li>
+            </ul>
+        </nav>
+
+        <hr>
+
+        <section id="work-order-stats-section">
+            <h2>📊 工單詳情統計</h2>
+            <p style="color: var(--pico-muted-color); margin-bottom: 1em;">顯示2開頭與63開頭的半品工單，計算缺料筆數依照 FIFO（日期優先、工單號次之）</p>
+
+            <!-- 篩選區塊 -->
+            <div class="filter-controls">
+                <div class="filter-row">
+                    <div style="flex: 1; min-width: 250px;">
+                        <label for="search-input">搜尋 (工單號/品名/成品)</label>
+                        <input type="text" id="search-input" placeholder="輸入工單號碼、品名或成品工單...">
+                    </div>
+                    <div style="display: flex; gap: 0.5em;">
+                        <button id="search-btn">🔍 查詢</button>
+                        <button id="clear-btn" class="secondary">清除</button>
+                        <button id="export-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出 Excel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 統計資訊 -->
+            <div id="stats-info" style="margin-bottom: 1em; color: var(--pico-muted-color);">
+                <span id="total-count">載入中...</span>
+            </div>
+
+            <!-- 資料表格 -->
+            <div style="overflow-x: auto;">
+                <table id="stats-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="半品工單號碼">工單號碼 <span class="sort-icon"></span></th>
+                            <th>品名</th>
+                            <th class="sortable" data-sort="生產開始">需求日期 <span class="sort-icon">▲</span></th>
+                            <th class="sortable" data-sort="缺料筆數">缺料筆數 <span class="sort-icon"></span></th>
+                            <th>對應成品</th>
+                            <th>機型</th>
+                            <th class="sortable" data-sort="成品出貨日">成品出貨日 <span class="sort-icon"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">載入中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分頁控制 -->
+            <div id="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em;">
+                <div>
+                    <label for="per-page-select">每頁顯示：</label>
+                    <select id="per-page-select" style="width: auto; display: inline-block;">
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                    </select>
+                </div>
+                <div id="page-info" style="display: flex; align-items: center; gap: 0.5em;">
+                    <button id="prev-page-btn" class="outline" disabled>◀ 上一頁</button>
+                    <span id="page-indicator">第 1 頁 / 共 1 頁</span>
+                    <button id="next-page-btn" class="outline" disabled>下一頁 ▶</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 缺料明細 Modal -->
+    <dialog id="shortage-modal">
+        <article style="min-width: 800px; max-width: 90vw;">
+            <header>
+                <a href="#close" aria-label="Close" class="close" id="close-shortage-modal"></a>
+                <h3 id="shortage-modal-title">工單缺料明細</h3>
+            </header>
+            <div id="shortage-modal-content">
+                <div style="margin-bottom: 1em;">
+                    <span id="shortage-summary"></span>
+                </div>
+                <div style="overflow-x: auto; max-height: 60vh;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>物料編號</th>
+                                <th>物料說明</th>
+                                <th>需求數量</th>
+                                <th>可用庫存</th>
+                                <th>狀態</th>
+                                <th>需求日期</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shortage-details-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <footer>
+                <button class="secondary" id="close-shortage-btn">關閉</button>
+            </footer>
+        </article>
+    </dialog>
+
+    <!-- 物料詳情 Modal (借用現有的) -->
+    <dialog id="material-modal">
+        <article style="min-width: 600px;">
+            <header>
+                <a href="#close" aria-label="Close" class="close" id="close-material-modal"></a>
+                <h3 id="material-modal-title">物料詳情</h3>
+            </header>
+            <div id="material-modal-content">
+                <p>載入中...</p>
+            </div>
+            <footer>
+                <button class="secondary" id="close-material-btn">關閉</button>
+            </footer>
+        </article>
+    </dialog>
+
+    <script src="{{ url_for('static', filename='js/work-order-stats.js') }}?v=1234"></script>
+</body>
+
+</html>

@@ -9,7 +9,13 @@ _*_backup_*/
 
 # 臨時檔案
 page_views.json
+
+# 資料檔案（從外部來源載入）
 工單總表*.xls
+今日入庫.xlsx
+入庫記錄_*.csv
+成品工單組件需求明細.xlsx
+採購人員.xlsx
 
 # Python
 __pycache__/
