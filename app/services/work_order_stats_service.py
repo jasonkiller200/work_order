@@ -292,6 +292,7 @@ class WorkOrderStatsService:
             demand_details_map = current_data.get('demand_details_map', {})
             inventory_data = current_data.get('inventory_data', [])
             
+            # 建立庫存對照表
             inventory_map = {}
             inventory_desc_map = {}
             for item in inventory_data:
@@ -305,39 +306,63 @@ class WorkOrderStatsService:
                 }
                 inventory_desc_map[material_id] = item.get('物料說明', '')
             
-            shortage_materials = cls._calculate_shortage_for_order(order_id, demand_details_map, inventory_map)
-            
+            # 收集該工單的所有物料需求
             order_materials = []
+            order_material_demands = {}  # 用於合併相同物料的需求
+            
             for material_id, demands in demand_details_map.items():
                 if str(material_id).startswith('08'):
                     continue
                     
                 for demand in demands:
                     if str(demand.get('訂單', '')) == order_id:
-                        inv = inventory_map.get(str(material_id), {'available': 0, 'unrestricted': 0, 'inspection': 0})
-                        is_shortage = str(material_id) in shortage_materials
+                        mat_id = str(material_id)
+                        demand_qty = float(demand.get('未結數量 (EINHEIT)', 0) or 0)
+                        demand_date = demand.get('需求日期', '')
+                        # 優先使用 demand 中的物料說明，其次才用庫存資料
+                        mat_desc = demand.get('物料說明', '') or inventory_desc_map.get(mat_id, '')
                         
-                        order_materials.append({
-                            '物料': str(material_id),
-                            '物料說明': inventory_desc_map.get(str(material_id), demand.get('物料說明', '')),
-                            '需求數量': float(demand.get('未結數量 (EINHEIT)', 0) or 0),
-                            '可用庫存': inv['available'],
-                            '未限制': inv['unrestricted'],
-                            '品檢中': inv['inspection'],
-                            '是否缺料': is_shortage,
-                            '需求日期': demand.get('需求日期', '')
-                        })
+                        if mat_id not in order_material_demands:
+                            order_material_demands[mat_id] = {
+                                '物料': mat_id,
+                                '物料說明': mat_desc,
+                                '需求數量': demand_qty,
+                                '需求日期': demand_date
+                            }
+                        else:
+                            # 合併相同物料的需求數量
+                            order_material_demands[mat_id]['需求數量'] += demand_qty
+                            # 取最早的需求日期
+                            if demand_date and (not order_material_demands[mat_id]['需求日期'] or demand_date < order_material_demands[mat_id]['需求日期']):
+                                order_material_demands[mat_id]['需求日期'] = demand_date
+                            # 如果之前沒有物料說明，更新
+                            if not order_material_demands[mat_id]['物料說明'] and mat_desc:
+                                order_material_demands[mat_id]['物料說明'] = mat_desc
             
-            seen = set()
-            unique_materials = []
-            for m in order_materials:
-                if m['物料'] not in seen:
-                    seen.add(m['物料'])
-                    unique_materials.append(m)
+            # 計算每個物料是否缺料（直接用可用庫存 vs 需求數量）
+            for mat_id, mat_data in order_material_demands.items():
+                inv = inventory_map.get(mat_id, {'available': 0, 'unrestricted': 0, 'inspection': 0})
+                demand_qty = mat_data['需求數量']
+                available = inv['available']
+                
+                # 直接比較：需求數量 > 可用庫存 就是缺料
+                is_shortage = demand_qty > available
+                
+                order_materials.append({
+                    '物料': mat_id,
+                    '物料說明': mat_data['物料說明'],
+                    '需求數量': demand_qty,
+                    '可用庫存': available,
+                    '未限制': inv['unrestricted'],
+                    '品檢中': inv['inspection'],
+                    '是否缺料': is_shortage,
+                    '需求日期': mat_data['需求日期']
+                })
             
-            unique_materials.sort(key=lambda x: (not x['是否缺料'], x['物料']))
+            # 排序：缺料的排前面
+            order_materials.sort(key=lambda x: (not x['是否缺料'], x['物料']))
             
-            return unique_materials
+            return order_materials
             
         except Exception as e:
             app_logger.error(f"取得工單缺料明細失敗: {e}", exc_info=True)
