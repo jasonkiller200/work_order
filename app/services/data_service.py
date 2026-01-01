@@ -182,6 +182,7 @@ class DataService:
                     
                     details.append({
                         '訂單': demand['訂單'],
+                        '物料說明': demand.get('物料說明', ''),  # 🆕 加入物料說明
                         '未結數量 (EINHEIT)': qty,
                         '需求日期': demand['需求日期'].strftime('%Y-%m-%d') if pd.notna(demand['需求日期']) else '',
                         'remaining_stock': running_stock  # 🆕 加入剩餘庫存
@@ -220,6 +221,7 @@ class DataService:
                     
                     details.append({
                         '訂單': demand['訂單'],
+                        '物料說明': demand.get('物料說明', ''),  # 🆕 加入物料說明
                         '未結數量 (EINHEIT)': qty,
                         '需求日期': demand['需求日期'].strftime('%Y-%m-%d') if pd.notna(demand['需求日期']) else '',
                         'remaining_stock': running_stock  # 🆕 加入剩餘庫存

@@ -369,17 +369,23 @@ class WorkOrderStatsService:
                 available = inventory_map.get(mat_id, 0)
                 unrestricted = 0
                 inspection = 0
+                mat_desc = mat_data['物料說明']  # 先使用 demand 中的物料說明
+                
+                # 從庫存資料中查詢並補充資訊
                 for item in inventory_data:
                     if str(item.get('物料', '')) == mat_id:
                         unrestricted = float(item.get('未限制', 0) or 0)
                         inspection = float(item.get('品質檢驗中', 0) or 0)
+                        # 如果 demand 中沒有物料說明，從庫存資料補充
+                        if not mat_desc:
+                            mat_desc = item.get('物料說明', '')
                         break
                 
                 is_shortage = mat_id in shortage_materials
                 
                 result.append({
                     '物料': mat_id,
-                    '物料說明': mat_data['物料說明'],
+                    '物料說明': mat_desc,  # 使用補充後的物料說明
                     '需求數量': mat_data['需求數量'],
                     '可用庫存': available,
                     '未限制': unrestricted,
