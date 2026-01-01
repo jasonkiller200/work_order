@@ -265,7 +265,8 @@ class WorkOrderStatsService:
             current_stock = remaining_stock.get(material_id, 0)
             remaining_stock[material_id] = current_stock - qty
             
-            if remaining_stock[material_id] < 0:
+            # 只有需求數量>0且剩餘庫存<0才算缺料
+            if qty > 0 and remaining_stock[material_id] < 0:
                 order_shortage_materials[order_id].add(material_id)
         
         result = {}
@@ -358,8 +359,8 @@ class WorkOrderStatsService:
                 current_stock = remaining_stock.get(mat_id, 0)
                 remaining_stock[mat_id] = current_stock - qty
                 
-                # 如果是目標工單且剩餘庫存 < 0，則該物料缺料
-                if demand['order_id'] == order_id and remaining_stock[mat_id] < 0:
+                # 如果是目標工單、需求數量>0、且剩餘庫存<0，則該物料缺料
+                if demand['order_id'] == order_id and qty > 0 and remaining_stock[mat_id] < 0:
                     shortage_materials.add(mat_id)
             
             # 組建回傳資料
