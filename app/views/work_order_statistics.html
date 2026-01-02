@@ -69,7 +69,10 @@
         }
 
         /* 固定表頭 (像 Excel 凍結窗格) */
-        #stats-table {
+        .table-container {
+            max-height: 600px;
+            overflow-y: auto;
+            overflow-x: auto;
             position: relative;
         }
 
@@ -83,6 +86,7 @@
 
         #stats-table thead th {
             background: var(--pico-background-color);
+            border-bottom: 2px solid var(--pico-muted-border-color);
         }
     </style>
 </head>
@@ -136,7 +140,7 @@
             </div>
 
             <!-- 資料表格 -->
-            <div style="overflow-x: auto;">
+            <div class="table-container">
                 <table id="stats-table">
                     <thead>
                         <tr>
