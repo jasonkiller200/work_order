@@ -81,9 +81,15 @@
             position: sticky;
             top: 0;
             z-index: 10;
-            background: var(--pico-background-color);
+            background: #11191f;
+            /* 深色主題背景 */
             border-bottom: 2px solid var(--pico-muted-border-color);
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 淺色主題背景 */
+        [data-theme="light"] #stats-table thead th {
+            background: #ffffff;
         }
     </style>
 </head>
