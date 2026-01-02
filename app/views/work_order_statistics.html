@@ -19,41 +19,51 @@
             font-weight: bold;
             font-size: 0.9em;
         }
+
         .shortage-badge.has-shortage {
             background: rgba(211, 47, 47, 0.2);
             color: #f44336;
         }
+
         .shortage-badge.no-shortage {
             background: rgba(76, 175, 80, 0.2);
             color: #4caf50;
         }
+
         .clickable-order {
             cursor: pointer;
             color: var(--pico-primary);
             text-decoration: underline;
         }
+
         .clickable-order:hover {
             color: var(--pico-primary-hover);
         }
+
         .clickable-material {
             cursor: pointer;
             color: var(--pico-primary);
         }
+
         .clickable-material:hover {
             text-decoration: underline;
         }
+
         .shortage-row {
             background: rgba(211, 47, 47, 0.1);
         }
+
         .filter-controls {
             margin-bottom: 1.5em;
         }
+
         .filter-row {
             display: flex;
             gap: 1em;
             flex-wrap: wrap;
             align-items: flex-end;
         }
+
         #shortage-details-tbody tr.shortage-row td:first-child::before {
             content: "⚠️ ";
         }
@@ -97,7 +107,8 @@
                     <div style="display: flex; gap: 0.5em;">
                         <button id="search-btn">🔍 查詢</button>
                         <button id="clear-btn" class="secondary">清除</button>
-                        <button id="export-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出 Excel</button>
+                        <button id="export-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
+                            Excel</button>
                     </div>
                 </div>
             </div>
@@ -130,10 +141,11 @@
             </div>
 
             <!-- 分頁控制 -->
-            <div id="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em;">
-                <div>
-                    <label for="per-page-select">每頁顯示：</label>
-                    <select id="per-page-select" style="width: auto; display: inline-block;">
+            <div id="pagination-controls"
+                style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em; flex-wrap: wrap; gap: 1em;">
+                <div style="display: flex; align-items: center; gap: 0.5em;">
+                    <label for="per-page-select" style="margin: 0;">每頁顯示：</label>
+                    <select id="per-page-select" style="width: 80px; display: inline-block; margin: 0;">
                         <option value="25">25</option>
                         <option value="50" selected>50</option>
                         <option value="100">100</option>
@@ -141,9 +153,12 @@
                     </select>
                 </div>
                 <div id="page-info" style="display: flex; align-items: center; gap: 0.5em;">
-                    <button id="prev-page-btn" class="outline" disabled>◀ 上一頁</button>
-                    <span id="page-indicator">第 1 頁 / 共 1 頁</span>
-                    <button id="next-page-btn" class="outline" disabled>下一頁 ▶</button>
+                    <button id="prev-page-btn" class="outline" style="margin: 0; padding: 0.5em 1em;" disabled>◀
+                        上一頁</button>
+                    <span id="page-indicator" style="min-width: 120px; text-align: center; white-space: nowrap;">第 1 頁 /
+                        共 1 頁</span>
+                    <button id="next-page-btn" class="outline" style="margin: 0; padding: 0.5em 1em;" disabled>下一頁
+                        ▶</button>
                 </div>
             </div>
         </section>
