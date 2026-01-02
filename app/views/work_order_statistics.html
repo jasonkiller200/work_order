@@ -67,6 +67,23 @@
         #shortage-details-tbody tr.shortage-row td:first-child::before {
             content: "⚠️ ";
         }
+
+        /* 固定表頭 (像 Excel 凍結窗格) */
+        #stats-table {
+            position: relative;
+        }
+
+        #stats-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--pico-background-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        #stats-table thead th {
+            background: var(--pico-background-color);
+        }
     </style>
 </head>
 
