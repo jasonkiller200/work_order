@@ -416,12 +416,17 @@ class WorkOrderStatsService:
                 app_logger.info(f"工單統計：採購資料欄位: {first_item_keys}")
             
             procurement_map = {}
-            for item in procurement_data:
+            for idx, item in enumerate(procurement_data):
                 material_id = str(item.get('物料', ''))
                 if material_id:  # 只處理非空的物料編號
                     # 從 delivery_schedules 中取得最早的交貨日期
                     delivery_schedules = item.get('delivery_schedules', [])
                     earliest_delivery = ''
+                    
+                    # Debug: 顯示第一筆資料的 delivery_schedules
+                    if idx == 0:
+                        app_logger.info(f"工單統計：第一筆物料 {material_id} 的 delivery_schedules: {delivery_schedules}")
+                    
                     if delivery_schedules and len(delivery_schedules) > 0:
                         # delivery_schedules 是一個陣列，每個元素有 '交貨日期' 欄位
                         # 取得最早的日期
