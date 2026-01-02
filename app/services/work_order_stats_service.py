@@ -407,7 +407,7 @@ class WorkOrderStatsService:
             result = []
             
             # 取得採購儀表板資料（用於採購人員和預計交貨日）
-            procurement_data = current_data.get('main_data', [])
+            procurement_data = current_data.get('materials_dashboard', [])
             app_logger.info(f"工單統計：採購儀表板資料筆數: {len(procurement_data)}")
             
             procurement_map = {}
