@@ -2,6 +2,7 @@
 # 工單詳情統計服務
 
 import logging
+import os
 import pandas as pd
 from io import BytesIO
 from collections import defaultdict
@@ -25,26 +26,66 @@ class WorkOrderStatsService:
     
     @classmethod
     def _load_semi_finished_table(cls):
-        """載入半品總表（從 URL 下載），5分鐘快取"""
+        """載入半品總表（從 URL 下載或本地檔案），5分鐘快取"""
         # 檢查快取
         if cls._semi_finished_cache['last_loaded']:
             elapsed = (get_taiwan_time() - cls._semi_finished_cache['last_loaded']).total_seconds()
             if elapsed < 300 and cls._semi_finished_cache['data'] is not None:
                 return cls._semi_finished_cache['data']
         
+        # 嘗試導入 requests
         try:
-            bookname = Config.WORK_ORDER_BOOK_NAME
-            base_url = Config.WORK_ORDER_DOWNLOAD_URL
-            url = f"{base_url}{bookname}"
-            
-            app_logger.info(f"工單統計：正在從 URL 下載半品總表: {url}")
-            
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            
-            excel_data = BytesIO(response.content)
-            df = pd.read_excel(excel_data, sheet_name='半品總表')
-            
+            import requests
+            has_requests = True
+        except ImportError:
+            has_requests = False
+            app_logger.warning("工單統計：requests 模組未安裝，將使用本地檔案")
+        
+        df = None
+        
+        # 嘗試從 URL 下載
+        if has_requests:
+            try:
+                bookname = Config.WORK_ORDER_BOOK_NAME
+                base_url = Config.WORK_ORDER_DOWNLOAD_URL
+                url = f"{base_url}{bookname}"
+                
+                app_logger.info(f"工單統計：正在從 URL 下載半品總表: {url}")
+                
+                response = requests.get(url, timeout=30)
+                response.raise_for_status()
+                
+                excel_data = BytesIO(response.content)
+                df = pd.read_excel(excel_data, sheet_name='半品總表')
+                
+            except Exception as e:
+                app_logger.error(f"載入半品總表失敗: {e}")
+                has_requests = False  # 觸發本地檔案讀取
+        
+        # 如果沒有 requests 或下載失敗，使用本地檔案
+        if not has_requests or df is None:
+            local_path = FilePaths.WORK_ORDER_SUMMARY_FILE
+            if os.path.exists(local_path):
+                app_logger.info(f"工單統計：使用本地檔案: {local_path}")
+                try:
+                    df = pd.read_excel(local_path, sheet_name='半品總表')
+                except Exception as e:
+                    app_logger.error(f"讀取本地半品總表失敗: {e}")
+                    cls._semi_finished_cache['data'] = {}
+                    cls._semi_finished_cache['last_loaded'] = get_taiwan_time()
+                    return {}
+            else:
+                app_logger.error(f"本地檔案不存在: {local_path}")
+                cls._semi_finished_cache['data'] = {}
+                cls._semi_finished_cache['last_loaded'] = get_taiwan_time()
+                return {}
+        
+        if df is None:
+            cls._semi_finished_cache['data'] = {}
+            cls._semi_finished_cache['last_loaded'] = get_taiwan_time()
+            return {}
+        
+        try:
             # 處理欄位
             df['半品工單號碼'] = df['半品工單號碼'].astype(str)
             
