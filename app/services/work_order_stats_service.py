@@ -3,7 +3,6 @@
 
 import logging
 import pandas as pd
-import requests
 from io import BytesIO
 from collections import defaultdict
 
