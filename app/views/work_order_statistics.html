@@ -70,7 +70,7 @@
 
         /* 固定表頭 (像 Excel 凍結窗格) */
         .table-container {
-            max-height: 600px;
+            max-height: 800px;
             overflow-y: auto;
             overflow-x: auto;
             position: relative;
@@ -164,27 +164,7 @@
                 </table>
             </div>
 
-            <!-- 分頁控制 -->
-            <div id="pagination-controls"
-                style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em; flex-wrap: wrap; gap: 1em;">
-                <div style="display: flex; align-items: center; gap: 0.5em;">
-                    <label for="per-page-select" style="margin: 0;">每頁顯示：</label>
-                    <select id="per-page-select" style="width: 80px; display: inline-block; margin: 0;">
-                        <option value="25">25</option>
-                        <option value="50" selected>50</option>
-                        <option value="100">100</option>
-                        <option value="200">200</option>
-                    </select>
-                </div>
-                <div id="page-info" style="display: flex; align-items: center; gap: 0.5em;">
-                    <button id="prev-page-btn" class="outline" style="margin: 0; padding: 0.5em 1em;" disabled>◀
-                        上一頁</button>
-                    <span id="page-indicator" style="min-width: 120px; text-align: center; white-space: nowrap;">第 1 頁 /
-                        共 1 頁</span>
-                    <button id="next-page-btn" class="outline" style="margin: 0; padding: 0.5em 1em;" disabled>下一頁
-                        ▶</button>
-                </div>
-            </div>
+
         </section>
     </main>
 

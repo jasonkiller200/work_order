@@ -4,19 +4,15 @@
 
 // 狀態管理
 const state = {
-    currentPage: 1,
-    perPage: 50,
     search: '',
     sortBy: '生產開始',
     sortOrder: 'asc',
-    totalPages: 1,
     totalCount: 0
 };
 
 // DOM 元素
 let searchInput, searchBtn, clearBtn, exportBtn;
 let statsTable, statsTbody, totalCountEl;
-let perPageSelect, prevPageBtn, nextPageBtn, pageIndicator;
 let shortageModal, materialModal;
 
 // 初始化
@@ -34,10 +30,6 @@ function initElements() {
     statsTable = document.getElementById('stats-table');
     statsTbody = document.getElementById('stats-tbody');
     totalCountEl = document.getElementById('total-count');
-    perPageSelect = document.getElementById('per-page-select');
-    prevPageBtn = document.getElementById('prev-page-btn');
-    nextPageBtn = document.getElementById('next-page-btn');
-    pageIndicator = document.getElementById('page-indicator');
     shortageModal = document.getElementById('shortage-modal');
     materialModal = document.getElementById('material-modal');
 }
@@ -65,30 +57,9 @@ function initEventListeners() {
         loadData();
     });
 
+
     // 匯出
     exportBtn.addEventListener('click', exportToExcel);
-
-    // 每頁筆數
-    perPageSelect.addEventListener('change', () => {
-        state.perPage = parseInt(perPageSelect.value);
-        state.currentPage = 1;
-        loadData();
-    });
-
-    // 分頁
-    prevPageBtn.addEventListener('click', () => {
-        if (state.currentPage > 1) {
-            state.currentPage--;
-            loadData();
-        }
-    });
-
-    nextPageBtn.addEventListener('click', () => {
-        if (state.currentPage < state.totalPages) {
-            state.currentPage++;
-            loadData();
-        }
-    });
 
     // 排序
     document.querySelectorAll('.sortable').forEach(th => {
@@ -128,8 +99,8 @@ async function loadData() {
 
     try {
         const params = new URLSearchParams({
-            page: state.currentPage,
-            per_page: state.perPage,
+            page: 1,
+            per_page: 1000,  // 載入所有資料
             search: state.search,
             sort_by: state.sortBy,
             sort_order: state.sortOrder
@@ -142,11 +113,9 @@ async function loadData() {
             throw new Error(result.error);
         }
 
-        state.totalPages = result.total_pages || 1;
         state.totalCount = result.total || 0;
 
         renderTable(result.data);
-        updatePagination();
         totalCountEl.textContent = `共 ${state.totalCount} 筆工單`;
 
     } catch (error) {
@@ -188,11 +157,7 @@ function truncateText(text, maxLength) {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 }
 
-function updatePagination() {
-    pageIndicator.textContent = `第 ${state.currentPage} 頁 / 共 ${state.totalPages} 頁`;
-    prevPageBtn.disabled = state.currentPage <= 1;
-    nextPageBtn.disabled = state.currentPage >= state.totalPages;
-}
+
 
 // 顯示缺料明細
 async function showShortageDetails(orderId) {
