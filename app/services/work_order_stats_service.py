@@ -410,6 +410,11 @@ class WorkOrderStatsService:
             procurement_data = current_data.get('materials_dashboard', [])
             app_logger.info(f"工單統計：採購儀表板資料筆數: {len(procurement_data)}")
             
+            # Debug: 顯示第一筆資料的所有欄位
+            if len(procurement_data) > 0:
+                first_item_keys = list(procurement_data[0].keys())
+                app_logger.info(f"工單統計：採購資料欄位: {first_item_keys}")
+            
             procurement_map = {}
             for item in procurement_data:
                 material_id = str(item.get('物料', ''))
