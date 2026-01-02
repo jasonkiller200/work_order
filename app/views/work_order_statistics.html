@@ -76,17 +76,14 @@
             position: relative;
         }
 
-        #stats-table thead {
+        /* 直接對 th 套用 sticky，避免 border-collapse 衝突 */
+        #stats-table thead th {
             position: sticky;
             top: 0;
             z-index: 10;
             background: var(--pico-background-color);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
-        #stats-table thead th {
-            background: var(--pico-background-color);
             border-bottom: 2px solid var(--pico-muted-border-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
     </style>
 </head>
