@@ -204,13 +204,15 @@ async function showShortageDetails(orderId) {
                     <td>${item['可用庫存'] || 0}</td>
                     <td style="color: ${statusColor};">${statusText}</td>
                     <td>${item['需求日期'] || '-'}</td>
+                    <td>${item['採購人員'] || '-'}</td>
+                    <td>${item['預計交貨日'] || '-'}</td>
                 </tr>
             `;
         }).join('');
 
     } catch (error) {
         console.error('載入缺料明細失敗:', error);
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
     }
 }
 

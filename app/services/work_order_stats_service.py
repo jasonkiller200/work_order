@@ -365,6 +365,17 @@ class WorkOrderStatsService:
             
             # 組建回傳資料
             result = []
+            
+            # 取得採購儀表板資料（用於採購人員和預計交貨日）
+            procurement_data = current_data.get('main_data', [])
+            procurement_map = {}
+            for item in procurement_data:
+                material_id = str(item.get('物料', ''))
+                procurement_map[material_id] = {
+                    '採購人員': item.get('採購人員', ''),
+                    '預計交貨日': item.get('預計交貨日', '')
+                }
+            
             for mat_id, mat_data in order_material_info.items():
                 available = inventory_map.get(mat_id, 0)
                 unrestricted = 0
@@ -383,6 +394,11 @@ class WorkOrderStatsService:
                 
                 is_shortage = mat_id in shortage_materials
                 
+                # 從採購儀表板取得採購人員和預計交貨日
+                procurement_info = procurement_map.get(mat_id, {})
+                buyer = procurement_info.get('採購人員', '-')
+                expected_delivery = procurement_info.get('預計交貨日', '-')
+                
                 result.append({
                     '物料': mat_id,
                     '物料說明': mat_desc,  # 使用補充後的物料說明
@@ -391,7 +407,9 @@ class WorkOrderStatsService:
                     '未限制': unrestricted,
                     '品檢中': inspection,
                     '是否缺料': is_shortage,
-                    '需求日期': mat_data['需求日期']
+                    '需求日期': mat_data['需求日期'],
+                    '採購人員': buyer,
+                    '預計交貨日': expected_delivery
                 })
             
             # 排序：缺料的排前面
