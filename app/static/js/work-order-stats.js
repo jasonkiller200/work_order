@@ -220,84 +220,14 @@ function closeShortageModal() {
     shortageModal.close();
 }
 
-// 顯示物料詳情
-async function showMaterialDetails(materialId) {
-    const modal = document.getElementById('material-modal');
-    const title = document.getElementById('material-modal-title');
-    const content = document.getElementById('material-modal-content');
-
-    title.textContent = `物料: ${materialId}`;
-    content.innerHTML = '<p>載入中...</p>';
-    modal.showModal();
-
-    try {
-        const response = await fetch(`/api/material/${materialId}/details`);
-        const result = await response.json();
-
-        if (result.error) {
-            throw new Error(result.error);
-        }
-
-        const stock = result.stock_summary || {};
-        const demands = result.demand_details || [];
-
-        content.innerHTML = `
-            <div style="margin-bottom: 1em;">
-                <h4>📦 庫存資訊</h4>
-                <p><strong>物料說明:</strong> ${result.material_description || '-'}</p>
-                <p><strong>圖號:</strong> ${result.drawing_number || '-'}</p>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; margin-top: 0.5em;">
-                    <div style="background: rgba(76, 175, 80, 0.1); padding: 0.5em; border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: var(--pico-muted-color);">未限制</div>
-                        <div style="font-size: 1.2em; font-weight: bold; color: #4caf50;">${stock.unrestricted || 0}</div>
-                    </div>
-                    <div style="background: rgba(255, 152, 0, 0.1); padding: 0.5em; border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: var(--pico-muted-color);">品檢中</div>
-                        <div style="font-size: 1.2em; font-weight: bold; color: #ff9800;">${stock.inspection || 0}</div>
-                    </div>
-                    <div style="background: rgba(33, 150, 243, 0.1); padding: 0.5em; border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: var(--pico-muted-color);">在途</div>
-                        <div style="font-size: 1.2em; font-weight: bold; color: #2196f3;">${stock.on_order || 0}</div>
-                    </div>
-                </div>
-            </div>
-            ${demands.length > 0 ? `
-                <details>
-                    <summary>📋 需求明細 (${demands.length} 筆)</summary>
-                    <div style="max-height: 200px; overflow-y: auto; margin-top: 0.5em;">
-                        <table style="font-size: 0.9em;">
-                            <thead>
-                                <tr>
-                                    <th>訂單</th>
-                                    <th>數量</th>
-                                    <th>日期</th>
-                                    <th>剩餘庫存</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${demands.map(d => `
-                                    <tr style="${d.remaining_stock < 0 ? 'color: #f44336;' : ''}">
-                                        <td>${d['訂單'] || '-'}</td>
-                                        <td>${d['未結數量 (EINHEIT)'] || 0}</td>
-                                        <td>${d['需求日期'] || '-'}</td>
-                                        <td>${d.remaining_stock || 0}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </details>
-            ` : ''}
-        `;
-
-    } catch (error) {
-        console.error('載入物料詳情失敗:', error);
-        content.innerHTML = `<p style="color: #f44336;">載入失敗: ${error.message}</p>`;
+// 顯示物料詳情 (整合共用模組)
+function showMaterialDetails(materialId) {
+    if (window.openDetailsModal) {
+        window.openDetailsModal(materialId);
+    } else {
+        console.error('Material modal module not loaded');
+        alert('物料詳情模組尚未載入，請稍後再試');
     }
-}
-
-function closeMaterialModal() {
-    materialModal.close();
 }
 
 // Excel 匯出
