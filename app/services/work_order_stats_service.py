@@ -428,11 +428,14 @@ class WorkOrderStatsService:
                         app_logger.info(f"工單統計：第一筆物料 {material_id} 的 delivery_schedules: {delivery_schedules}")
                     
                     if delivery_schedules and len(delivery_schedules) > 0:
-                        # delivery_schedules 是一個陣列，每個元素有 '交貨日期' 欄位
+                        # delivery_schedules 是一個陣列，每個元素有 'expected_date' 欄位
                         # 取得最早的日期
-                        dates = [schedule.get('交貨日期', '') for schedule in delivery_schedules if schedule.get('交貨日期')]
+                        dates = [schedule.get('expected_date', '') for schedule in delivery_schedules if schedule.get('expected_date')]
                         if dates:
                             earliest_delivery = min(dates)
+                            # 如果是 datetime 物件，轉換為字串
+                            if hasattr(earliest_delivery, 'strftime'):
+                                earliest_delivery = earliest_delivery.strftime('%Y-%m-%d')
                     
                     procurement_map[material_id] = {
                         '採購人員': item.get('採購人員', ''),
