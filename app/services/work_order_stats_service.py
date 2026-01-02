@@ -408,13 +408,22 @@ class WorkOrderStatsService:
             
             # 取得採購儀表板資料（用於採購人員和預計交貨日）
             procurement_data = current_data.get('main_data', [])
+            app_logger.info(f"工單統計：採購儀表板資料筆數: {len(procurement_data)}")
+            
             procurement_map = {}
             for item in procurement_data:
                 material_id = str(item.get('物料', ''))
-                procurement_map[material_id] = {
-                    '採購人員': item.get('採購人員', ''),
-                    '預計交貨日': item.get('預計交貨日', '')
-                }
+                if material_id:  # 只處理非空的物料編號
+                    procurement_map[material_id] = {
+                        '採購人員': item.get('採購人員', ''),
+                        '預計交貨日': item.get('預計交貨日', '')
+                    }
+            
+            app_logger.info(f"工單統計：建立採購對照表，共 {len(procurement_map)} 筆")
+            if len(procurement_map) > 0:
+                # 顯示前 3 筆作為範例
+                sample_keys = list(procurement_map.keys())[:3]
+                app_logger.info(f"工單統計：採購對照表範例物料編號: {sample_keys}")
             
             for mat_id, mat_data in order_material_info.items():
                 available = inventory_map.get(mat_id, 0)
@@ -438,6 +447,11 @@ class WorkOrderStatsService:
                 procurement_info = procurement_map.get(mat_id, {})
                 buyer = procurement_info.get('採購人員', '-')
                 expected_delivery = procurement_info.get('預計交貨日', '-')
+                
+                # Debug: 記錄第一筆物料的查詢結果
+                if len(result) == 0:
+                    app_logger.info(f"工單統計：第一筆物料 {mat_id} 的採購資訊 - 採購人員: {buyer}, 預計交貨日: {expected_delivery}")
+                    app_logger.info(f"工單統計：procurement_map 中是否有此物料: {mat_id in procurement_map}")
                 
                 result.append({
                     '物料': mat_id,
