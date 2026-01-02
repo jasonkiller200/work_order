@@ -419,9 +419,19 @@ class WorkOrderStatsService:
             for item in procurement_data:
                 material_id = str(item.get('物料', ''))
                 if material_id:  # 只處理非空的物料編號
+                    # 從 delivery_schedules 中取得最早的交貨日期
+                    delivery_schedules = item.get('delivery_schedules', [])
+                    earliest_delivery = ''
+                    if delivery_schedules and len(delivery_schedules) > 0:
+                        # delivery_schedules 是一個陣列，每個元素有 '交貨日期' 欄位
+                        # 取得最早的日期
+                        dates = [schedule.get('交貨日期', '') for schedule in delivery_schedules if schedule.get('交貨日期')]
+                        if dates:
+                            earliest_delivery = min(dates)
+                    
                     procurement_map[material_id] = {
                         '採購人員': item.get('採購人員', ''),
-                        '預計交貨日': item.get('預計交貨日', '')
+                        '預計交貨日': earliest_delivery
                     }
             
             app_logger.info(f"工單統計：建立採購對照表，共 {len(procurement_map)} 筆")
