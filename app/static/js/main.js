@@ -624,6 +624,8 @@ function setupProcurementFilter() {
     if (applyFilterBtn && filterInput) {
         // 應用物料篩選
         const applyMaterialFilter = function () {
+            // 🔧 讀取輸入框的值並設定全域篩選關鍵字
+            currentFilterKeyword = filterInput.value.trim();
             if (currentDashboardType === 'main') {
                 mainDashboardPage = 1;
             } else {
