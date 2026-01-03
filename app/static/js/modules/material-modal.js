@@ -513,6 +513,10 @@ function loadPurchaseOrders(materialId) {
 
             // 🆕 將分批交期資料附加到採購單上
             const deliveryHistory = deliveryData.history || [];
+
+            // 🔧 先將交期歷史存到全域變數，供表格和下拉選單使用
+            window.currentDeliveryHistory = deliveryHistory;
+
             purchaseOrders.forEach(po => {
                 // 找出該採購單的所有分批交期(按日期排序)
                 po.delivery_schedules = deliveryHistory
@@ -523,8 +527,8 @@ function loadPurchaseOrders(materialId) {
             // 渲染表格 (包含採購單和鑄件訂單)
             renderPurchaseOrdersTable(purchaseOrders, castingOrders);
 
-            // 填充選擇器
-            populatePOSelect(purchaseOrders);
+            // 填充選擇器 (包含採購單和鑄件訂單)
+            populatePOSelect(purchaseOrders, castingOrders);
         })
         .catch(error => {
             console.error('Error loading purchase orders:', error);
@@ -562,10 +566,17 @@ function renderPurchaseOrdersTable(purchaseOrders, castingOrders = []) {
                 status = '<span style="color: #ff9800;">待交貨</span>';
             }
 
-            // 計算預計完成日期與今天的差距
-            let deliveryHTML = '-';
-            if (co.expected_date) {
-                const expectedDate = new Date(co.expected_date);
+            // 🔧 從已維護的交期記錄中查詢該鑄件訂單的交期
+            let deliveryHTML = '<span style="color: #888; font-style: italic;">尚未設定</span>';
+            const deliveryHistory = window.currentDeliveryHistory || [];
+            const maintainedSchedule = deliveryHistory.find(h =>
+                h.po_number === co.order_number &&
+                h.status !== 'completed' &&
+                h.status !== 'cancelled'
+            );
+
+            if (maintainedSchedule) {
+                const expectedDate = new Date(maintainedSchedule.expected_date);
                 const today = new Date();
                 const diffDays = Math.ceil((expectedDate - today) / (1000 * 60 * 60 * 24));
 
@@ -578,7 +589,7 @@ function renderPurchaseOrdersTable(purchaseOrders, castingOrders = []) {
                     colorStyle = 'color: #4caf50; font-weight: bold;';
                 }
 
-                deliveryHTML = `<span style="${colorStyle}">${co.expected_date}</span>`;
+                deliveryHTML = `<span style="${colorStyle}">${maintainedSchedule.expected_date}</span> <small style="color: #888;">(${maintainedSchedule.quantity}件)</small>`;
             }
 
             html += `
@@ -592,7 +603,9 @@ function renderPurchaseOrdersTable(purchaseOrders, castingOrders = []) {
                     <td style="min-width: 180px;">${deliveryHTML}</td>
                     <td>${status}</td>
                     <td>
-                        <small style="color: #888;">${co.system_status || '-'}</small>
+                        <button class="small secondary" onclick="fillDeliveryFormFromPO('${co.order_number}')">
+                            帶入
+                        </button>
                     </td>
                 </tr>
             `;
@@ -689,21 +702,52 @@ function renderPurchaseOrdersTable(purchaseOrders, castingOrders = []) {
     window.currentPurchaseOrders = purchaseOrders;
 }
 
-function populatePOSelect(purchaseOrders) {
+function populatePOSelect(purchaseOrders, castingOrders = []) {
     const poSelect = document.getElementById('po-select');
     if (!poSelect) return;
 
-    let html = '<option value="">-- 新建交期記錄 (不關聯採購單) --</option>';
+    let html = '<option value="">-- 新建交期記錄 (不關聯訂單) --</option>';
 
-    // 🆕 所有未結案的採購單都會顯示（API已過濾completed和cancelled）
-    purchaseOrders.forEach(po => {
-        const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '未定';
-        html += `<option value="${po.po_number}">
-            ${po.po_number} - ${po.supplier || '未知供應商'} (未交: ${po.outstanding_quantity}, 交期: ${deliveryDate})
-        </option>`;
-    });
+    // 🆕 鑄件訂單選項 (4開頭) - 顯示已維護的交期
+    if (castingOrders && castingOrders.length > 0) {
+        const deliveryHistory = window.currentDeliveryHistory || [];
+
+        html += '<optgroup label="🔧 鑄件訂單">';
+        castingOrders.forEach(co => {
+            // 從已維護的交期記錄中查詢
+            const maintainedSchedule = deliveryHistory.find(h =>
+                h.po_number === co.order_number &&
+                h.status !== 'completed' &&
+                h.status !== 'cancelled'
+            );
+
+            const deliveryInfo = maintainedSchedule
+                ? `交期: ${maintainedSchedule.expected_date}`
+                : '尚未設定';
+
+            html += `<option value="${co.order_number}" data-type="casting">
+                ${co.order_number} - 鑄件生產 (未交: ${co.outstanding_quantity}, ${deliveryInfo})
+            </option>`;
+        });
+        html += '</optgroup>';
+    }
+
+    // 🆕 採購單選項
+    if (purchaseOrders && purchaseOrders.length > 0) {
+        html += '<optgroup label="📦 採購單">';
+        purchaseOrders.forEach(po => {
+            const deliveryDate = po.updated_delivery_date || po.original_delivery_date || '未定';
+            html += `<option value="${po.po_number}" data-type="purchase">
+                ${po.po_number} - ${po.supplier || '未知供應商'} (未交: ${po.outstanding_quantity}, 交期: ${deliveryDate})
+            </option>`;
+        });
+        html += '</optgroup>';
+    }
 
     poSelect.innerHTML = html;
+
+    // 🆕 儲存鑄件訂單資料到全域變數
+    window.currentCastingOrders = castingOrders;
 }
 
 window.fillDeliveryFormFromPO = function (poNumber) {

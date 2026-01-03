@@ -306,18 +306,46 @@ function setupDeliveryFormEvents(materialId, materialData) {
     qtyInput.addEventListener('input', updateCalculation);
     dateInput.addEventListener('change', updateCalculation);
 
-    // 🆕 採購單選擇事件
+    // 🆕 採購單/鑄件訂單選擇事件
     const poSelect = document.getElementById('po-select');
     if (poSelect) {
         poSelect.addEventListener('change', function () {
-            const selectedPO = this.value;
-            if (!selectedPO) {
+            const selectedValue = this.value;
+            const selectedOption = this.options[this.selectedIndex];
+            const orderType = selectedOption ? selectedOption.dataset.type : null;
+
+            if (!selectedValue) {
                 removePOBatchHint();
                 return;
             }
 
-            // 從全域變數中查找採購單資料
-            const poData = window.currentPurchaseOrders ? window.currentPurchaseOrders.find(p => p.po_number === selectedPO) : null;
+            // 🆕 處理鑄件訂單 (4開頭)
+            if (orderType === 'casting' || selectedValue.startsWith('4')) {
+                const coData = window.currentCastingOrders ? window.currentCastingOrders.find(c => c.order_number === selectedValue) : null;
+
+                if (coData) {
+                    // 自動填入表單
+                    document.getElementById('po-number').value = coData.order_number;
+                    document.getElementById('supplier').value = '鑄件生產';
+
+                    // 填入未交數量
+                    const outstandingQty = parseFloat(coData.outstanding_quantity) || 0;
+                    document.getElementById('delivery-qty').value = outstandingQty > 0 ? outstandingQty : 0;
+
+                    // 🔧 不自動載入 SAP 預計完成日期，因為那是採購開單時的預設日期，需由用戶手動填寫實際預計交期
+
+                    // 🆕 顯示鑄件訂單分批提示
+                    const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
+                    showCastingOrderHint(selectedValue, coData.outstanding_quantity, coData.expected_date, currentEditId);
+
+                    // 觸發計算更新
+                    updateCalculation();
+                }
+                return;
+            }
+
+            // 處理採購單
+            const poData = window.currentPurchaseOrders ? window.currentPurchaseOrders.find(p => p.po_number === selectedValue) : null;
 
             if (poData) {
                 // 自動填入表單
@@ -326,7 +354,7 @@ function setupDeliveryFormEvents(materialId, materialData) {
 
                 // 🆕 智慧計算剩餘可分配數量
                 const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
-                const remaining = calculateRemainingPOQuantity(selectedPO, currentEditId);
+                const remaining = calculateRemainingPOQuantity(selectedValue, currentEditId);
 
                 // 填入數量
                 document.getElementById('delivery-qty').value = remaining > 0 ? remaining : 0;
@@ -341,7 +369,7 @@ function setupDeliveryFormEvents(materialId, materialData) {
                 }
 
                 // 🆕 顯示分批資訊提示
-                showPOBatchHint(selectedPO, poData.outstanding_quantity, remaining, currentEditId);
+                showPOBatchHint(selectedValue, poData.outstanding_quantity, remaining, currentEditId);
 
                 // 觸發計算更新
                 updateCalculation();
@@ -378,8 +406,10 @@ function setupDeliveryFormEvents(materialId, materialData) {
             return;
         }
 
-        // 🆕 加強型驗證:檢查採購單分配上限
-        if (formData.po_number && window.currentPurchaseOrders) {
+        // 🆕 加強型驗證:檢查採購單分配上限（鑄件訂單跳過此驗證）
+        const isCastingOrder = formData.po_number && formData.po_number.startsWith('4');
+
+        if (formData.po_number && window.currentPurchaseOrders && !isCastingOrder) {
             const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
             const maxRemaining = calculateRemainingPOQuantity(formData.po_number, currentEditId);
 
@@ -457,6 +487,40 @@ function showPOBatchHint(poNumber, total, remaining, currentEditId) {
 function removePOBatchHint() {
     const oldHint = document.querySelector('.po-batch-hint');
     if (oldHint) oldHint.remove();
+    // 同時移除鑄件訂單提示
+    const oldCastingHint = document.querySelector('.casting-order-hint');
+    if (oldCastingHint) oldCastingHint.remove();
+}
+
+// 🆕 顯示鑄件訂單狀態提示
+function showCastingOrderHint(orderNumber, outstandingQty, expectedDate, currentEditId) {
+    const qtyInput = document.getElementById('delivery-qty');
+    const container = qtyInput.parentElement;
+
+    // 移除舊提示
+    removePOBatchHint();
+
+    // 🆕 偵測暗黑模式
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+    const bgColor = isDarkMode ? '#3d2f1f' : '#fff3e0';
+    const textColor = isDarkMode ? '#ffcc80' : '#666';
+    const borderColor = isDarkMode ? '#ffa726' : '#ff9800';
+    const highlightColor = isDarkMode ? '#ffcc80' : '#ff9800';
+
+    const hint = document.createElement('div');
+    hint.className = 'casting-order-hint';
+    hint.style.cssText = `font-size: 0.85em; color: ${textColor}; margin-top: 0.3em; background: ${bgColor}; padding: 4px 8px; border-radius: 4px; border-left: 3px solid ${borderColor};`;
+
+    // 計算已有的分批數
+    const batchCount = window.currentDeliveryHistory ? window.currentDeliveryHistory.filter(h => h.po_number === orderNumber && h.status !== 'cancelled').length : 0;
+
+    hint.innerHTML = `
+        <strong>🔧 鑄件訂單 ${orderNumber}</strong> 狀態:<br>
+        • 未交數量:<span style="color: ${highlightColor}; font-weight: bold;">${outstandingQty}</span> | • 已有排程:${batchCount} 筆<br>
+        • 交期請手動填寫
+    `;
+
+    container.appendChild(hint);
 }
 
 // 儲存交期
