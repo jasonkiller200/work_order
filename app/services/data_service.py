@@ -628,6 +628,7 @@ class DataService:
     @staticmethod
     def _build_order_summary_map(df_work_order_summary):
         """建立工單摘要對應表"""
+        from app.config.settings import Config
         order_summary_map = {}
         
         if not df_work_order_summary.empty:
@@ -639,7 +640,7 @@ class DataService:
             # 確保所有需要的欄位都存在
             existing_cols = [col for col in required_cols if col in df_work_order_summary.columns]
             if len(existing_cols) != len(required_cols):
-                app_logger.warning(f"警告：'工單總表2026.xls' 中缺少部分預期欄位。預期: {required_cols}, 實際: {df_work_order_summary.columns.tolist()}")
+                app_logger.warning(f"警告：'{Config.WORK_ORDER_BOOK_NAME}' 中缺少部分預期欄位。預期: {required_cols}, 實際: {df_work_order_summary.columns.tolist()}")
             
             # 篩選出包含所有必要欄位的 DataFrame
             df_filtered_summary = df_work_order_summary[existing_cols].copy()

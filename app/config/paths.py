@@ -1,6 +1,8 @@
 # app/config/paths.py
 # 檔案路徑設定
 
+from app.config.settings import Config
+
 class FilePaths:
     """檔案路徑設定"""
     
@@ -14,8 +16,8 @@ class FilePaths:
     CASTING_ORDER_FILE = r'P:\\F004\\MPS維護\\鑄件未交.XLSX'
     RECEIPT_FILE = r'P:\\F004\\MPS維護\\今日入庫.xlsx'
     
-    # 工單總表
-    WORK_ORDER_SUMMARY_FILE = '工單總表2026.xls'
+    # 工單總表（引用 Config 中的設定）
+    WORK_ORDER_SUMMARY_FILE = Config.WORK_ORDER_BOOK_NAME
     WORK_ORDER_SUMMARY_SHEET = '工單總表'
     
     # 訂單備註與版本來源檔案
