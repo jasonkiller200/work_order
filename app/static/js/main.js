@@ -33,7 +33,12 @@ function checkApiStatus() {
             if (data.service_status === 'online' && data.data_loaded) {
                 // 正常狀態 - 綠色
                 badge.className = 'status-indicator';
-                badgeText.textContent = `✅ 快取: ${data.live_cache}`;
+                // 顯示快取和下次更新時間
+                let statusText = `✅ 快取: ${data.live_cache}`;
+                if (data.next_update_time) {
+                    statusText += ` | 下次更新: ${data.next_update_time}`;
+                }
+                badgeText.textContent = statusText;
             } else if (data.service_status === 'online' && !data.data_loaded) {
                 // 服務正常但資料未載入 - 橙色
                 badge.className = 'status-indicator loading';

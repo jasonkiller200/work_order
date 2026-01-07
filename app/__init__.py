@@ -69,6 +69,9 @@ def initialize_app_data(app):
         except Exception as e:
             app_logger.error(f"主程式：首次工單規格檔案彙總失敗: {e}", exc_info=True)
         
+        # 設定快取更新間隔（用於計算下次更新時間）
+        cache_manager.set_update_interval(Config.CACHE_UPDATE_INTERVAL)
+        
         # 執行首次資料載入
         app_logger.info("主程式：執行首次資料載入...")
         initial_data = DataService.load_and_process_data()

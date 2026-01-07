@@ -5,6 +5,8 @@ import threading
 import time
 import logging
 import xlrd
+from datetime import datetime, timedelta
+import pytz
 from app.config import FilePaths
 
 app_logger = logging.getLogger(__name__)
@@ -21,6 +23,11 @@ class CacheManager:
         # 訂單備註與版本快取
         self.order_note_cache = {}
         self.order_note_cache_lock = threading.Lock()
+        
+        # 快取時間追蹤
+        self.taiwan_tz = pytz.timezone('Asia/Taipei')
+        self.last_update_time = None
+        self.update_interval = 1800  # 預設 30 分鐘
     
     def get_current_data(self):
         """取得當前快取資料"""
@@ -39,8 +46,38 @@ class CacheManager:
         
         with self.cache_lock:
             self.live_cache_pointer = target_buffer
+            self.last_update_time = datetime.now(self.taiwan_tz)
         
         app_logger.info(f"快取更新完畢，線上服務已切換至緩衝區 {self.live_cache_pointer}")
+    
+    def set_update_interval(self, interval):
+        """設定快取更新間隔（秒）"""
+        self.update_interval = interval
+    
+    def get_next_update_time(self):
+        """
+        取得下次快取更新的預計時間
+        
+        Returns:
+            str: 下次更新時間的格式化字串 (HH:MM) 或 None
+        """
+        if self.last_update_time is None:
+            return None
+        
+        next_update = self.last_update_time + timedelta(seconds=self.update_interval)
+        return next_update.strftime('%H:%M')
+    
+    def get_last_update_time(self):
+        """
+        取得上次快取更新時間
+        
+        Returns:
+            str: 上次更新時間的格式化字串 (HH:MM) 或 None
+        """
+        if self.last_update_time is None:
+            return None
+        
+        return self.last_update_time.strftime('%H:%M')
     
     def is_data_loaded(self):
         """檢查資料是否已載入"""

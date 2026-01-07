@@ -506,7 +506,9 @@ def api_status():
     status = {
         "service_status": "online",
         "live_cache": cache_manager.get_live_cache_pointer(),
-        "data_loaded": current_data is not None
+        "data_loaded": current_data is not None,
+        "last_update_time": cache_manager.get_last_update_time(),
+        "next_update_time": cache_manager.get_next_update_time()
     }
     return jsonify(status)
 
