@@ -166,8 +166,8 @@ def load_and_process_data():
 
         df_specs = pd.read_excel(r'P:\F004\MPS維護\工單規格總表.xlsx')
 
-        # 載入工單總表2025.xls
-        work_order_summary_path = '工單總表2025.xls' # 假設檔案在應用程式根目錄
+        # 載入工單總表2026.xls
+        work_order_summary_path = '工單總表2026.xls' # 假設檔案在應用程式根目錄
         df_work_order_summary = pd.DataFrame() # 初始化為空 DataFrame
         if os.path.exists(work_order_summary_path):
             try:
@@ -177,7 +177,7 @@ def load_and_process_data():
                     df_work_order_summary.rename(columns={'品號說明': '物料說明'}, inplace=True)
                 app_logger.info(f"DEBUG: df_work_order_summary 欄位: {df_work_order_summary.columns.tolist()}")
             except Exception as e:
-                app_logger.error(f"載入 '工單總表2025.xls' 的 '工單總表' 頁籤時發生錯誤: {e}")
+                app_logger.error(f"載入 '工單總表2026.xls' 的 '工單總表' 頁籤時發生錯誤: {e}")
         else:
             app_logger.warning(f"警告：找不到 '{work_order_summary_path}' 檔案。工單摘要資訊將無法載入。 সন")
 
@@ -291,7 +291,7 @@ def load_and_process_data():
             # 確保所有需要的欄位都存在
             existing_cols = [col for col in required_cols if col in df_work_order_summary.columns]
             if len(existing_cols) != len(required_cols):
-                app_logger.warning(f"警告：'工單總表2025.xls' 中缺少部分預期欄位。預期: {required_cols}, 實際: {df_work_order_summary.columns.tolist()}")
+                app_logger.warning(f"警告：'工單總表2026.xls' 中缺少部分預期欄位。預期: {required_cols}, 實際: {df_work_order_summary.columns.tolist()}")
             
             # 篩選出包含所有必要欄位的 DataFrame
             df_filtered_summary = df_work_order_summary[existing_cols].copy()

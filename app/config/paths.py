@@ -15,7 +15,7 @@ class FilePaths:
     RECEIPT_FILE = r'P:\\F004\\MPS維護\\今日入庫.xlsx'
     
     # 工單總表
-    WORK_ORDER_SUMMARY_FILE = '工單總表2025.xls'
+    WORK_ORDER_SUMMARY_FILE = '工單總表2026.xls'
     WORK_ORDER_SUMMARY_SHEET = '工單總表'
     
     # 訂單備註與版本來源檔案
