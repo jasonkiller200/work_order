@@ -104,6 +104,18 @@ def start_background_threads(app):
                 cache_manager.update_cache(new_data)
             else:
                 app_logger.error("背景執行緒：資料載入失敗，本次不更新快取。")
+            
+            # 🆕 執行入庫同步（採購單 + 鑄件訂單）
+            try:
+                from app.models.database import db
+                from app.services.receipt_sync_service import ReceiptSyncService
+                
+                app_logger.info("背景執行緒：執行入庫同步...")
+                receipt_service = ReceiptSyncService(app, db)
+                receipt_service.sync_receipts()
+                app_logger.info("背景執行緒：入庫同步完成。")
+            except Exception as e:
+                app_logger.error(f"背景執行緒：入庫同步失敗: {e}", exc_info=True)
     
     # 啟動資料快取更新執行緒
     cache_manager.start_cache_update_thread(
