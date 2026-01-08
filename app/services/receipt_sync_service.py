@@ -22,10 +22,13 @@ class ReceiptSyncService:
         """
         同步入庫記錄到資料庫（採購單 + 鑄件訂單）
         
+        只處理「過帳日期 = 今天」的記錄，避免重複處理舊資料
+        
         Returns:
             dict: 同步統計資訊
         """
         from app.models.database import PurchaseOrder, CastingOrder, DeliverySchedule
+        from datetime import date
         
         try:
             # 讀取入庫記錄
@@ -34,19 +37,28 @@ class ReceiptSyncService:
                 app_logger.info("入庫同步：無入庫記錄")
                 return None
             
-            app_logger.info(f"入庫同步：讀取到 {len(df_receipt)} 筆入庫記錄")
+            # 🆕 只處理今日的入庫記錄
+            today = date.today()
+            df_receipt['過帳日期_parsed'] = pd.to_datetime(df_receipt['過帳日期']).dt.date
+            df_today = df_receipt[df_receipt['過帳日期_parsed'] == today]
+            
+            if df_today.empty:
+                app_logger.info(f"入庫同步：今日 ({today}) 無新入庫記錄，跳過處理")
+                return None
+            
+            app_logger.info(f"入庫同步：讀取到 {len(df_receipt)} 筆入庫記錄，其中今日 ({today}) 有 {len(df_today)} 筆")
             
             # 統計變數
             po_stats = {
                 'total': 0, 'success': 0, 'completed': 0, 
-                'partial': 0, 'not_found': 0, 'error': 0
+                'partial': 0, 'not_found': 0, 'error': 0, 'skipped': 0
             }
             co_stats = {
                 'total': 0, 'success': 0, 'completed': 0, 
-                'partial': 0, 'not_found': 0, 'error': 0
+                'partial': 0, 'not_found': 0, 'error': 0, 'skipped': 0
             }
             
-            for i, row in df_receipt.iterrows():
+            for i, row in df_today.iterrows():
                 try:
                     receipt_qty = Decimal(str(float(row['以輸入單位表示的數量'])))
                     receipt_date = pd.to_datetime(row['過帳日期']).date()
@@ -75,6 +87,11 @@ class ReceiptSyncService:
                         po = PurchaseOrder.query.filter_by(po_number=po_number).first()
                         
                         if po:
+                            # 🆕 跳過已完成的採購單
+                            if po.status == 'completed':
+                                po_stats['skipped'] += 1
+                                continue
+                            
                             result = self._update_purchase_order(po, receipt_qty, receipt_date)
                             po_stats['success'] += 1
                             if result == 'completed':
@@ -92,6 +109,11 @@ class ReceiptSyncService:
                         co = CastingOrder.query.filter_by(order_number=order_number).first()
                         
                         if co:
+                            # 🆕 跳過已完成的鑄件訂單
+                            if co.status == 'completed':
+                                co_stats['skipped'] += 1
+                                continue
+                            
                             result = self._update_casting_order(co, receipt_qty)
                             co_stats['success'] += 1
                             if result == 'completed':
@@ -121,10 +143,10 @@ class ReceiptSyncService:
             app_logger.info("入庫同步統計：")
             app_logger.info(f"[採購單] 處理: {po_stats['total']}, 成功: {po_stats['success']}, "
                            f"結案: {po_stats['completed']}, 部分: {po_stats['partial']}, "
-                           f"找不到: {po_stats['not_found']}")
+                           f"跳過(已完成): {po_stats['skipped']}, 找不到: {po_stats['not_found']}")
             app_logger.info(f"[鑄件訂單] 處理: {co_stats['total']}, 成功: {co_stats['success']}, "
                            f"結案: {co_stats['completed']}, 部分: {co_stats['partial']}, "
-                           f"找不到: {co_stats['not_found']}")
+                           f"跳過(已完成): {co_stats['skipped']}, 找不到: {co_stats['not_found']}")
             app_logger.info("=" * 60)
             
             return {'po_stats': po_stats, 'co_stats': co_stats}
