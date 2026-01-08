@@ -113,6 +113,11 @@ def start_background_threads(app):
                 app_logger.info("背景執行緒：執行入庫同步...")
                 receipt_service = ReceiptSyncService(app, db)
                 receipt_service.sync_receipts()
+                
+                # 🆕 清除孤兒交期（訂單已不存在的交期記錄）
+                app_logger.info("背景執行緒：清除孤兒交期...")
+                receipt_service.cleanup_orphan_delivery_schedules()
+                
                 app_logger.info("背景執行緒：入庫同步完成。")
             except Exception as e:
                 app_logger.error(f"背景執行緒：入庫同步失敗: {e}", exc_info=True)

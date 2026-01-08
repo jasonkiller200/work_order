@@ -238,42 +238,85 @@ class ReceiptSyncService:
         return 'updated'
     
     def _reconcile_delivery_schedules(self, material_id, order_number, receipt_qty):
-        """對消/更新交期分批"""
+        """
+        入庫時清除最近一筆待交期
+        
+        邏輯：
+        1. 找該物料尚未完成的交期排程
+        2. 優先找訂單號相符的
+        3. 刪除日期最近的那一筆
+        """
         from app.models.database import DeliverySchedule
         
         try:
-            remaining_to_deduct = receipt_qty
-            
-            # 撈出該品號相關的、未結案的排程 (優先處理 order_number 相符的)
-            schedules = DeliverySchedule.query.filter(
+            # 找該物料+訂單號相符的、最近的待交期
+            schedule = DeliverySchedule.query.filter(
                 DeliverySchedule.material_id == material_id,
+                DeliverySchedule.po_number == order_number,
                 DeliverySchedule.status.notin_(['completed', 'cancelled'])
             ).order_by(
-                self.db.case((DeliverySchedule.po_number == order_number, 0), else_=1),
                 DeliverySchedule.expected_date
-            ).all()
+            ).first()
             
-            if not schedules:
-                return
-                
-            for s in schedules:
-                if remaining_to_deduct <= 0:
-                    break
-                    
-                # 該分批剩餘需要到貨的數量
-                s_outstanding = Decimal(str(s.quantity)) - Decimal(str(s.received_quantity or 0))
-                
-                if s_outstanding <= 0:
-                    continue
-                    
-                if remaining_to_deduct >= s_outstanding:
-                    remaining_to_deduct -= s_outstanding
-                    s.received_quantity = s.quantity
-                    s.status = 'completed'
-                else:
-                    s.received_quantity = Decimal(str(s.received_quantity or 0)) + remaining_to_deduct
-                    s.status = 'partial'
-                    remaining_to_deduct = 0
+            # 如果沒有訂單號相符的，找該物料最近的待交期
+            if not schedule:
+                schedule = DeliverySchedule.query.filter(
+                    DeliverySchedule.material_id == material_id,
+                    DeliverySchedule.status.notin_(['completed', 'cancelled'])
+                ).order_by(
+                    DeliverySchedule.expected_date
+                ).first()
+            
+            if schedule:
+                app_logger.info(f"🗑️ 刪除交期: 物料 {material_id}, 訂單 {schedule.po_number}, "
+                               f"預計 {schedule.expected_date}, 數量 {schedule.quantity}")
+                self.db.session.delete(schedule)
             
         except Exception as e:
-            app_logger.error(f"對消交期失敗: {e}")
+            app_logger.error(f"清除交期失敗: {e}")
+    
+    def cleanup_orphan_delivery_schedules(self):
+        """
+        清除孤兒交期：採購單/鑄件訂單已不存在，但交期還在
+        
+        應在每日同步後執行
+        """
+        from app.models.database import PurchaseOrder, CastingOrder, DeliverySchedule
+        
+        try:
+            deleted_count = 0
+            
+            # 找出所有有 po_number 的待交期
+            schedules = DeliverySchedule.query.filter(
+                DeliverySchedule.po_number.isnot(None),
+                DeliverySchedule.status.notin_(['completed', 'cancelled'])
+            ).all()
+            
+            for s in schedules:
+                po_number = s.po_number
+                
+                # 判斷是採購單還是鑄件訂單
+                if po_number.startswith('4') and '-' not in po_number:
+                    # 鑄件訂單 (4開頭，無項目號)
+                    order = CastingOrder.query.filter_by(order_number=po_number).first()
+                else:
+                    # 採購單 (xxxx-yy 格式)
+                    order = PurchaseOrder.query.filter_by(po_number=po_number).first()
+                
+                if not order:
+                    # 訂單不存在，刪除此交期
+                    app_logger.info(f"🗑️ 刪除孤兒交期: 物料 {s.material_id}, 訂單 {po_number} (訂單已不存在)")
+                    self.db.session.delete(s)
+                    deleted_count += 1
+            
+            if deleted_count > 0:
+                self.db.session.commit()
+                app_logger.info(f"共清除 {deleted_count} 筆孤兒交期")
+            
+            return deleted_count
+            
+        except Exception as e:
+            self.db.session.rollback()
+            app_logger.error(f"清除孤兒交期失敗: {e}", exc_info=True)
+            return 0
+
