@@ -88,10 +88,10 @@ function applyStatFilter(filterType) {
     const filterNames = {
         'shortage-30-days': '30日內缺料',
         'no-delivery': '無交期項目',
-        'delayed': '已延誤',
+        'delayed': '今日到貨',
         'due-soon': '即將到期',
         'all-shortage': '總缺料項目',
-        'my-items': '我的項目',
+        'delivery-delayed': '交貨延期',
         'this-week': '本週需求',
         'sufficient': '庫存充足',
         'substitute-notify': '替代用料通知',
@@ -150,7 +150,7 @@ function calculateStats(materials, deliveryData) {
         delayed: 0,
         dueSoon: 0,
         allShortage: 0,
-        myItems: 0,
+        deliveryDelayed: 0,
         thisWeek: 0,
         sufficient: 0,
         substituteNotify: 0,
@@ -188,8 +188,42 @@ function calculateStats(materials, deliveryData) {
             stats.allShortage++;
         }
 
-        // 我的項目（暫時設為0，需要實作獲取當前使用者）
-        stats.myItems = 0;
+        // 交貨延期：使用和渲染相同的邏輯計算
+        // 判斷第一批交貨日是否超過對應缺料點的需求日期
+        if (m.delivery_schedules && m.delivery_schedules.length > 0 && m.demand_details && m.demand_details.length > 0) {
+            // 1. 初始化模擬庫存
+            let currentStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
+
+            // 2. 複製需求列表並排序
+            let demands = m.demand_details.map(d => ({
+                ...d,
+                qty: d['未結數量 (EINHEIT)'] || 0,
+                date: new Date(d['需求日期'])
+            })).sort((a, b) => a.date - b.date);
+
+            // 3. 找出第一個缺料點對應的需求
+            let targetDemand = null;
+            let tempRunningStock = currentStock;
+
+            for (const demand of demands) {
+                tempRunningStock -= demand.qty;
+                if (tempRunningStock < 0) {
+                    targetDemand = demand;
+                    break;
+                }
+            }
+
+            // 4. 如果有缺料點，比較第一批交貨日期和缺料需求日期
+            if (targetDemand) {
+                const firstSchedule = m.delivery_schedules[0];
+                const scheduleDate = new Date(firstSchedule.expected_date);
+                const demandDate = targetDemand.date;
+
+                if (scheduleDate > demandDate) {
+                    stats.deliveryDelayed++;
+                }
+            }
+        }
 
         // 本週需求
         if (earliestDemand && earliestDemand >= weekStart && earliestDemand <= weekEnd) {
@@ -227,7 +261,7 @@ window.updateStatsCards = function () {
         'stat-delayed': stats.delayed,
         'stat-due-soon': stats.dueSoon,
         'stat-all-shortage': stats.allShortage,
-        'stat-my-items': stats.myItems,
+        'stat-delivery-delayed': stats.deliveryDelayed,
         'stat-this-week': stats.thisWeek,
         'stat-sufficient': stats.sufficient,
         'stat-substitute-notify': stats.substituteNotify,
@@ -280,8 +314,42 @@ window.filterMaterialsByStats = function (materials) {
             case 'all-shortage':
                 return hasShortage;
 
-            case 'my-items':
-                // 需要實作當前使用者判斷
+            case 'delivery-delayed':
+                // 交貨延期：使用和渲染相同的邏輯計算
+                if (!(m.delivery_schedules && m.delivery_schedules.length > 0 && m.demand_details && m.demand_details.length > 0)) {
+                    return false;
+                }
+
+                // 1. 初始化模擬庫存
+                let currentStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
+
+                // 2. 複製需求列表並排序
+                let demands = m.demand_details.map(d => ({
+                    ...d,
+                    qty: d['未結數量 (EINHEIT)'] || 0,
+                    date: new Date(d['需求日期'])
+                })).sort((a, b) => a.date - b.date);
+
+                // 3. 找出第一個缺料點對應的需求
+                let targetDemand = null;
+                let tempRunningStock = currentStock;
+
+                for (const demand of demands) {
+                    tempRunningStock -= demand.qty;
+                    if (tempRunningStock < 0) {
+                        targetDemand = demand;
+                        break;
+                    }
+                }
+
+                // 4. 如果有缺料點，比較第一批交貨日期和缺料需求日期
+                if (targetDemand) {
+                    const firstSchedule = m.delivery_schedules[0];
+                    const scheduleDate = new Date(firstSchedule.expected_date);
+                    const demandDate = targetDemand.date;
+
+                    return scheduleDate > demandDate;
+                }
                 return false;
 
             case 'this-week':
