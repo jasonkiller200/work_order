@@ -14,7 +14,7 @@ class Config:
     THREADS = 2
     
     # 快取更新設定
-    CACHE_UPDATE_INTERVAL = 1800  # 30 分鐘（秒）
+    CACHE_UPDATE_INTERVAL = 900  # 30 分鐘（秒）
     ORDER_NOTE_CACHE_UPDATE_INTERVAL = 3600  # 60 分鐘（秒）
     
     # 日誌設定

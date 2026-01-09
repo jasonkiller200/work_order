@@ -752,18 +752,19 @@ class DataService:
         '''
         檢查物料是否在未來指定天數內有需求缺料
         
+        注意：此函數只考慮需求和庫存，不考慮預計到貨（delivery_schedules_map 保留參數但不使用）
+        預計到貨資料僅供物料詳情模態視窗中採購人員參考使用
+        
         Args:
             df_materials: 物料DataFrame
             demand_details_map: 需求詳情對應表
-            delivery_schedules_map: 交期分批對應表 (🆕)
+            delivery_schedules_map: （已停用）交期分批對應表，保留參數以維持向下相容
             days: 檢查天數（預設30天）
             
         Returns:
             Series: 布林值序列，True表示在指定天數內會缺料
         '''
         from datetime import datetime, timedelta
-        if delivery_schedules_map is None:
-            delivery_schedules_map = {}
             
         now = get_taiwan_time()
         cutoff_date = pd.Timestamp(now + timedelta(days=days))
@@ -773,49 +774,32 @@ class DataService:
             material_id = material['物料']
             available_stock = float(material.get('unrestricted_stock', 0) + material.get('inspection_stock', 0))
             
-            # 1. 取得需求與到貨的時間軸事件
-            timeline_events = []
-            
-            # 加入需求事件
-            demand_details = demand_details_map.get(material_id, [])
-            for demand in demand_details:
-                demand_date_str = demand.get('需求日期')
-                if demand_date_str and demand_date_str != '':
-                    # 🆕 將字串轉換回 Timestamp
-                    demand_date = pd.Timestamp(demand_date_str)
-                    if demand_date <= cutoff_date:
-                        timeline_events.append({
-                            'date': demand_date,
-                            'type': 'demand',
-                            'quantity': float(demand.get('未結數量 (EINHEIT)', 0))
-                        })
-            
-            # 加入到貨事件 (🆕 分批交期)
-            schedules = delivery_schedules_map.get(material_id, [])
-            for s in schedules:
-                delivery_date = pd.Timestamp(s['expected_date'])
-                if delivery_date <= cutoff_date:
-                    timeline_events.append({
-                        'date': delivery_date,
-                        'type': 'delivery',
-                        'quantity': s['quantity']
-                    })
-            
-            # 2. 按日期排序 (到貨排在需求之前，如果同一天)
-            timeline_events.sort(key=lambda x: (x['date'], 0 if x['type'] == 'delivery' else 1))
-            
-            # 3. 模擬庫存水位
+            # 只考慮需求事件，不考慮預計到貨
             running_stock = available_stock
             has_shortage = False
             
-            for event in timeline_events:
-                if event['type'] == 'demand':
-                    running_stock -= event['quantity']
-                    if running_stock < 0:
-                        has_shortage = True
-                        break
-                else: # delivery
-                    running_stock += event['quantity']
+            # 取得需求並按日期排序
+            demand_details = demand_details_map.get(material_id, [])
+            demand_events = []
+            for demand in demand_details:
+                demand_date_str = demand.get('需求日期')
+                if demand_date_str and demand_date_str != '':
+                    demand_date = pd.Timestamp(demand_date_str)
+                    if demand_date <= cutoff_date:
+                        demand_events.append({
+                            'date': demand_date,
+                            'quantity': float(demand.get('未結數量 (EINHEIT)', 0))
+                        })
+            
+            # 按日期排序需求
+            demand_events.sort(key=lambda x: x['date'])
+            
+            # 模擬庫存水位（只扣除需求，不加入預計到貨）
+            for event in demand_events:
+                running_stock -= event['quantity']
+                if running_stock < 0:
+                    has_shortage = True
+                    break
             
             shortage_flags.append(has_shortage)
         
