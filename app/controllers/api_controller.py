@@ -65,20 +65,14 @@ def get_material_details(material_id):
                 demand_map = alternative_map
                 dashboard_type = 'finished' if dashboard_type == 'main' else 'main'
         
-        # 從完整庫存資料中查找物料（而不是只從儀表板資料）
-        inventory_data = current_data.get("inventory_data", [])
-        material_info = None
+        # 🆕 使用 inventory_dict 進行 O(1) 快速查找 (效能優化)
+        inventory_dict = current_data.get("inventory_dict", {})
+        material_info = inventory_dict.get(material_id)
         
-        app_logger.info(f"查找物料 {material_id}, type={dashboard_type}, inventory_data 筆數: {len(inventory_data)}")
-        
-        for item in inventory_data:
-            if item.get('物料') == material_id:
-                material_info = item
-                app_logger.info(f"在 inventory_data 中找到物料 {material_id}")
-                break
-        
-        # 如果在庫存資料中找不到，嘗試從儀表板資料查找
-        if not material_info:
+        if material_info:
+            app_logger.info(f"在 inventory_dict 中找到物料 {material_id}")
+        else:
+            # 如果在庫存字典中找不到，嘗試從儀表板資料查找
             if dashboard_type == 'finished':
                 materials_data = current_data.get("finished_dashboard", [])
             else:

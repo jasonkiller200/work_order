@@ -278,6 +278,10 @@ class DataService:
             
             specs_data_cleaned = df_specs.fillna('').to_dict(orient='records')
             inventory_data_cleaned = df_inventory.fillna('').to_dict(orient='records')
+            
+            # 🆕 建立物料快速查找字典 (O(1) 查詢效能優化)
+            inventory_dict = {item['物料']: item for item in inventory_data_cleaned}
+            
             demand_details_map_cleaned = replace_nan_in_dict(demand_details_map)
             finished_demand_details_map_cleaned = replace_nan_in_dict(finished_demand_details_map)
             order_details_map_cleaned = replace_nan_in_dict(order_details_map)
@@ -294,7 +298,8 @@ class DataService:
                 "order_details_map": order_details_map_cleaned,
                 "specs_map": specs_map,
                 "order_summary_map": order_summary_map,
-                "inventory_data": inventory_data_cleaned  # 新增完整庫存資料
+                "inventory_data": inventory_data_cleaned,  # 完整庫存資料 (list)
+                "inventory_dict": inventory_dict  # 🆕 物料快速查找字典
             }
         
         except FileNotFoundError as e:
