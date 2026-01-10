@@ -87,8 +87,8 @@ function openDetailsModal(materialId) {
 
     modal.showModal();
 
-    // 根據當前儀表板類型傳遞參數
-    const dashboardType = currentDashboardType;
+    // 根據當前儀表板類型傳遞參數 (如果未定義則使用 'main' 作為預設值)
+    const dashboardType = typeof currentDashboardType !== 'undefined' ? currentDashboardType : 'main';
     fetch(`/api/material/${materialId}/details?type=${dashboardType}`)
         .then(response => {
             if (!response.ok) {
@@ -139,6 +139,12 @@ function openDetailsModal(materialId) {
 
             // 顯示替代品資訊在庫存總覽下方 (先載入通知狀態再顯示)
             if (data.substitute_inventory && data.substitute_inventory.length > 0) {
+                // 🆕 有替代品時，顯示替代版本頁籤
+                const substituteTab = modal.querySelector('.tab-link[data-tab="tab-substitute"]');
+                if (substituteTab) {
+                    substituteTab.classList.remove('hidden');
+                }
+
                 // 從 API 載入該物料的替代品通知設定
                 fetch(`/api/substitute_notification/list/${materialId}`)
                     .then(res => res.json())
@@ -239,7 +245,7 @@ function openDetailsModal(materialId) {
 
             // 🆕 初始化交期日期選擇器 (Flatpickr)
             const deliveryDateEl = document.getElementById('delivery-date');
-            const modal = document.getElementById('details-modal');
+            // 使用函式開頭定義的 modal 變數，不要重複宣告
             if (deliveryDateEl && typeof flatpickr !== 'undefined') {
                 // 如果已有 flatpickr 實例，先銷毀
                 if (deliveryDateEl._flatpickr) {
