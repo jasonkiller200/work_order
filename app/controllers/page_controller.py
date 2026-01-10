@@ -61,3 +61,11 @@ def work_order_statistics():
     TrafficService.record_page_view('work_order_statistics.html', request.remote_addr)
     return render_template('work_order_statistics.html', is_admin=get_is_admin())
 
+
+@page_bp.route('/user-management')
+@login_required
+def user_management():
+    """使用者管理頁面"""
+    TrafficService.record_page_view('user_management.html', request.remote_addr)
+    return render_template('user_management.html', is_admin=True)
+

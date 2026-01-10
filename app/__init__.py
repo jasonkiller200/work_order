@@ -4,7 +4,7 @@
 import logging
 from flask import Flask
 from app.config import Config
-from app.controllers import page_bp, api_bp, auth_bp
+from app.controllers import page_bp, api_bp, auth_bp, user_api_bp
 from app.services.cache_service import cache_manager
 from app.services.data_service import DataService
 from app.services.spec_service import SpecService
@@ -50,6 +50,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(page_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(user_api_bp)
     
     app_logger.info("Blueprints 註冊完成")
     
