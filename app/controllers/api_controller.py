@@ -67,6 +67,7 @@ def get_material_details(material_id):
         
         # 🆕 使用 inventory_dict 進行 O(1) 快速查找 (效能優化)
         inventory_dict = current_data.get("inventory_dict", {})
+        inventory_data = current_data.get("inventory_data", [])  # 替代品查找需要
         material_info = inventory_dict.get(material_id)
         
         if material_info:
