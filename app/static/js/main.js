@@ -15,10 +15,14 @@ document.addEventListener('DOMContentLoaded', function () {
             loadProcurementDashboard(); // 載入採購儀表板資料
         });
 
+        // 🆕 啟動快取自動刷新機制
+        startCacheAutoRefresh();
+
     } else if (window.location.pathname === '/order_query') {
         // All setup is now in order-query.js
     }
 });
+
 
 function checkApiStatus() {
     const badge = document.querySelector('.status-indicator');
@@ -57,6 +61,169 @@ function checkApiStatus() {
 }
 
 
+
+// ==================== 快取自動刷新機制 ====================
+
+// 快取版本追蹤
+let lastKnownCacheUpdateTime = null;
+let cacheRefreshInterval = null;
+let pendingCacheUpdate = false;
+
+/**
+ * 啟動快取自動刷新機制
+ * - 每 60 秒檢查一次快取是否更新
+ * - 若有更新且無 Modal 開啟，自動刷新資料
+ * - 若有 Modal 開啟，顯示提示讓使用者手動刷新
+ */
+function startCacheAutoRefresh() {
+    console.log('🔄 啟動快取自動刷新機制');
+
+    // 初始化：記錄當前的快取更新時間
+    fetch('/api/status')
+        .then(res => res.json())
+        .then(data => {
+            lastKnownCacheUpdateTime = data.last_update_time;
+            console.log('📌 初始快取版本:', lastKnownCacheUpdateTime);
+        })
+        .catch(err => console.error('❌ 初始化快取版本失敗:', err));
+
+    // 每 60 秒檢查一次
+    cacheRefreshInterval = setInterval(checkCacheUpdate, 60000);
+}
+
+/**
+ * 檢查快取是否已更新
+ */
+function checkCacheUpdate() {
+    fetch('/api/status')
+        .then(res => res.json())
+        .then(data => {
+            const newUpdateTime = data.last_update_time;
+
+            // 如果快取時間有變化
+            if (lastKnownCacheUpdateTime && newUpdateTime !== lastKnownCacheUpdateTime) {
+                console.log('🔔 偵測到快取更新:', lastKnownCacheUpdateTime, '→', newUpdateTime);
+
+                // 更新狀態列
+                checkApiStatus();
+
+                // 檢查是否有 Modal 開啟中
+                if (isAnyModalOpen()) {
+                    console.log('⏸️ Modal 開啟中，暫緩自動刷新');
+                    pendingCacheUpdate = true;
+                    showCacheUpdateNotification();
+                } else {
+                    // 無 Modal，直接刷新資料
+                    console.log('✅ 自動刷新資料中...');
+                    silentRefreshData();
+                }
+
+                lastKnownCacheUpdateTime = newUpdateTime;
+            }
+        })
+        .catch(err => console.error('❌ 檢查快取更新失敗:', err));
+}
+
+/**
+ * 檢查是否有任何 Modal/Dialog 開啟中
+ */
+function isAnyModalOpen() {
+    const dialogs = document.querySelectorAll('dialog[open]');
+    if (dialogs.length > 0) return true;
+
+    const overlays = document.querySelectorAll('[style*="position: fixed"][style*="z-index: 9999"]');
+    if (overlays.length > 0) return true;
+
+    return false;
+}
+
+/**
+ * 靜默刷新資料（不影響使用者操作）
+ */
+function silentRefreshData() {
+    const savedState = {
+        filterKeyword: currentFilterKeyword,
+        buyerKeyword: currentBuyerKeyword,
+        statFilter: currentStatFilter,
+        mainPage: mainDashboardPage,
+        finishedPage: finishedDashboardPage
+    };
+
+    if (typeof loadProcurementDashboard === 'function') {
+        loadProcurementDashboard().then(() => {
+            currentFilterKeyword = savedState.filterKeyword;
+            currentBuyerKeyword = savedState.buyerKeyword;
+            currentStatFilter = savedState.statFilter;
+            mainDashboardPage = savedState.mainPage;
+            finishedDashboardPage = savedState.finishedPage;
+
+            if (typeof renderMaterialsTable === 'function') {
+                renderMaterialsTable();
+            }
+
+            console.log('✅ 資料已自動更新');
+            showRefreshSuccessToast();
+        });
+    }
+}
+
+/**
+ * 顯示快取更新通知（當 Modal 開啟時）
+ */
+function showCacheUpdateNotification() {
+    if (document.getElementById('cache-update-notification')) return;
+
+    const notification = document.createElement('div');
+    notification.id = 'cache-update-notification';
+    notification.style.cssText = `
+        position: fixed; top: 70px; right: 20px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: white; padding: 12px 20px; border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10000;
+        font-size: 0.9em; display: flex; align-items: center; gap: 12px;
+    `;
+    notification.innerHTML = `
+        <span>🔄 資料已更新</span>
+        <button onclick="refreshAfterModal()" style="background: white; color: #2563eb; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">刷新</button>
+        <button onclick="this.parentElement.remove()" style="background: transparent; color: white; border: none; cursor: pointer; font-size: 1.2em;">✕</button>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => { if (notification.parentElement) notification.remove(); }, 30000);
+}
+
+window.refreshAfterModal = function () {
+    const notification = document.getElementById('cache-update-notification');
+    if (notification) notification.remove();
+    pendingCacheUpdate = false;
+    silentRefreshData();
+};
+
+function showRefreshSuccessToast() {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed; bottom: 20px; right: 20px;
+        background: #10b981; color: white; padding: 10px 16px;
+        border-radius: 6px; font-size: 0.85em; z-index: 10000;
+    `;
+    toast.textContent = '✅ 資料已自動更新';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+document.addEventListener('close', function (e) {
+    if (e.target.tagName === 'DIALOG' && pendingCacheUpdate) {
+        setTimeout(() => {
+            if (!isAnyModalOpen()) {
+                pendingCacheUpdate = false;
+                silentRefreshData();
+                const notification = document.getElementById('cache-update-notification');
+                if (notification) notification.remove();
+            }
+        }, 100);
+    }
+}, true);
+
+// ==================== 快取自動刷新機制結束 ====================
 
 // 全局變數來儲存當前儀表板的資料和狀態
 let currentDashboardType = 'main'; // 'main' 或 'finished'
