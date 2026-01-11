@@ -8,12 +8,17 @@ let perPage = 100;
 let totalPages = 1;
 let allData = []; // 儲存當前頁面資料
 
+// 🆕 排序相關變數
+let currentSortField = null;
+let currentSortDirection = 'asc'; // 'asc' 或 'desc'
+
 // 初始化
 document.addEventListener('DOMContentLoaded', function () {
     initFlatpickr();
     loadBuyerFilter();
     loadData();
     bindEvents();
+    bindSortEvents(); // 🆕 綁定排序事件
 });
 
 // 初始化日期選擇器
@@ -354,4 +359,107 @@ async function exportToExcel() {
         exportBtn.innerHTML = '📊 匯出 Excel';
         exportBtn.disabled = false;
     }
+}
+
+// 🆕 綁定排序事件
+function bindSortEvents() {
+    const sortableHeaders = document.querySelectorAll('th.sortable');
+    sortableHeaders.forEach(header => {
+        header.addEventListener('click', function () {
+            const sortField = this.dataset.sort;
+            handleSort(sortField);
+        });
+    });
+}
+
+// 🆕 處理排序
+function handleSort(field) {
+    // 切換排序方向
+    if (currentSortField === field) {
+        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSortField = field;
+        currentSortDirection = 'asc';
+    }
+
+    // 更新表頭圖標
+    updateSortIcons();
+
+    // 對資料進行排序
+    sortData();
+
+    // 重新渲染表格
+    renderTable(allData);
+}
+
+// 🆕 更新排序圖標
+function updateSortIcons() {
+    const sortableHeaders = document.querySelectorAll('th.sortable');
+    sortableHeaders.forEach(header => {
+        const icon = header.querySelector('.sort-icon');
+        if (header.dataset.sort === currentSortField) {
+            icon.textContent = currentSortDirection === 'asc' ? '↑' : '↓';
+            header.style.backgroundColor = 'rgba(66, 139, 202, 0.2)';
+        } else {
+            icon.textContent = '⇅';
+            header.style.backgroundColor = '';
+        }
+    });
+}
+
+// 🆕 排序資料
+function sortData() {
+    if (!currentSortField || !allData || allData.length === 0) return;
+
+    allData.sort((a, b) => {
+        let valueA, valueB;
+
+        // 根據欄位取得對應值
+        switch (currentSortField) {
+            case 'material_id':
+                valueA = a.material_id || '';
+                valueB = b.material_id || '';
+                break;
+            case 'supplier':
+                valueA = a.supplier || '';
+                valueB = b.supplier || '';
+                break;
+            case 'original_delivery_date':
+                valueA = a.original_delivery_date || '';
+                valueB = b.original_delivery_date || '';
+                break;
+            case 'updated_delivery_date':
+                valueA = a.updated_delivery_date || '';
+                valueB = b.updated_delivery_date || '';
+                break;
+            case 'schedule_date':
+                // 取第一筆分批日期
+                valueA = (a.delivery_schedules && a.delivery_schedules.length > 0)
+                    ? a.delivery_schedules[0].expected_date || '' : '';
+                valueB = (b.delivery_schedules && b.delivery_schedules.length > 0)
+                    ? b.delivery_schedules[0].expected_date || '' : '';
+                break;
+            case 'maintained_at':
+                // 取第一筆維護時間
+                valueA = (a.delivery_schedules && a.delivery_schedules.length > 0)
+                    ? a.delivery_schedules[0].updated_at || '' : '';
+                valueB = (b.delivery_schedules && b.delivery_schedules.length > 0)
+                    ? b.delivery_schedules[0].updated_at || '' : '';
+                break;
+            default:
+                valueA = '';
+                valueB = '';
+        }
+
+        // 字串比較
+        let comparison = 0;
+        if (valueA < valueB) {
+            comparison = -1;
+        } else if (valueA > valueB) {
+            comparison = 1;
+        }
+
+        // 根據方向調整
+        return currentSortDirection === 'asc' ? comparison : -comparison;
+    });
 }

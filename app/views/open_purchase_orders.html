@@ -81,9 +81,20 @@
                 </div>
             </div>
 
-            <!-- 統計資訊 -->
-            <div id="stats-info" style="margin-bottom: 1em; color: var(--pico-muted-color);">
-                <span id="total-count">載入中...</span>
+            <!-- 統計資訊與每頁顯示設定 -->
+            <div id="stats-info"
+                style="margin-bottom: 1em; display: flex; justify-content: space-between; align-items: center;">
+                <span id="total-count" style="color: var(--pico-muted-color);">載入中...</span>
+                <div style="display: flex; align-items: center; gap: 0.5em;">
+                    <label for="per-page-select" style="margin: 0; color: var(--pico-muted-color);">每頁顯示：</label>
+                    <select id="per-page-select"
+                        style="width: auto; display: inline-block; margin: 0; padding: 0.3em 0.6em;">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
             </div>
 
             <!-- 資料表格 -->
@@ -92,18 +103,24 @@
                     <thead>
                         <tr>
                             <th>採購單號</th>
-                            <th>物料</th>
+                            <th class="sortable" data-sort="material_id" style="cursor: pointer;">物料 <span
+                                    class="sort-icon">⇅</span></th>
                             <th>圖號</th>
                             <th>物料說明</th>
                             <th>採購人員</th>
-                            <th>供應商</th>
+                            <th class="sortable" data-sort="supplier" style="cursor: pointer;">供應商 <span
+                                    class="sort-icon">⇅</span></th>
                             <th>訂購數量</th>
                             <th>未結數量</th>
-                            <th>原始交期</th>
-                            <th>更新交期</th>
-                            <th>分批日期</th>
+                            <th class="sortable" data-sort="original_delivery_date" style="cursor: pointer;">原始交期 <span
+                                    class="sort-icon">⇅</span></th>
+                            <th class="sortable" data-sort="updated_delivery_date" style="cursor: pointer;">更新交期 <span
+                                    class="sort-icon">⇅</span></th>
+                            <th class="sortable" data-sort="schedule_date" style="cursor: pointer;">分批日期 <span
+                                    class="sort-icon">⇅</span></th>
                             <th>分批數量</th>
-                            <th>維護時間</th>
+                            <th class="sortable" data-sort="maintained_at" style="cursor: pointer;">維護時間 <span
+                                    class="sort-icon">⇅</span></th>
                         </tr>
                     </thead>
                     <tbody id="po-tbody">
@@ -116,21 +133,10 @@
 
             <!-- 分頁控制 -->
             <div id="pagination-controls"
-                style="display: flex; justify-content: space-between; align-items: center; margin-top: 1em;">
-                <div>
-                    <label for="per-page-select">每頁顯示：</label>
-                    <select id="per-page-select" style="width: auto; display: inline-block;">
-                        <option value="50">50</option>
-                        <option value="100" selected>100</option>
-                        <option value="200">200</option>
-                        <option value="500">500</option>
-                    </select>
-                </div>
-                <div id="page-info" style="display: flex; align-items: center; gap: 0.5em;">
-                    <button id="prev-page-btn" class="outline" disabled>◀ 上一頁</button>
-                    <span id="page-indicator">第 1 頁 / 共 1 頁</span>
-                    <button id="next-page-btn" class="outline" disabled>下一頁 ▶</button>
-                </div>
+                style="display: flex; justify-content: center; align-items: center; margin-top: 1em; gap: 1em;">
+                <button id="prev-page-btn" class="outline" disabled>◀ 上一頁</button>
+                <span id="page-indicator">第 1 頁 / 共 1 頁</span>
+                <button id="next-page-btn" class="outline" disabled>下一頁 ▶</button>
             </div>
         </section>
     </main>
