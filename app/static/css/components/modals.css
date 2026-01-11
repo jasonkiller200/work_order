@@ -4,8 +4,8 @@
 
 /* === 基礎彈窗樣式 === */
 #details-modal article {
-    width: 80%;
-    max-width: 900px;
+    width: 95%;
+    max-width: none;
 }
 
 /* === 分頁樣式 === */
