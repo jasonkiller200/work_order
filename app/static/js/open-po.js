@@ -4,7 +4,7 @@
 
 // 全域變數
 let currentPage = 1;
-let perPage = 100;
+let perPage = 200;
 let totalPages = 1;
 let allData = []; // 儲存當前頁面資料
 
