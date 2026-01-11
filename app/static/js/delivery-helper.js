@@ -328,15 +328,17 @@ function setupDeliveryFormEvents(materialId, materialData) {
                     document.getElementById('po-number').value = coData.order_number;
                     document.getElementById('supplier').value = '鑄件生產';
 
-                    // 填入未交數量
-                    const outstandingQty = parseFloat(coData.outstanding_quantity) || 0;
-                    document.getElementById('delivery-qty').value = outstandingQty > 0 ? outstandingQty : 0;
+                    // 🆕 智慧計算剩餘可分配數量 (與採購單相同邏輯)
+                    const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
+                    const remaining = calculateRemainingCastingQuantity(selectedValue, currentEditId);
+
+                    // 填入剩餘數量
+                    document.getElementById('delivery-qty').value = remaining > 0 ? remaining : 0;
 
                     // 🔧 不自動載入 SAP 預計完成日期，因為那是採購開單時的預設日期，需由用戶手動填寫實際預計交期
 
-                    // 🆕 顯示鑄件訂單分批提示
-                    const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
-                    showCastingOrderHint(selectedValue, coData.outstanding_quantity, coData.expected_date, currentEditId);
+                    // 🆕 顯示鑄件訂單分批提示 (含剩餘數量)
+                    showCastingOrderHint(selectedValue, coData.outstanding_quantity, remaining, currentEditId);
 
                     // 觸發計算更新
                     updateCalculation();
@@ -453,6 +455,28 @@ function calculateRemainingPOQuantity(poNumber, currentScheduleId = null) {
     return totalOutstanding - alreadyAssigned;
 }
 
+// 🆕 計算鑄件工單剩餘可分配數量 (與採購單相同邏輯)
+function calculateRemainingCastingQuantity(orderNumber, currentScheduleId = null) {
+    if (!orderNumber || !window.currentCastingOrders) return 0;
+
+    const co = window.currentCastingOrders.find(c => c.order_number === orderNumber);
+    if (!co) return 0;
+
+    const totalOutstanding = parseFloat(co.outstanding_quantity) || 0;
+
+    // 計算已分配量 (排除當前正在編輯的這一筆)
+    let alreadyAssigned = 0;
+    if (window.currentDeliveryHistory) {
+        window.currentDeliveryHistory.forEach(h => {
+            if (h.po_number === orderNumber && String(h.id) !== String(currentScheduleId) && h.status !== 'cancelled') {
+                alreadyAssigned += (parseFloat(h.quantity) - parseFloat(h.received_quantity || 0));
+            }
+        });
+    }
+
+    return totalOutstanding - alreadyAssigned;
+}
+
 // 🆕 顯示 PO 分批狀態提示
 function showPOBatchHint(poNumber, total, remaining, currentEditId) {
     const qtyInput = document.getElementById('delivery-qty');
@@ -493,7 +517,7 @@ function removePOBatchHint() {
 }
 
 // 🆕 顯示鑄件訂單狀態提示
-function showCastingOrderHint(orderNumber, outstandingQty, expectedDate, currentEditId) {
+function showCastingOrderHint(orderNumber, outstandingQty, remainingQty, currentEditId) {
     const qtyInput = document.getElementById('delivery-qty');
     const container = qtyInput.parentElement;
 
@@ -514,10 +538,15 @@ function showCastingOrderHint(orderNumber, outstandingQty, expectedDate, current
     // 計算已有的分批數
     const batchCount = window.currentDeliveryHistory ? window.currentDeliveryHistory.filter(h => h.po_number === orderNumber && h.status !== 'cancelled').length : 0;
 
+    // 🆕 計算已分配數量
+    const alreadyAssigned = outstandingQty - remainingQty;
+
     hint.innerHTML = `
         <strong>🔧 鑄件訂單 ${orderNumber}</strong> 狀態:<br>
-        • 未交數量:<span style="color: ${highlightColor}; font-weight: bold;">${outstandingQty}</span> | • 已有排程:${batchCount} 筆<br>
-        • 交期請手動填寫
+        • 未交數量: <span style="font-weight: bold;">${outstandingQty}</span> | 
+        • 已分配: <span style="color: ${alreadyAssigned > 0 ? '#ff9800' : 'inherit'};">${alreadyAssigned.toFixed(0)}</span> | 
+        • <span style="color: ${highlightColor}; font-weight: bold;">剩餘可分配: ${remainingQty.toFixed(0)}</span><br>
+        • 已有排程: ${batchCount} 筆 | • 交期請手動填寫
     `;
 
     container.appendChild(hint);
