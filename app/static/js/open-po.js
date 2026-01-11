@@ -99,7 +99,7 @@ function renderTable(results) {
     const tbody = document.getElementById('po-tbody');
 
     if (!results || results.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="13" style="text-align: center;">沒有找到符合條件的資料</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align: center;">沒有找到符合條件的資料</td></tr>';
         return;
     }
 
@@ -123,7 +123,6 @@ function renderTable(results) {
                     <td>${po.supplier || '-'}</td>
                     <td style="text-align: right;">${Math.round(po.ordered_quantity)}</td>
                     <td style="text-align: right;">${Math.round(po.outstanding_quantity)}</td>
-                    <td>${po.original_delivery_date || '-'}</td>
                     <td>${po.updated_delivery_date || '-'}</td>
                     <td>${schedule.expected_date || '-'}</td>
                     <td style="text-align: right;">${Math.round(schedule.quantity)}</td>
@@ -141,9 +140,7 @@ function renderTable(results) {
                 <td>${po.supplier || '-'}</td>
                 <td style="text-align: right;">${Math.round(po.ordered_quantity)}</td>
                 <td style="text-align: right;">${Math.round(po.outstanding_quantity)}</td>
-                <td>${po.original_delivery_date || '-'}</td>
                 <td>${po.updated_delivery_date || '-'}</td>
-                <td>-</td>
                 <td>-</td>
                 <td>-</td>
             </tr>`;
@@ -279,7 +276,6 @@ async function exportToExcel() {
             { header: '供應商', key: 'supplier', width: 20 },
             { header: '訂購數量', key: 'ordered_quantity', width: 12 },
             { header: '未結數量', key: 'outstanding_quantity', width: 12 },
-            { header: '原始交期', key: 'original_delivery_date', width: 12 },
             { header: '更新交期', key: 'updated_delivery_date', width: 12 },
             { header: '分批日期', key: 'schedule_date', width: 12 },
             { header: '分批數量', key: 'schedule_quantity', width: 12 },
@@ -302,7 +298,6 @@ async function exportToExcel() {
                         supplier: po.supplier || '',
                         ordered_quantity: Math.round(po.ordered_quantity),
                         outstanding_quantity: Math.round(po.outstanding_quantity),
-                        original_delivery_date: po.original_delivery_date || '',
                         updated_delivery_date: po.updated_delivery_date || '',
                         schedule_date: schedule.expected_date || '',
                         schedule_quantity: Math.round(schedule.quantity),
@@ -320,7 +315,6 @@ async function exportToExcel() {
                     supplier: po.supplier || '',
                     ordered_quantity: Math.round(po.ordered_quantity),
                     outstanding_quantity: Math.round(po.outstanding_quantity),
-                    original_delivery_date: po.original_delivery_date || '',
                     updated_delivery_date: po.updated_delivery_date || '',
                     schedule_date: '',
                     schedule_quantity: '',
@@ -423,10 +417,6 @@ function sortData() {
             case 'supplier':
                 valueA = a.supplier || '';
                 valueB = b.supplier || '';
-                break;
-            case 'original_delivery_date':
-                valueA = a.original_delivery_date || '';
-                valueB = b.original_delivery_date || '';
                 break;
             case 'updated_delivery_date':
                 valueA = a.updated_delivery_date || '';
