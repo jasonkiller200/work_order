@@ -247,6 +247,11 @@ function openDetailsModal(materialId) {
             const deliveryDateEl = document.getElementById('delivery-date');
             // 使用函式開頭定義的 modal 變數，不要重複宣告
             if (deliveryDateEl && typeof flatpickr !== 'undefined') {
+                // 🆕 禁用瀏覽器自動填入，避免遮擋日期選擇器
+                deliveryDateEl.setAttribute('autocomplete', 'off');
+                deliveryDateEl.setAttribute('data-lpignore', 'true');  // 禁用 LastPass
+                deliveryDateEl.setAttribute('data-form-type', 'other');  // 禁用其他密碼管理器
+
                 // 如果已有 flatpickr 實例，先銷毀
                 if (deliveryDateEl._flatpickr) {
                     deliveryDateEl._flatpickr.destroy();
@@ -261,7 +266,14 @@ function openDetailsModal(materialId) {
                     allowInput: true,
                     defaultDate: deliveryDateEl.value || null,
                     appendTo: modalArticle || document.body,  // 附加到 modal 內
-                    static: true  // 使用 static 定位，相對於 input 位置
+                    static: true,  // 使用 static 定位，相對於 input 位置
+                    // 🆕 禁用週六 (6) 和週日 (0)
+                    disable: [
+                        function (date) {
+                            // 0 = 週日, 6 = 週六
+                            return (date.getDay() === 0 || date.getDay() === 6);
+                        }
+                    ]
                 });
             }
 
