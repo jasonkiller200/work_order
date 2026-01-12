@@ -457,14 +457,15 @@ function renderFinishedTable(data) {
                 <td>
                     <span class="clickable-order" onclick="showShortageDetails('${row['工單號碼']}', 'finished')">${row['工單號碼']}</span>
                 </td>
-                <td title="${row['品名'] || ''}">${truncateText(row['品名'] || '', 30)}</td>
-                <td>${row['需求日期'] || '-'}</td>
+                <td>${row['訂單號碼'] || '-'}</td>
+                <td title="${row['下單客戶名稱'] || ''}">${truncateText(row['下單客戶名稱'] || '', 20)}</td>
+                <td>${row['物料品號'] || '-'}</td>
+                <td title="${row['品號說明'] || ''}">${truncateText(row['品號說明'] || '', 25)}</td>
+                <td>${row['生產開始'] || '-'}</td>
+                <td>${row['生產結束'] || '-'}</td>
                 <td>
                     <span class="shortage-badge ${badgeClass}">${shortageCount}</span>
                 </td>
-                <td>${row['對應成品'] || '-'}</td>
-                <td title="${row['機型'] || ''}">${truncateText(row['機型'] || '', 25)}</td>
-                <td>${row['成品出貨日'] || '-'}</td>
             </tr>
         `;
     }).join('');
@@ -492,23 +493,25 @@ async function exportFinishedToExcel() {
 
         worksheet.columns = [
             { header: '工單號碼', key: 'order_id', width: 15 },
-            { header: '品名', key: 'name', width: 35 },
-            { header: '需求日期', key: 'demand_date', width: 12 },
-            { header: '缺料筆數', key: 'shortage', width: 10 },
-            { header: '對應成品', key: 'product', width: 15 },
-            { header: '機型', key: 'model', width: 30 },
-            { header: '成品出貨日', key: 'ship_date', width: 12 }
+            { header: '訂單號碼', key: 'sales_order', width: 15 },
+            { header: '下單客戶名稱', key: 'customer', width: 25 },
+            { header: '物料品號', key: 'material_id', width: 15 },
+            { header: '品號說明', key: 'description', width: 30 },
+            { header: '生產開始', key: 'start_date', width: 12 },
+            { header: '生產結束', key: 'end_date', width: 12 },
+            { header: '缺料數', key: 'shortage', width: 10 }
         ];
 
         result.data.forEach(row => {
             worksheet.addRow({
                 order_id: row['工單號碼'],
-                name: row['品名'] || '',
-                demand_date: row['需求日期'] || '',
-                shortage: row['缺料筆數'] || 0,
-                product: row['對應成品'] || '',
-                model: row['機型'] || '',
-                ship_date: row['成品出貨日'] || ''
+                sales_order: row['訂單號碼'] || '',
+                customer: row['下單客戶名稱'] || '',
+                material_id: row['物料品號'] || '',
+                description: row['品號說明'] || '',
+                start_date: row['生產開始'] || '',
+                end_date: row['生產結束'] || '',
+                shortage: row['缺料筆數'] || 0
             });
         });
 

@@ -183,50 +183,89 @@ class WorkOrderStatsService:
             # 計算每個工單的缺料筆數
             order_stats = cls._calculate_order_statistics(demand_details_map, inventory_map)
             
-            # 合併半品總表資訊
+            # 🆕 取得工單總表資訊（用於成品工單）
+            order_summary_map = current_data.get('order_summary_map', {})
+            
             orders_list = []
-            for order_id, stats in order_stats.items():
-                # 篩選 2 開頭和 6 開頭
-                if not (order_id.startswith('2') or order_id.startswith('6')):
-                    continue
-                
-                # 從半品總表取得對應資訊
-                semi_info = semi_finished_map.get(order_id, {})
-                
-                # 判斷是否在半品總表內
-                if semi_info.get('在半品總表'):
-                    # 在半品總表內，使用半品總表的資訊
+            
+            # 🆕 根據 order_type 處理不同邏輯
+            if order_type == 'finished':
+                # === 成品工單處理 (1 開頭) ===
+                for order_id, stats in order_stats.items():
+                    # 只處理 1 開頭的成品工單
+                    if not order_id.startswith('1'):
+                        continue
+                    
+                    # 從工單總表取得資訊
+                    order_info = order_summary_map.get(order_id, {})
+                    
                     orders_list.append({
                         '工單號碼': order_id,
-                        '品名': semi_info.get('品名', ''),
-                        '需求日期': stats.get('earliest_date', ''),  # 使用元件需求日期
+                        '訂單號碼': order_info.get('訂單號碼', ''),
+                        '下單客戶名稱': order_info.get('下單客戶名稱', ''),
+                        '物料品號': order_info.get('物料品號', ''),  # 🔧 從工單總表取得
+                        '品號說明': order_info.get('物料說明', ''),
+                        '生產開始': order_info.get('生產開始', ''),
+                        '生產結束': order_info.get('生產結束', ''),
+                        '缺料數': stats.get('total_material_count', 0),  # 總物料數
                         '缺料筆數': stats.get('shortage_count', 0),
-                        '對應成品': semi_info.get('對應成品', ''),
-                        '機型': semi_info.get('機型', ''),
-                        '成品出貨日': semi_info.get('成品出貨日', '')
+                        '需求日期': stats.get('earliest_date', '')  # 兼容舊邏輯
                     })
-                else:
-                    # 不在半品總表內，機型顯示"預備用料"
-                    orders_list.append({
-                        '工單號碼': order_id,
-                        '品名': '',
-                        '需求日期': stats.get('earliest_date', ''),
-                        '缺料筆數': stats.get('shortage_count', 0),
-                        '對應成品': '',
-                        '機型': '預備用料',
-                        '成品出貨日': ''
-                    })
+            else:
+                # === 半品工單處理 (2/6 開頭) ===
+                for order_id, stats in order_stats.items():
+                    # 篩選 2 開頭和 6 開頭
+                    if not (order_id.startswith('2') or order_id.startswith('6')):
+                        continue
+                    
+                    # 從半品總表取得對應資訊
+                    semi_info = semi_finished_map.get(order_id, {})
+                    
+                    # 判斷是否在半品總表內
+                    if semi_info.get('在半品總表'):
+                        # 在半品總表內，使用半品總表的資訊
+                        orders_list.append({
+                            '工單號碼': order_id,
+                            '品名': semi_info.get('品名', ''),
+                            '需求日期': stats.get('earliest_date', ''),  # 使用元件需求日期
+                            '缺料筆數': stats.get('shortage_count', 0),
+                            '對應成品': semi_info.get('對應成品', ''),
+                            '機型': semi_info.get('機型', ''),
+                            '成品出貨日': semi_info.get('成品出貨日', '')
+                        })
+                    else:
+                        # 不在半品總表內，機型顯示"預備用料"
+                        orders_list.append({
+                            '工單號碼': order_id,
+                            '品名': '',
+                            '需求日期': stats.get('earliest_date', ''),
+                            '缺料筆數': stats.get('shortage_count', 0),
+                            '對應成品': '',
+                            '機型': '預備用料',
+                            '成品出貨日': ''
+                        })
             
             # 搜尋過濾
             if search:
                 search_lower = search.lower()
-                orders_list = [
-                    o for o in orders_list
-                    if search_lower in o['工單號碼'].lower() or
-                       search_lower in str(o['品名']).lower() or
-                       search_lower in str(o['機型']).lower() or
-                       search_lower in str(o['對應成品']).lower()
-                ]
+                if order_type == 'finished':
+                    # 成品工單搜尋欄位
+                    orders_list = [
+                        o for o in orders_list
+                        if search_lower in o['工單號碼'].lower() or
+                           search_lower in str(o.get('訂單號碼', '')).lower() or
+                           search_lower in str(o.get('下單客戶名稱', '')).lower() or
+                           search_lower in str(o.get('品號說明', '')).lower()
+                    ]
+                else:
+                    # 半品工單搜尋欄位
+                    orders_list = [
+                        o for o in orders_list
+                        if search_lower in o['工單號碼'].lower() or
+                           search_lower in str(o.get('品名', '')).lower() or
+                           search_lower in str(o.get('機型', '')).lower() or
+                           search_lower in str(o.get('對應成品', '')).lower()
+                    ]
             
             # 排序
             sort_key_map = {
@@ -234,14 +273,16 @@ class WorkOrderStatsService:
                 '半品工單號碼': '工單號碼',
                 '工單號碼': '工單號碼',
                 '缺料筆數': '缺料筆數',
-                '成品出貨日': '成品出貨日'
+                '成品出貨日': '成品出貨日',
+                '生產開始': '生產開始',  # 成品工單排序
+                '生產結束': '生產結束'
             }
-            sort_key = sort_key_map.get(sort_by, '需求日期')
+            sort_key = sort_key_map.get(sort_by, '需求日期' if order_type != 'finished' else '生產開始')
             reverse = (sort_order == 'desc')
             
             def sort_func(x):
                 val = x.get(sort_key, '')
-                if sort_key in ['需求日期', '成品出貨日']:
+                if sort_key in ['需求日期', '成品出貨日', '生產開始', '生產結束']:
                     return val if val else 'zzzz'
                 elif sort_key == '缺料筆數':
                     return -x.get(sort_key, 0) if not reverse else x.get(sort_key, 0)
@@ -280,7 +321,8 @@ class WorkOrderStatsService:
                 
             for demand in demands:
                 order_id = str(demand.get('訂單', ''))
-                if not (order_id.startswith('2') or order_id.startswith('6')):
+                # 🆕 處理 1 開頭（成品）、2 開頭和 6 開頭（半品）工單
+                if not (order_id.startswith('1') or order_id.startswith('2') or order_id.startswith('6')):
                     continue
                     
                 all_demands.append({
