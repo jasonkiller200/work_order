@@ -426,8 +426,13 @@ function setupDeliveryFormEvents(materialId, materialData) {
                 orderType = '採購單';
             }
 
-            if (maxRemaining > 0 && formData.quantity > (maxRemaining + 0.01)) { // 允許微小浮點誤差
-                showToast(`❌ 此筆交期數量 (${formData.quantity}) 超出${orderType}剩餘可分配數量 (${maxRemaining.toFixed(1)})，無法儲存`, 'error');
+            // 驗證數量是否超過剩餘可分配數量
+            if (formData.quantity > (maxRemaining + 0.01)) { // 允許微小浮點誤差
+                if (maxRemaining <= 0) {
+                    showToast(`❌ 此${orderType}已無剩餘可分配數量 (剩餘: ${maxRemaining.toFixed(1)})，無法新增分批`, 'error');
+                } else {
+                    showToast(`❌ 此筆交期數量 (${formData.quantity}) 超出${orderType}剩餘可分配數量 (${maxRemaining.toFixed(1)})，無法儲存`, 'error');
+                }
                 document.getElementById('delivery-qty').focus();
                 return;
             }
