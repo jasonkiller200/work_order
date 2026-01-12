@@ -408,17 +408,28 @@ function setupDeliveryFormEvents(materialId, materialData) {
             return;
         }
 
-        // 🆕 加強型驗證:檢查採購單分配上限（鑄件訂單跳過此驗證）
+        // 🆕 加強型驗證:檢查採購單/鑄件工單分配上限
         const isCastingOrder = formData.po_number && formData.po_number.startsWith('4');
+        const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
 
-        if (formData.po_number && window.currentPurchaseOrders && !isCastingOrder) {
-            const currentEditId = document.getElementById('save-delivery-btn').dataset.editId;
-            const maxRemaining = calculateRemainingPOQuantity(formData.po_number, currentEditId);
+        if (formData.po_number) {
+            let maxRemaining = 0;
+            let orderType = '';
 
-            if (formData.quantity > (maxRemaining + 0.01)) { // 允許微小浮點誤差
-                if (!confirm(`⚠️ 注意:此筆交期數量 (${formData.quantity}) 已超出該採購單剩餘未分配數量 (${maxRemaining.toFixed(1)})。\n\n確定要強制儲存嗎?`)) {
-                    return;
-                }
+            if (isCastingOrder && window.currentCastingOrders) {
+                // 鑄件工單使用 calculateRemainingCastingQuantity
+                maxRemaining = calculateRemainingCastingQuantity(formData.po_number, currentEditId);
+                orderType = '鑄件工單';
+            } else if (!isCastingOrder && window.currentPurchaseOrders) {
+                // 採購單使用 calculateRemainingPOQuantity
+                maxRemaining = calculateRemainingPOQuantity(formData.po_number, currentEditId);
+                orderType = '採購單';
+            }
+
+            if (maxRemaining > 0 && formData.quantity > (maxRemaining + 0.01)) { // 允許微小浮點誤差
+                showToast(`❌ 此筆交期數量 (${formData.quantity}) 超出${orderType}剩餘可分配數量 (${maxRemaining.toFixed(1)})，無法儲存`, 'error');
+                document.getElementById('delivery-qty').focus();
+                return;
             }
         }
 
