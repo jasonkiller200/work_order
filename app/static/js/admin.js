@@ -1,8 +1,50 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     if (window.location.pathname === '/admin_dashboard') {
         loadTrafficData();
+        initSyncButtons();  // 🆕 初始化同步按鈕
     }
 });
+
+// 🆕 初始化資料同步按鈕
+function initSyncButtons() {
+    const syncBtn = document.getElementById('sync-delivery-excel-btn');
+    const resultSpan = document.getElementById('sync-result');
+
+    if (syncBtn) {
+        syncBtn.addEventListener('click', async function () {
+            // 禁用按鈕並顯示載入狀態
+            syncBtn.disabled = true;
+            syncBtn.innerHTML = '⏳ 同步中...';
+            resultSpan.textContent = '';
+            resultSpan.style.color = 'var(--pico-muted-color)';
+
+            try {
+                const response = await fetch('/api/sync/delivery-to-excel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultSpan.style.color = 'var(--color-success, #4caf50)';
+                    resultSpan.textContent = `✅ ${data.message}`;
+                } else {
+                    resultSpan.style.color = 'var(--color-danger, #f44336)';
+                    resultSpan.textContent = `❌ 同步失敗: ${data.error}`;
+                }
+            } catch (error) {
+                console.error('同步失敗:', error);
+                resultSpan.style.color = 'var(--color-danger, #f44336)';
+                resultSpan.textContent = `❌ 網路錯誤: ${error.message}`;
+            } finally {
+                // 恢復按鈕
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = '📅 同步交期到缺料 Excel';
+            }
+        });
+    }
+}
 
 function loadTrafficData() {
     const container = document.getElementById('traffic-data-container');

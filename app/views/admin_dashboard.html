@@ -48,6 +48,21 @@
             </div>
         </section>
 
+        <hr>
+
+        <section id="data-sync-section">
+            <h2>📤 資料同步</h2>
+            <p style="color: var(--pico-muted-color); margin-bottom: 1em;">
+                將系統中的交期資料同步到外部 Excel 檔案
+            </p>
+            <div style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
+                <button id="sync-delivery-excel-btn" style="margin: 0;">
+                    📅 同步交期到缺料 Excel
+                </button>
+                <span id="sync-result" style="color: var(--pico-muted-color);"></span>
+            </div>
+        </section>
+
     </main>
 
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>

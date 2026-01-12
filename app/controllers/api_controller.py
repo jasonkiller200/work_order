@@ -1683,3 +1683,36 @@ def export_work_order_statistics():
         app_logger.error(f"匯出工單統計失敗: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+
+# ========================================
+# 資料同步 API
+# ========================================
+
+@api_bp.route('/sync/delivery-to-excel', methods=['POST'])
+def sync_delivery_to_excel():
+    """
+    將系統中的交期資料同步到外部 Excel 檔案
+    目標檔案: 未來半品缺料.xlsm 的「半品」頁籤
+    """
+    try:
+        from app.services.excel_sync_service import sync_delivery_to_excel as do_sync
+        
+        app_logger.info("開始執行交期同步到 Excel...")
+        result = do_sync()
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': f"成功同步 {result['synced_count']} 筆交期資料",
+                'synced_count': result['synced_count'],
+                'skipped_count': result['skipped_count']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result['error']
+            }), 500
+            
+    except Exception as e:
+        app_logger.error(f"交期同步失敗: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
