@@ -2,11 +2,13 @@
 Excel 同步服務 - 將系統交期資料同步至外部 Excel 檔案
 """
 import os
+import logging
 from datetime import datetime
 from openpyxl import load_workbook
 from sqlalchemy import func
 from ..models.database import db, DeliverySchedule
-from ..utils.logger import app_logger
+
+app_logger = logging.getLogger(__name__)
 
 
 # Excel 檔案設定
