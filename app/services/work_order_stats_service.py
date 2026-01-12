@@ -143,9 +143,12 @@ class WorkOrderStatsService:
             return cls._semi_finished_cache['data'] or {}
     
     @classmethod
-    def get_work_order_statistics(cls, page=1, per_page=50, search='', sort_by='需求日期', sort_order='asc'):
+    def get_work_order_statistics(cls, page=1, per_page=50, search='', sort_by='需求日期', sort_order='asc', order_type='semi'):
         """
         取得工單統計資料
+        
+        參數：
+        - order_type: 'semi' = 半品工單 (demand_details_map), 'finished' = 成品工單 (finished_demand_details_map)
         
         資料來源：
         - 工單清單和缺料筆數：採購儀表板主儀表板 (demand_details_map)
@@ -161,8 +164,12 @@ class WorkOrderStatsService:
             # 載入半品總表
             semi_finished_map = cls._load_semi_finished_table()
             
-            # 從主儀表板取得資料
-            demand_details_map = current_data.get('demand_details_map', {})
+            # 🆕 根據 order_type 選擇資料來源
+            if order_type == 'finished':
+                demand_details_map = current_data.get('finished_demand_details_map', {})
+            else:
+                demand_details_map = current_data.get('demand_details_map', {})
+            
             inventory_data = current_data.get('inventory_data', [])
             
             # 建立庫存對照表
@@ -538,7 +545,7 @@ class WorkOrderStatsService:
         return shortage_materials
     
     @classmethod
-    def get_all_data_for_export(cls, search=''):
+    def get_all_data_for_export(cls, search='', order_type='semi'):
         """取得所有資料供 Excel 匯出"""
-        result = cls.get_work_order_statistics(page=1, per_page=10000, search=search)
+        result = cls.get_work_order_statistics(page=1, per_page=10000, search=search, order_type=order_type)
         return result.get('data', [])

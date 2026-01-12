@@ -122,51 +122,112 @@
 
         <section id="work-order-stats-section">
             <h2>📊 工單詳情統計</h2>
-            <p style="color: var(--pico-muted-color); margin-bottom: 1em;">顯示2開頭與63開頭的半品工單，計算缺料筆數依照 FIFO（日期優先、工單號次之）</p>
 
-            <!-- 篩選區塊 -->
-            <div class="filter-controls">
-                <div class="filter-row">
-                    <div style="flex: 1; min-width: 250px;">
-                        <label for="search-input">搜尋 (工單號/品名/成品)</label>
-                        <input type="text" id="search-input" placeholder="輸入工單號碼、品名或成品工單...">
+            <!-- 🆕 頁籤導航 -->
+            <nav class="work-order-tabs" style="margin-bottom: 1em;">
+                <ul>
+                    <li><a href="#" class="wo-tab-link active" data-tab="semi-orders">📦 半品工單</a></li>
+                    <li><a href="#" class="wo-tab-link" data-tab="finished-orders">🏭 成品工單</a></li>
+                </ul>
+            </nav>
+
+            <!-- 🆕 半品工單頁籤內容 -->
+            <div id="semi-orders" class="wo-tab-content active">
+                <p style="color: var(--pico-muted-color); margin-bottom: 1em;">顯示2開頭與63開頭的半品工單，計算缺料筆數依照 FIFO（日期優先、工單號次之）
+                </p>
+
+                <!-- 篩選區塊 -->
+                <div class="filter-controls">
+                    <div class="filter-row">
+                        <div style="flex: 1; min-width: 250px;">
+                            <label for="search-input">搜尋 (工單號/品名/成品)</label>
+                            <input type="text" id="search-input" placeholder="輸入工單號碼、品名或成品工單...">
+                        </div>
+                        <div style="display: flex; gap: 0.5em;">
+                            <button id="search-btn">🔍 查詢</button>
+                            <button id="clear-btn" class="secondary">清除</button>
+                            <button id="export-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
+                                Excel</button>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 0.5em;">
-                        <button id="search-btn">🔍 查詢</button>
-                        <button id="clear-btn" class="secondary">清除</button>
-                        <button id="export-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
-                            Excel</button>
-                    </div>
+                </div>
+
+                <!-- 統計資訊 -->
+                <div id="stats-info" style="margin-bottom: 1em; color: var(--pico-muted-color);">
+                    <span id="total-count">載入中...</span>
+                </div>
+
+                <!-- 資料表格 -->
+                <div class="table-container">
+                    <table id="stats-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort="半品工單號碼">工單號碼 <span class="sort-icon"></span></th>
+                                <th>品名</th>
+                                <th class="sortable" data-sort="生產開始">需求日期 <span class="sort-icon">▲</span></th>
+                                <th class="sortable" data-sort="缺料筆數">缺料筆數 <span class="sort-icon"></span></th>
+                                <th>對應成品</th>
+                                <th>機型</th>
+                                <th class="sortable" data-sort="成品出貨日">成品出貨日 <span class="sort-icon"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-tbody">
+                            <tr>
+                                <td colspan="7" style="text-align: center;">載入中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <!-- 統計資訊 -->
-            <div id="stats-info" style="margin-bottom: 1em; color: var(--pico-muted-color);">
-                <span id="total-count">載入中...</span>
-            </div>
+            <!-- 🆕 成品工單頁籤內容 -->
+            <div id="finished-orders" class="wo-tab-content">
+                <p style="color: var(--pico-muted-color); margin-bottom: 1em;">顯示1開頭的成品工單，計算缺料筆數依照 FIFO（日期優先、工單號次之）</p>
 
-            <!-- 資料表格 -->
-            <div class="table-container">
-                <table id="stats-table">
-                    <thead>
-                        <tr>
-                            <th class="sortable" data-sort="半品工單號碼">工單號碼 <span class="sort-icon"></span></th>
-                            <th>品名</th>
-                            <th class="sortable" data-sort="生產開始">需求日期 <span class="sort-icon">▲</span></th>
-                            <th class="sortable" data-sort="缺料筆數">缺料筆數 <span class="sort-icon"></span></th>
-                            <th>對應成品</th>
-                            <th>機型</th>
-                            <th class="sortable" data-sort="成品出貨日">成品出貨日 <span class="sort-icon"></span></th>
-                        </tr>
-                    </thead>
-                    <tbody id="stats-tbody">
-                        <tr>
-                            <td colspan="7" style="text-align: center;">載入中...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+                <!-- 篩選區塊 -->
+                <div class="filter-controls">
+                    <div class="filter-row">
+                        <div style="flex: 1; min-width: 250px;">
+                            <label for="finished-search-input">搜尋 (工單號/品名)</label>
+                            <input type="text" id="finished-search-input" placeholder="輸入成品工單號碼或品名...">
+                        </div>
+                        <div style="display: flex; gap: 0.5em;">
+                            <button id="finished-search-btn">🔍 查詢</button>
+                            <button id="finished-clear-btn" class="secondary">清除</button>
+                            <button id="finished-export-btn"
+                                style="background-color: #28a745; border-color: #28a745;">📊 匯出
+                                Excel</button>
+                        </div>
+                    </div>
+                </div>
 
+                <!-- 統計資訊 -->
+                <div id="finished-stats-info" style="margin-bottom: 1em; color: var(--pico-muted-color);">
+                    <span id="finished-total-count">載入中...</span>
+                </div>
+
+                <!-- 資料表格 -->
+                <div class="table-container">
+                    <table id="finished-stats-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort="半品工單號碼">工單號碼 <span class="sort-icon"></span></th>
+                                <th>品名</th>
+                                <th class="sortable" data-sort="生產開始">需求日期 <span class="sort-icon">▲</span></th>
+                                <th class="sortable" data-sort="缺料筆數">缺料筆數 <span class="sort-icon"></span></th>
+                                <th>對應成品</th>
+                                <th>機型</th>
+                                <th class="sortable" data-sort="成品出貨日">成品出貨日 <span class="sort-icon"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="finished-stats-tbody">
+                            <tr>
+                                <td colspan="7" style="text-align: center;">載入中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
         </section>
     </main>
@@ -222,6 +283,21 @@
         }
 
         .tab-link.active {
+            border-bottom-color: var(--pico-primary) !important;
+            color: var(--pico-primary) !important;
+            font-weight: bold;
+        }
+
+        /* 🆕 工單統計頁籤樣式 */
+        .wo-tab-content {
+            display: none;
+        }
+
+        .wo-tab-content.active {
+            display: block;
+        }
+
+        .wo-tab-link.active {
             border-bottom-color: var(--pico-primary) !important;
             color: var(--pico-primary) !important;
             font-weight: bold;
