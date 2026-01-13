@@ -463,9 +463,13 @@ class WorkOrderStatsService:
             # 組建回傳資料
             result = []
             
-            # 取得採購儀表板資料（用於採購人員和預計交貨日）
-            procurement_data = current_data.get('materials_dashboard', [])
-            app_logger.info(f"工單統計：採購儀表板資料筆數: {len(procurement_data)}")
+            # 🆕 根據 order_type 選擇正確的儀表板資料（用於採購人員和預計交貨日）
+            if order_type == 'finished':
+                procurement_data = current_data.get('finished_dashboard', [])
+                app_logger.info(f"工單統計：成品儀表板資料筆數: {len(procurement_data)}")
+            else:
+                procurement_data = current_data.get('materials_dashboard', [])
+                app_logger.info(f"工單統計：採購儀表板資料筆數: {len(procurement_data)}")
             
             # Debug: 顯示第一筆資料的所有欄位
             if len(procurement_data) > 0:
