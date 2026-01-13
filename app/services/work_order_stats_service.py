@@ -371,7 +371,7 @@ class WorkOrderStatsService:
         return result
     
     @classmethod
-    def get_order_shortage_details(cls, order_id):
+    def get_order_shortage_details(cls, order_id, order_type='semi'):
         """取得特定工單的缺料物料明細（使用跨工單 FIFO 計算）"""
         try:
             current_data = cache_manager.get_current_data()
@@ -379,7 +379,14 @@ class WorkOrderStatsService:
             if not current_data:
                 return []
             
-            demand_details_map = current_data.get('demand_details_map', {})
+            # 🆕 根據 order_type 選擇資料來源
+            if order_type == 'finished':
+                demand_details_map = current_data.get('finished_demand_details_map', {})
+                order_prefix_check = lambda x: x.startswith('1')
+            else:
+                demand_details_map = current_data.get('demand_details_map', {})
+                order_prefix_check = lambda x: x.startswith('2') or x.startswith('6')
+            
             inventory_data = current_data.get('inventory_data', [])
             
             # 建立庫存對照表（使用未限制+品檢中）
@@ -403,7 +410,8 @@ class WorkOrderStatsService:
                     
                 for demand in demands:
                     demand_order_id = str(demand.get('訂單', ''))
-                    if not (demand_order_id.startswith('2') or demand_order_id.startswith('6')):
+                    # 🆕 使用動態的工單前綴檢查
+                    if not order_prefix_check(demand_order_id):
                         continue
                     
                     mat_id = str(material_id)

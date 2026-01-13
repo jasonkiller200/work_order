@@ -261,7 +261,7 @@ function truncateText(text, maxLength) {
 
 
 // 顯示缺料明細
-async function showShortageDetails(orderId) {
+async function showShortageDetails(orderId, orderType = 'semi') {
     const modal = document.getElementById('shortage-modal');
     const title = document.getElementById('shortage-modal-title');
     const summary = document.getElementById('shortage-summary');
@@ -272,7 +272,8 @@ async function showShortageDetails(orderId) {
     modal.showModal();
 
     try {
-        const response = await fetch(`/api/work-order-statistics/${orderId}/shortage-details`);
+        // 🆕 傳遞 order_type 參數
+        const response = await fetch(`/api/work-order-statistics/${orderId}/shortage-details?order_type=${orderType}`);
         const result = await response.json();
 
         if (result.error) {
