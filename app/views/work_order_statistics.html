@@ -80,7 +80,8 @@
         }
 
         /* 直接對 th 套用 sticky，避免 border-collapse 衝突 */
-        #stats-table thead th {
+        #stats-table thead th,
+        #finished-stats-table thead th {
             position: sticky;
             top: 0;
             z-index: 10;
@@ -91,7 +92,8 @@
         }
 
         /* 淺色主題背景 */
-        [data-theme="light"] #stats-table thead th {
+        [data-theme="light"] #stats-table thead th,
+        [data-theme="light"] #finished-stats-table thead th {
             background: #ffffff;
         }
     </style>
