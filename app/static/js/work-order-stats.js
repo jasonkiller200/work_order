@@ -338,7 +338,12 @@ async function exportToExcel() {
     exportBtn.textContent = '匯出中...';
 
     try {
-        const params = new URLSearchParams({ search: state.search });
+        // 🆕 傳遞排序參數以匯出與畫面一致的排序結果
+        const params = new URLSearchParams({
+            search: state.search,
+            sort_by: state.sortBy,
+            sort_order: state.sortOrder
+        });
         const response = await fetch(`/api/work-order-statistics/export?${params}`);
         const result = await response.json();
 
@@ -477,9 +482,12 @@ async function exportFinishedToExcel() {
     finishedExportBtn.textContent = '匯出中...';
 
     try {
+        // 🆕 傳遞排序參數以匯出與畫面一致的排序結果
         const params = new URLSearchParams({
             search: finishedState.search,
-            order_type: 'finished'
+            order_type: 'finished',
+            sort_by: finishedState.sortBy,
+            sort_order: finishedState.sortOrder
         });
 
         const response = await fetch(`/api/work-order-statistics/export?${params}`);

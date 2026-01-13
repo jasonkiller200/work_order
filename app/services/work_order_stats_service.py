@@ -595,7 +595,14 @@ class WorkOrderStatsService:
         return shortage_materials
     
     @classmethod
-    def get_all_data_for_export(cls, search='', order_type='semi'):
+    def get_all_data_for_export(cls, search='', order_type='semi', sort_by='需求日期', sort_order='asc'):
         """取得所有資料供 Excel 匯出"""
-        result = cls.get_work_order_statistics(page=1, per_page=10000, search=search, order_type=order_type)
+        result = cls.get_work_order_statistics(
+            page=1, 
+            per_page=10000, 
+            search=search, 
+            order_type=order_type,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
         return result.get('data', [])

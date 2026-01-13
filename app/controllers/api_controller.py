@@ -1675,8 +1675,16 @@ def export_work_order_statistics():
         from app.services.work_order_stats_service import WorkOrderStatsService
         
         search = request.args.get('search', '')
-        order_type = request.args.get('order_type', 'semi')  # 🆕 semi / finished
-        data = WorkOrderStatsService.get_all_data_for_export(search=search, order_type=order_type)
+        order_type = request.args.get('order_type', 'semi')  # semi / finished
+        sort_by = request.args.get('sort_by', '需求日期')
+        sort_order = request.args.get('sort_order', 'asc')
+        
+        data = WorkOrderStatsService.get_all_data_for_export(
+            search=search, 
+            order_type=order_type,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
         
         return jsonify({
             'data': data,
