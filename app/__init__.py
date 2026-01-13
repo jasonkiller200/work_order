@@ -30,12 +30,25 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # 設定日誌
+    import sys
+    
+    # 建立 StreamHandler 並設定 UTF-8 編碼（解決 Windows 終端機 emoji 輸出問題）
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    # 嘗試設定 UTF-8 編碼，若失敗則使用預設編碼
+    try:
+        import io
+        console_handler.stream = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass  # 若失敗則使用預設編碼
+    
     logging.basicConfig(
         level=getattr(logging, Config.LOG_LEVEL),
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(Config.LOG_FILE),
-            logging.StreamHandler()
+            logging.FileHandler(Config.LOG_FILE, encoding='utf-8'),
+            console_handler
         ]
     )
     
