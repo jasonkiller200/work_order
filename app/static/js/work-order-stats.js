@@ -592,16 +592,18 @@ async function exportFinishedToExcel() {
         ];
 
         result.data.forEach(row => {
-            worksheet.addRow({
+            const excelRow = worksheet.addRow({
                 order_id: row['工單號碼'],
                 sales_order: row['訂單號碼'] || '',
                 customer: row['下單客戶名稱'] || '',
-                material_id: row['物料品號'] || '',
+                material_id: String(row['物料品號'] || ''),  // 🆕 確保為字串
                 description: row['品號說明'] || '',
                 start_date: row['生產開始'] || '',
                 end_date: row['生產結束'] || '',
                 shortage: row['缺料筆數'] || 0
             });
+            // 🆕 設定物料品號欄位為文字格式（第4欄）
+            excelRow.getCell(4).numFmt = '@';
         });
 
         // 樣式
@@ -723,10 +725,7 @@ async function handleExport(type, orderType) {
     currentExportMode = type;
 
     if (type === 'summary') {
-        // 總表匯出 - 隱藏勾選框
-        toggleCheckboxDisplay(orderType, false);
-        selectedOrders[orderType].clear();
-
+        // 總表匯出 - 直接匯出，不改變介面狀態
         if (orderType === 'semi') {
             await exportToExcel();
         } else {
@@ -878,7 +877,7 @@ async function exportBothSheetsData(orderType) {
         const sheet1 = workbook.addWorksheet('工單總表');
         if (orderType === 'semi') {
             sheet1.columns = [
-                { header: '工單號碼', key: '半品工單號碼', width: 15 },
+                { header: '工單號碼', key: '工單號碼', width: 15 },
                 { header: '品名', key: '品名', width: 35 },
                 { header: '需求日期', key: '需求日期', width: 12 },
                 { header: '缺料筆數', key: '缺料筆數', width: 10 },
@@ -898,7 +897,14 @@ async function exportBothSheetsData(orderType) {
                 { header: '缺料數', key: '缺料筆數', width: 10 }
             ];
         }
-        summaryData.forEach(row => sheet1.addRow(row));
+        summaryData.forEach(row => {
+            const excelRow = sheet1.addRow(row);
+            // 🆕 成品工單：設定物料品號欄位為文字格式（第4欄）
+            if (orderType === 'finished') {
+                excelRow.getCell(4).numFmt = '@';
+                excelRow.getCell(4).value = String(row['物料品號'] || '');
+            }
+        });
 
         const headerRow1 = sheet1.getRow(1);
         headerRow1.font = { bold: true };
