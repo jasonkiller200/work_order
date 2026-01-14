@@ -96,6 +96,21 @@
         [data-theme="light"] #finished-stats-table thead th {
             background: #ffffff;
         }
+
+        /* 🆕 匯出下拉選單樣式 */
+        .export-option:hover {
+            background: var(--pico-primary-focus);
+        }
+
+        .checkbox-col {
+            text-align: center;
+        }
+
+        .checkbox-col input[type="checkbox"] {
+            margin: 0;
+            width: 18px;
+            height: 18px;
+        }
     </style>
 </head>
 
@@ -145,11 +160,27 @@
                             <label for="search-input">搜尋 (工單號/品名/成品)</label>
                             <input type="text" id="search-input" placeholder="輸入工單號碼、品名或成品工單...">
                         </div>
-                        <div style="display: flex; gap: 0.5em;">
+                        <div style="display: flex; gap: 0.5em; align-items: center;">
                             <button id="search-btn">🔍 查詢</button>
                             <button id="clear-btn" class="secondary">清除</button>
-                            <button id="export-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
-                                Excel</button>
+                            <!-- 🆕 匯出下拉選單 -->
+                            <div class="export-dropdown" style="position: relative;">
+                                <button id="export-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
+                                    ▼</button>
+                                <div id="export-menu" class="export-menu"
+                                    style="display: none; position: absolute; top: 100%; right: 0; background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; min-width: 200px; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                                    <div class="export-option" data-type="summary"
+                                        style="padding: 0.8em 1em; cursor: pointer;">📊 匯出總表</div>
+                                    <div class="export-option" data-type="shortage"
+                                        style="padding: 0.8em 1em; cursor: pointer;">📋 匯出缺料明細</div>
+                                    <div class="export-option" data-type="both"
+                                        style="padding: 0.8em 1em; cursor: pointer;">📊📋 匯出總表+缺料</div>
+                                </div>
+                            </div>
+                            <!-- 🆕 已選計數 -->
+                            <span id="selected-count"
+                                style="margin-left: 1em; color: var(--pico-primary); display: none;">已選 <strong
+                                    id="selected-num">0</strong> 筆</span>
                         </div>
                     </div>
                 </div>
@@ -164,6 +195,10 @@
                     <table id="stats-table">
                         <thead>
                             <tr>
+                                <!-- 🆕 勾選框欄位 -->
+                                <th id="checkbox-header" class="checkbox-col" style="width: 40px; display: none;">
+                                    <input type="checkbox" id="select-all-semi" title="全選/取消">
+                                </th>
                                 <th class="sortable" data-sort="半品工單號碼">工單號碼 <span class="sort-icon"></span></th>
                                 <th>品名</th>
                                 <th class="sortable" data-sort="需求日期">需求日期 <span class="sort-icon">▲</span></th>
@@ -193,12 +228,27 @@
                             <label for="finished-search-input">搜尋 (工單號/品名)</label>
                             <input type="text" id="finished-search-input" placeholder="輸入成品工單號碼或品名...">
                         </div>
-                        <div style="display: flex; gap: 0.5em;">
+                        <div style="display: flex; gap: 0.5em; align-items: center;">
                             <button id="finished-search-btn">🔍 查詢</button>
                             <button id="finished-clear-btn" class="secondary">清除</button>
-                            <button id="finished-export-btn"
-                                style="background-color: #28a745; border-color: #28a745;">📊 匯出
-                                Excel</button>
+                            <!-- 🆕 匯出下拉選單 -->
+                            <div class="export-dropdown" style="position: relative;">
+                                <button id="finished-export-btn"
+                                    style="background-color: #28a745; border-color: #28a745;">📊 匯出 ▼</button>
+                                <div id="finished-export-menu" class="export-menu"
+                                    style="display: none; position: absolute; top: 100%; right: 0; background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; min-width: 200px; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                                    <div class="export-option" data-type="summary"
+                                        style="padding: 0.8em 1em; cursor: pointer;">📊 匯出總表</div>
+                                    <div class="export-option" data-type="shortage"
+                                        style="padding: 0.8em 1em; cursor: pointer;">📋 匯出缺料明細</div>
+                                    <div class="export-option" data-type="both"
+                                        style="padding: 0.8em 1em; cursor: pointer;">📊📋 匯出總表+缺料</div>
+                                </div>
+                            </div>
+                            <!-- 🆕 已選計數 -->
+                            <span id="finished-selected-count"
+                                style="margin-left: 1em; color: var(--pico-primary); display: none;">已選 <strong
+                                    id="finished-selected-num">0</strong> 筆</span>
                         </div>
                     </div>
                 </div>
@@ -213,6 +263,11 @@
                     <table id="finished-stats-table">
                         <thead>
                             <tr>
+                                <!-- 🆕 勾選框欄位 -->
+                                <th id="finished-checkbox-header" class="checkbox-col"
+                                    style="width: 40px; display: none;">
+                                    <input type="checkbox" id="select-all-finished" title="全選/取消">
+                                </th>
                                 <th class="sortable" data-sort="工單號碼">工單號碼 <span class="sort-icon"></span></th>
                                 <th>訂單號碼</th>
                                 <th>下單客戶名稱</th>

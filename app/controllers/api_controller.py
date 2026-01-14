@@ -1696,6 +1696,42 @@ def export_work_order_statistics():
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/work-order-statistics/batch-shortage-details', methods=['POST'])
+@cache_required
+def get_batch_shortage_details():
+    """批量取得多個工單的缺料明細"""
+    try:
+        from app.services.work_order_stats_service import WorkOrderStatsService
+        
+        data = request.get_json()
+        order_ids = data.get('order_ids', [])
+        order_type = data.get('order_type', 'semi')
+        
+        if not order_ids:
+            return jsonify({'error': '請提供工單號碼'}), 400
+        
+        all_details = []
+        
+        for order_id in order_ids:
+            details = WorkOrderStatsService.get_order_shortage_details(order_id, order_type=order_type)
+            # 為每筆資料加上工單號碼
+            for item in details:
+                item['工單號碼'] = order_id
+            all_details.extend(details)
+        
+        # 排序：缺料優先
+        all_details.sort(key=lambda x: (not x.get('是否缺料', False), x.get('工單號碼', ''), x.get('物料', '')))
+        
+        return jsonify({
+            'data': all_details,
+            'total': len(all_details),
+            'order_count': len(order_ids)
+        })
+    
+    except Exception as e:
+        app_logger.error(f"批量取得缺料明細失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 # ========================================
 # 資料同步 API
 # ========================================
