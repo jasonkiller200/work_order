@@ -286,9 +286,10 @@ class ReceiptSyncService:
         try:
             deleted_count = 0
             
-            # 找出所有有 po_number 的待交期
+            # 找出所有有 po_number 的待交期 (排除 NULL 和空字串)
             schedules = DeliverySchedule.query.filter(
                 DeliverySchedule.po_number.isnot(None),
+                DeliverySchedule.po_number != '',  # 🆕 排除空字串
                 DeliverySchedule.status.notin_(['completed', 'cancelled'])
             ).all()
             
