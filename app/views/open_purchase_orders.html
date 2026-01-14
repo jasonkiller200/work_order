@@ -20,6 +20,9 @@
         <header>
             <h1>生產資訊中心</h1>
             <p>一個整合工單料況、庫存與規格的查詢系統</p>
+            <!-- 🆕 快取狀態列 -->
+            <span class="status-indicator loading"></span>
+            <span id="status-badge-text" style="font-size: 0.8em; color: var(--pico-muted-color);">檢查中...</span>
         </header>
 
         <nav>
@@ -146,6 +149,8 @@
     <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
 
+    <!-- 通用 JS (包含快取刷新) -->
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=1235"></script>
     <!-- 頁面專用 JS -->
     <script src="{{ url_for('static', filename='js/open-po.js') }}?v=1234"></script>
 </body>

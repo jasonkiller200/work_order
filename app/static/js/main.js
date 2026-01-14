@@ -1,11 +1,20 @@
 
 
-
 document.addEventListener('DOMContentLoaded', function () {
+    // 🆕 所有頁面都執行狀態檢查
     checkApiStatus();
 
-    if (window.location.pathname === '/procurement') {
+    const pathname = window.location.pathname;
 
+    // 🆕 需要啟動快取自動刷新的頁面列表
+    const pagesWithCacheRefresh = [
+        '/procurement',
+        '/order_query',
+        '/open-purchase-orders',
+        '/work-order-statistics'
+    ];
+
+    if (pathname === '/procurement') {
         setupProcurementFilter();
         setupDashboardTabs(); // 設定儀表板頁籤切換
         setupStatsCardEvents(); // 🆕 設定統計圖卡事件
@@ -14,12 +23,11 @@ document.addEventListener('DOMContentLoaded', function () {
         window.loadNotifiedSubstitutes().then(() => {
             loadProcurementDashboard(); // 載入採購儀表板資料
         });
+    }
 
-        // 🆕 啟動快取自動刷新機制
+    // 🆕 這些頁面都啟動快取自動刷新
+    if (pagesWithCacheRefresh.includes(pathname)) {
         startCacheAutoRefresh();
-
-    } else if (window.location.pathname === '/order_query') {
-        // All setup is now in order-query.js
     }
 });
 
