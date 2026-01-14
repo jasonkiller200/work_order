@@ -277,7 +277,9 @@ class ReceiptSyncService:
     
     def cleanup_orphan_delivery_schedules(self):
         """
-        清除孤兒交期：採購單/鑄件訂單已不存在，但交期還在
+        清除孤兒交期：
+        1. 採購單/鑄件訂單已不存在，但交期還在
+        2. 採購單/鑄件訂單已完成，但交期還在 (新增)
         
         應在每日同步後執行
         """
@@ -286,10 +288,10 @@ class ReceiptSyncService:
         try:
             deleted_count = 0
             
-            # 找出所有有 po_number 的待交期 (排除 NULL 和空字串)
+            # === 1. 清除訂單不存在的孤兒交期 ===
             schedules = DeliverySchedule.query.filter(
                 DeliverySchedule.po_number.isnot(None),
-                DeliverySchedule.po_number != '',  # 🆕 排除空字串
+                DeliverySchedule.po_number != '',
                 DeliverySchedule.status.notin_(['completed', 'cancelled'])
             ).all()
             
@@ -298,21 +300,32 @@ class ReceiptSyncService:
                 
                 # 判斷是採購單還是鑄件訂單
                 if po_number.startswith('4') and '-' not in po_number:
-                    # 鑄件訂單 (4開頭，無項目號)
                     order = CastingOrder.query.filter_by(order_number=po_number).first()
+                    order_status = order.status if order else None
                 else:
-                    # 採購單 (xxxx-yy 格式)
                     order = PurchaseOrder.query.filter_by(po_number=po_number).first()
+                    order_status = order.status if order else None
+                
+                should_delete = False
+                delete_reason = ''
                 
                 if not order:
-                    # 訂單不存在，刪除此交期
-                    app_logger.info(f"🗑️ 刪除孤兒交期: 物料 {s.material_id}, 訂單 {po_number} (訂單已不存在)")
+                    # 訂單不存在
+                    should_delete = True
+                    delete_reason = '訂單已不存在'
+                elif order_status == 'completed':
+                    # 🆕 訂單已完成，殘留交期也應清除
+                    should_delete = True
+                    delete_reason = '訂單已完成'
+                
+                if should_delete:
+                    app_logger.info(f"🗑️ 刪除交期: 物料 {s.material_id}, 訂單 {po_number} ({delete_reason})")
                     self.db.session.delete(s)
                     deleted_count += 1
             
             if deleted_count > 0:
                 self.db.session.commit()
-                app_logger.info(f"共清除 {deleted_count} 筆孤兒交期")
+                app_logger.info(f"共清除 {deleted_count} 筆孤兒/殘留交期")
             
             return deleted_count
             
