@@ -658,6 +658,16 @@ class DataService:
             # 處理 NaN 值
             df_filtered_summary = df_filtered_summary.fillna('')
             
+            # 🆕 新增「廠別」欄位：根據「機械外包」欄位是否包含「裝三課」來判斷
+            def determine_factory(row):
+                """判斷廠別：如果「機械外包」欄位包含「裝三課」則返回「三廠」，否則返回「一廠」"""
+                mech_value = str(row.get('機械外包', ''))
+                if '裝三課' in mech_value:
+                    return '三廠'
+                return '一廠'
+            
+            df_filtered_summary['廠別'] = df_filtered_summary.apply(determine_factory, axis=1)
+            
             # 處理重複的 '工單號碼'
             if '工單號碼' in df_filtered_summary.columns:
                 df_filtered_summary['工單號碼'] = df_filtered_summary['工單號碼'].astype(str)

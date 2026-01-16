@@ -17,7 +17,8 @@ const finishedState = {
     search: '',
     sortBy: '生產開始',
     sortOrder: 'asc',
-    totalCount: 0
+    totalCount: 0,
+    factoryFilter: ''  // 🆕 廠別篩選
 };
 
 // 🆕 勾選狀態管理
@@ -191,10 +192,25 @@ function initEventListeners() {
         });
     }
 
+    // 🆕 廠別篩選事件
+    const factoryFilter = document.getElementById('factory-filter');
+    if (factoryFilter) {
+        factoryFilter.addEventListener('change', () => {
+            finishedState.factoryFilter = factoryFilter.value;
+            loadFinishedData();
+        });
+    }
+
     if (finishedClearBtn) {
         finishedClearBtn.addEventListener('click', () => {
             finishedSearchInput.value = '';
             finishedState.search = '';
+            // 🆕 重置廠別篩選
+            const factoryFilter = document.getElementById('factory-filter');
+            if (factoryFilter) {
+                factoryFilter.value = '';
+                finishedState.factoryFilter = '';
+            }
             loadFinishedData();
         });
     }
@@ -485,7 +501,7 @@ function updateFinishedSortIcons() {
 }
 
 async function loadFinishedData() {
-    finishedStatsTbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">載入中...</td></tr>';
+    finishedStatsTbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">載入中...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -504,20 +520,26 @@ async function loadFinishedData() {
             throw new Error(result.error);
         }
 
-        finishedState.totalCount = result.total || 0;
+        // 🆕 前端廠別篩選
+        let filteredData = result.data || [];
+        if (finishedState.factoryFilter) {
+            filteredData = filteredData.filter(row => row['廠別'] === finishedState.factoryFilter);
+        }
 
-        renderFinishedTable(result.data);
+        finishedState.totalCount = filteredData.length;
+
+        renderFinishedTable(filteredData);
         finishedTotalCountEl.textContent = `共 ${finishedState.totalCount} 筆工單`;
 
     } catch (error) {
         console.error('載入成品工單資料失敗:', error);
-        finishedStatsTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
+        finishedStatsTbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
     }
 }
 
 function renderFinishedTable(data) {
     if (!data || data.length === 0) {
-        const colspan = showCheckboxes ? 9 : 8;
+        const colspan = showCheckboxes ? 10 : 9;
         finishedStatsTbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center;">沒有符合條件的資料</td></tr>`;
         return;
     }
@@ -547,6 +569,7 @@ function renderFinishedTable(data) {
                 <td title="${row['下單客戶名稱'] || ''}">${truncateText(row['下單客戶名稱'] || '', 20)}</td>
                 <td>${row['物料品號'] || '-'}</td>
                 <td title="${row['品號說明'] || ''}">${truncateText(row['品號說明'] || '', 25)}</td>
+                <td>${row['廠別'] || '一廠'}</td>
                 <td>${row['生產開始'] || '-'}</td>
                 <td>${row['生產結束'] || '-'}</td>
                 <td>
@@ -586,6 +609,7 @@ async function exportFinishedToExcel() {
             { header: '下單客戶名稱', key: 'customer', width: 25 },
             { header: '物料品號', key: 'material_id', width: 15 },
             { header: '品號說明', key: 'description', width: 30 },
+            { header: '廠別', key: 'factory', width: 8 },
             { header: '生產開始', key: 'start_date', width: 12 },
             { header: '生產結束', key: 'end_date', width: 12 },
             { header: '缺料數', key: 'shortage', width: 10 }
@@ -598,6 +622,7 @@ async function exportFinishedToExcel() {
                 customer: row['下單客戶名稱'] || '',
                 material_id: String(row['物料品號'] || ''),  // 🆕 確保為字串
                 description: row['品號說明'] || '',
+                factory: row['廠別'] || '一廠',
                 start_date: row['生產開始'] || '',
                 end_date: row['生產結束'] || '',
                 shortage: row['缺料筆數'] || 0

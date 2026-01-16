@@ -207,6 +207,7 @@ class WorkOrderStatsService:
                         '品號說明': order_info.get('物料說明', ''),
                         '生產開始': order_info.get('生產開始', ''),
                         '生產結束': order_info.get('生產結束', ''),
+                        '廠別': order_info.get('廠別', '一廠'),  # 🆕 新增廠別欄位
                         '缺料數': stats.get('total_material_count', 0),  # 總物料數
                         '缺料筆數': stats.get('shortage_count', 0),
                         '需求日期': stats.get('earliest_date', '')  # 兼容舊邏輯
