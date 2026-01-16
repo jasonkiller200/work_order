@@ -1059,6 +1059,17 @@ window.toggleSubstituteNotify = function (materialId, substituteMaterialId, chec
                 if (checkbox) {
                     checkbox.checked = data.is_notified;
                 }
+
+                // 🆕 重新載入替代品通知資料並刷新儀表板統計
+                if (typeof window.loadNotifiedSubstitutes === 'function') {
+                    window.loadNotifiedSubstitutes().then(() => {
+                        // 重新計算並更新統計卡片
+                        if (typeof window.updateStatsCards === 'function') {
+                            window.updateStatsCards();
+                            console.log('替代用料統計已刷新');
+                        }
+                    });
+                }
             } else {
                 console.error('Toggle failed:', data.error);
                 // 復原 checkbox 狀態
