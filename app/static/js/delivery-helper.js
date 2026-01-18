@@ -600,8 +600,10 @@ function saveDelivery(formData) {
                 if (typeof loadPurchaseOrders === 'function') {
                     loadPurchaseOrders(formData.material_id);
                 }
-                // 重新載入儀錶板以更新統計
-                loadProcurementDashboard();
+                // 重新載入儀錶板以更新統計（僅在採購儀表板頁面有效）
+                if (typeof loadProcurementDashboard === 'function') {
+                    loadProcurementDashboard();
+                }
 
                 // 🆕 刷新工單缺料明細視窗（如果有開啟）
                 if (window.currentShortageModalInfo && typeof window.showShortageDetails === 'function') {
@@ -684,7 +686,18 @@ function deleteDeliverySchedule(id, materialId) {
                 if (typeof loadPurchaseOrders === 'function') {
                     loadPurchaseOrders(materialId);
                 }
-                loadProcurementDashboard();
+                // 🆕 重新載入儀錶板以更新統計（僅在採購儀表板頁面有效）
+                if (typeof loadProcurementDashboard === 'function') {
+                    loadProcurementDashboard();
+                }
+
+                // 🆕 刷新工單缺料明細視窗（如果有開啟）
+                if (window.currentShortageModalInfo && typeof window.showShortageDetails === 'function') {
+                    const { orderId, orderType } = window.currentShortageModalInfo;
+                    setTimeout(() => {
+                        window.showShortageDetails(orderId, orderType);
+                    }, 500);
+                }
             } else {
                 alert('刪除失敗: ' + (data.error || '未知錯誤'));
             }
@@ -818,7 +831,9 @@ function clearOverdueDelivery(materialId) {
             if (data.success) {
                 showToast('✅ 已清除過期交期', 'success');
                 loadExistingDelivery(materialId);
-                loadProcurementDashboard();
+                if (typeof loadProcurementDashboard === 'function') {
+                    loadProcurementDashboard();
+                }
             } else {
                 showToast('❌ 清除失敗', 'error');
             }
@@ -876,7 +891,9 @@ function batchClearOverdueDeliveries() {
             if (data.success) {
                 showToast(`✅ 已批量清除 ${data.cleared_count} 個過期交期`, 'success');
                 // 重新載入儀表板
-                loadProcurementDashboard();
+                if (typeof loadProcurementDashboard === 'function') {
+                    loadProcurementDashboard();
+                }
                 // 隱藏批量操作欄
                 document.getElementById('batch-actions-bar').style.display = 'none';
             } else {
