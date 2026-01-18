@@ -355,29 +355,49 @@ async function showShortageDetails(orderId, orderType = 'semi') {
     modal.showModal();
 
     try {
-        // 🆕 傳遞 order_type 參數
-        const response = await fetch(`/api/work-order-statistics/${orderId}/shortage-details?order_type=${orderType}`);
-        const result = await response.json();
+        // 🆕 同時載入缺料明細和採購人員清單
+        const [shortageResult, buyersResult] = await Promise.all([
+            fetch(`/api/work-order-statistics/${orderId}/shortage-details?order_type=${orderType}`).then(r => r.json()),
+            fetch('/api/buyers_list').then(r => r.json())
+        ]);
 
-        if (result.error) {
-            throw new Error(result.error);
+        if (shortageResult.error) {
+            throw new Error(shortageResult.error);
         }
 
+        const buyersList = buyersResult.buyers || [];
+
         summary.innerHTML = `
-            <strong>缺料筆數:</strong> <span style="color: ${result.shortage_count > 0 ? '#f44336' : '#4caf50'};">${result.shortage_count}</span> / 
-            <strong>物料總數:</strong> ${result.total_materials}
+            <strong>缺料筆數:</strong> <span style="color: ${shortageResult.shortage_count > 0 ? '#f44336' : '#4caf50'};">${shortageResult.shortage_count}</span> / 
+            <strong>物料總數:</strong> ${shortageResult.total_materials}
         `;
 
-        if (!result.details || result.details.length === 0) {
+        if (!shortageResult.details || shortageResult.details.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">此工單無物料需求</td></tr>';
             return;
         }
 
-        tbody.innerHTML = result.details.map(item => {
+        // 🆕 建立採購人員下拉選單的 HTML
+        function buildBuyerSelect(materialId, currentBuyer) {
+            let options = '<option value="">未指定</option>';
+            buyersList.forEach(buyer => {
+                const selected = buyer === currentBuyer ? 'selected' : '';
+                options += `<option value="${buyer}" ${selected}>${buyer}</option>`;
+            });
+            return `<select class="shortage-buyer-select" 
+                           data-material-id="${materialId}" 
+                           data-dashboard-type="${orderType === 'finished' ? 'finished' : 'main'}"
+                           style="font-size: 0.85em; padding: 0.2em 0.4em; min-width: 80px;">
+                        ${options}
+                    </select>`;
+        }
+
+        tbody.innerHTML = shortageResult.details.map(item => {
             const isShortage = item['是否缺料'];
             const rowClass = isShortage ? 'shortage-row' : '';
             const statusText = isShortage ? '⚠️ 缺料' : '✅ 充足';
             const statusColor = isShortage ? '#f44336' : '#4caf50';
+            const currentBuyer = item['採購人員'] || '';
 
             return `
                 <tr class="${rowClass}">
@@ -389,16 +409,72 @@ async function showShortageDetails(orderId, orderType = 'semi') {
                     <td>${item['可用庫存'] || 0}</td>
                     <td style="color: ${statusColor};">${statusText}</td>
                     <td>${item['需求日期'] || '-'}</td>
-                    <td>${item['採購人員'] || '-'}</td>
+                    <td>${buildBuyerSelect(item['物料'], currentBuyer)}</td>
                     <td>${item['預計交貨日'] || '-'}</td>
                 </tr>
             `;
         }).join('');
 
+        // 🆕 綁定採購人員下拉選單變更事件
+        bindShortageBuyerSelectEvents();
+
     } catch (error) {
         console.error('載入缺料明細失敗:', error);
         tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
     }
+}
+
+// 🆕 綁定缺料明細中採購人員下拉選單的變更事件
+function bindShortageBuyerSelectEvents() {
+    document.querySelectorAll('.shortage-buyer-select').forEach(select => {
+        select.addEventListener('change', async function () {
+            const materialId = this.dataset.materialId;
+            const newBuyer = this.value;
+            const dashboardType = this.dataset.dashboardType;
+            const originalValue = this.getAttribute('data-original-value') || '';
+
+            // 暫時禁用選單
+            this.disabled = true;
+            this.style.opacity = '0.6';
+
+            try {
+                const response = await fetch('/api/update_buyer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        material_id: materialId,
+                        buyer: newBuyer,
+                        dashboard_type: dashboardType
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 顯示成功訊息
+                    this.style.backgroundColor = '#d4edda';
+                    this.style.borderColor = '#c3e6cb';
+                    setTimeout(() => {
+                        this.style.backgroundColor = '';
+                        this.style.borderColor = '';
+                    }, 1500);
+                    console.log(`物料 ${materialId} 採購人員已更新為: ${newBuyer || '未指定'}`);
+                } else {
+                    alert('儲存失敗: ' + (data.error || '未知錯誤'));
+                    this.value = originalValue;
+                }
+            } catch (error) {
+                console.error('更新採購人員失敗:', error);
+                alert('儲存採購人員時發生錯誤');
+                this.value = originalValue;
+            } finally {
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        });
+
+        // 儲存原始值
+        select.setAttribute('data-original-value', select.value);
+    });
 }
 
 function closeShortageModal() {
