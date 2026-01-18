@@ -464,51 +464,50 @@ class WorkOrderStatsService:
             # 組建回傳資料
             result = []
             
-            # 🆕 根據 order_type 選擇正確的儀表板資料（用於採購人員和預計交貨日）
+            # 🆕 直接從資料庫查詢所有相關物料的交期排程（不依賴儀表板快取）
+            from app.models.database import DeliverySchedule
+            
+            # 取得所有需要查詢的物料 ID
+            material_ids_to_query = list(order_material_info.keys())
+            
+            # 從資料庫查詢這些物料的交期排程
+            delivery_map = {}
+            if material_ids_to_query:
+                try:
+                    schedules = DeliverySchedule.query.filter(
+                        DeliverySchedule.material_id.in_(material_ids_to_query),
+                        DeliverySchedule.status.notin_(['completed', 'cancelled'])
+                    ).all()
+                    
+                    for s in schedules:
+                        mat_id = s.material_id
+                        if mat_id not in delivery_map:
+                            delivery_map[mat_id] = []
+                        delivery_map[mat_id].append({
+                            'expected_date': s.expected_date.strftime('%Y-%m-%d') if s.expected_date else '',
+                            'quantity': float(s.quantity - (s.received_quantity or 0)),
+                            'po_number': s.po_number  # 可能為 None（無綁定採購單）
+                        })
+                    
+                    app_logger.info(f"工單統計：從資料庫查詢到 {len(schedules)} 筆交期排程，涵蓋 {len(delivery_map)} 個物料")
+                except Exception as e:
+                    app_logger.error(f"工單統計：查詢交期排程失敗: {e}")
+            
+            # 🆕 從儀表板取得採購人員資料
             if order_type == 'finished':
                 procurement_data = current_data.get('finished_dashboard', [])
-                app_logger.info(f"工單統計：成品儀表板資料筆數: {len(procurement_data)}")
             else:
                 procurement_data = current_data.get('materials_dashboard', [])
-                app_logger.info(f"工單統計：採購儀表板資料筆數: {len(procurement_data)}")
-            
-            # Debug: 顯示第一筆資料的所有欄位
-            if len(procurement_data) > 0:
-                first_item_keys = list(procurement_data[0].keys())
-                app_logger.info(f"工單統計：採購資料欄位: {first_item_keys}")
             
             procurement_map = {}
-            for idx, item in enumerate(procurement_data):
+            for item in procurement_data:
                 material_id = str(item.get('物料', ''))
-                if material_id:  # 只處理非空的物料編號
-                    # 從 delivery_schedules 中取得最早的交貨日期
-                    delivery_schedules = item.get('delivery_schedules', [])
-                    earliest_delivery = ''
-                    
-                    # Debug: 顯示第一筆資料的 delivery_schedules
-                    if idx == 0:
-                        app_logger.info(f"工單統計：第一筆物料 {material_id} 的 delivery_schedules: {delivery_schedules}")
-                    
-                    if delivery_schedules and len(delivery_schedules) > 0:
-                        # delivery_schedules 是一個陣列，每個元素有 'expected_date' 欄位
-                        # 取得最早的日期
-                        dates = [schedule.get('expected_date', '') for schedule in delivery_schedules if schedule.get('expected_date')]
-                        if dates:
-                            earliest_delivery = min(dates)
-                            # 如果是 datetime 物件，轉換為字串
-                            if hasattr(earliest_delivery, 'strftime'):
-                                earliest_delivery = earliest_delivery.strftime('%Y-%m-%d')
-                    
+                if material_id:
                     procurement_map[material_id] = {
-                        '採購人員': item.get('採購人員', ''),
-                        '預計交貨日': earliest_delivery
+                        '採購人員': item.get('採購人員', '')
                     }
             
             app_logger.info(f"工單統計：建立採購對照表，共 {len(procurement_map)} 筆")
-            if len(procurement_map) > 0:
-                # 顯示前 3 筆作為範例
-                sample_keys = list(procurement_map.keys())[:3]
-                app_logger.info(f"工單統計：採購對照表範例物料編號: {sample_keys}")
             
             for mat_id, mat_data in order_material_info.items():
                 available = inventory_map.get(mat_id, 0)
@@ -528,15 +527,23 @@ class WorkOrderStatsService:
                 
                 is_shortage = mat_id in shortage_materials
                 
-                # 從採購儀表板取得採購人員和預計交貨日
+                # 從採購儀表板取得採購人員
                 procurement_info = procurement_map.get(mat_id, {})
-                buyer = procurement_info.get('採購人員', '-')
-                expected_delivery = procurement_info.get('預計交貨日', '-')
+                buyer = procurement_info.get('採購人員', '') or '-'
+                
+                # 🆕 從資料庫查詢的 delivery_map 取得預計交貨日（最早的一筆）
+                mat_deliveries = delivery_map.get(mat_id, [])
+                expected_delivery = '-'
+                if mat_deliveries:
+                    # 按日期排序，取最早的
+                    dates = [d['expected_date'] for d in mat_deliveries if d.get('expected_date')]
+                    if dates:
+                        expected_delivery = min(dates)
                 
                 # Debug: 記錄第一筆物料的查詢結果
                 if len(result) == 0:
                     app_logger.info(f"工單統計：第一筆物料 {mat_id} 的採購資訊 - 採購人員: {buyer}, 預計交貨日: {expected_delivery}")
-                    app_logger.info(f"工單統計：procurement_map 中是否有此物料: {mat_id in procurement_map}")
+                    app_logger.info(f"工單統計：delivery_map 中是否有此物料: {mat_id in delivery_map}")
                 
                 result.append({
                     '物料': mat_id,
