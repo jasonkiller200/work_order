@@ -602,6 +602,16 @@ function saveDelivery(formData) {
                 }
                 // 重新載入儀錶板以更新統計
                 loadProcurementDashboard();
+
+                // 🆕 刷新工單缺料明細視窗（如果有開啟）
+                if (window.currentShortageModalInfo && typeof window.showShortageDetails === 'function') {
+                    const { orderId, orderType } = window.currentShortageModalInfo;
+                    // 延遲執行以確保資料已經更新
+                    setTimeout(() => {
+                        window.showShortageDetails(orderId, orderType);
+                        console.log(`已刷新工單 ${orderId} 的缺料明細視窗`);
+                    }, 500);
+                }
             } else {
                 showToast('❌ 儲存失敗: ' + (data.error || '未知錯誤'), 'error');
             }

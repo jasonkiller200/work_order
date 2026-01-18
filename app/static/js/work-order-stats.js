@@ -343,8 +343,13 @@ function truncateText(text, maxLength) {
 
 
 
+// 🆕 全域變數追蹤當前開啟的缺料明細視窗資訊
+window.currentShortageModalInfo = null;
+
 // 顯示缺料明細
 async function showShortageDetails(orderId, orderType = 'semi') {
+    // 🆕 保存當前開啟的工單資訊，供其他模組使用（例如交期儲存後刷新）
+    window.currentShortageModalInfo = { orderId, orderType };
     const modal = document.getElementById('shortage-modal');
     const title = document.getElementById('shortage-modal-title');
     const summary = document.getElementById('shortage-summary');
