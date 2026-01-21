@@ -576,6 +576,76 @@ def get_all_deliveries():
         app_logger.error(f"取得所有交期失敗: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@api_bp.route('/delivery/nearest')
+def get_nearest_deliveries():
+    """
+    取得所有物料的「最近一筆預計交貨日」
+    
+    資料來源：DeliverySchedule 表（所有交期都由人工維護於此表）
+    邏輯：
+    1. 查詢所有有效的交期排程（狀態非 completed/cancelled）。
+    2. 排除 08 開頭的物料。
+    3. 針對每個物料，取最早的一筆交期。
+    4. 回傳時標註該排程是否有綁定採購單 (po_number)。
+    """
+    try:
+        # 查詢所有有效交期排程
+        schedules = DeliverySchedule.query.filter(
+            DeliverySchedule.status.notin_(['completed', 'cancelled'])
+        ).all()
+        
+        # 按物料分組
+        material_schedules = {}  # material_id -> list of schedule details
+        
+        for s in schedules:
+            # 排除 08 開頭的物料
+            if s.material_id and s.material_id.startswith('08'):
+                continue
+            
+            # 排除無效日期
+            if not s.expected_date:
+                continue
+                
+            if s.material_id not in material_schedules:
+                material_schedules[s.material_id] = []
+            
+            # 判斷來源類型
+            if s.po_number:
+                source_type = 'po'
+                source_info = f'採購單 {s.po_number}'
+            else:
+                source_type = 'manual'
+                source_info = '手動排程 (未綁定訂單)'
+            
+            material_schedules[s.material_id].append({
+                'date': s.expected_date,
+                'source': source_type,
+                'ref_id': s.po_number or s.id,
+                'info': source_info
+            })
+        
+        # 針對每個物料取最早的一筆
+        result = {}
+        for mid, schedules_list in material_schedules.items():
+            if schedules_list:
+                earliest = min(schedules_list, key=lambda x: x['date'])
+                result[mid] = {
+                    'date': earliest['date'].strftime('%Y-%m-%d'),
+                    'source': earliest['source'],
+                    'ref_id': earliest['ref_id'],
+                    'info': earliest['info']
+                }
+        
+        return jsonify({
+            'data': result,
+            'count': len(result),
+            'timestamp': get_taiwan_time().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+    except Exception as e:
+        app_logger.error(f"取得最近交期失敗: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 @api_bp.route('/delivery/<material_id>')
 def get_delivery(material_id):
     """取得物料的交期資訊 (分批)"""
