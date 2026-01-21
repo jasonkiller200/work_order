@@ -411,7 +411,8 @@ async function showShortageDetails(orderId, orderType = 'semi') {
                     </td>
                     <td title="${item['物料說明'] || ''}">${truncateText(item['物料說明'] || '', 25)}</td>
                     <td>${item['需求數量'] || 0}</td>
-                    <td>${item['可用庫存'] || 0}</td>
+                    <td>${item['未限制'] || 0}</td>
+                    <td>${item['品檢中'] || 0}</td>
                     <td style="color: ${statusColor};">${statusText}</td>
                     <td>${item['需求日期'] || '-'}</td>
                     <td>${buildBuyerSelect(item['物料'], currentBuyer)}</td>
@@ -892,7 +893,8 @@ async function exportShortageDetails(orderType) {
             { header: '物料編號', key: 'material_id', width: 15 },
             { header: '物料說明', key: 'description', width: 35 },
             { header: '需求數量', key: 'demand_qty', width: 12 },
-            { header: '可用庫存', key: 'available', width: 12 },
+            { header: '未限制', key: 'unrestricted', width: 12 },
+            { header: '品檢中', key: 'inspection', width: 12 },
             { header: '狀態', key: 'status', width: 10 },
             { header: '需求日期', key: 'demand_date', width: 12 },
             { header: '採購人員', key: 'buyer', width: 12 },
@@ -905,7 +907,8 @@ async function exportShortageDetails(orderType) {
                 material_id: row['物料'],
                 description: row['物料說明'],
                 demand_qty: row['需求數量'],
-                available: row['可用庫存'],
+                unrestricted: row['未限制'] || 0,
+                inspection: row['品檢中'] || 0,
                 status: row['是否缺料'] ? '缺料' : '充足',
                 demand_date: row['需求日期'],
                 buyer: row['採購人員'],
@@ -1024,7 +1027,8 @@ async function exportBothSheetsData(orderType) {
             { header: '物料編號', key: 'material_id', width: 15 },
             { header: '物料說明', key: 'description', width: 35 },
             { header: '需求數量', key: 'demand_qty', width: 12 },
-            { header: '可用庫存', key: 'available', width: 12 },
+            { header: '未限制', key: 'unrestricted', width: 12 },
+            { header: '品檢中', key: 'inspection', width: 12 },
             { header: '狀態', key: 'status', width: 10 },
             { header: '需求日期', key: 'demand_date', width: 12 },
             { header: '採購人員', key: 'buyer', width: 12 },
@@ -1037,7 +1041,8 @@ async function exportBothSheetsData(orderType) {
                 material_id: row['物料'],
                 description: row['物料說明'],
                 demand_qty: row['需求數量'],
-                available: row['可用庫存'],
+                unrestricted: row['未限制'] || 0,
+                inspection: row['品檢中'] || 0,
                 status: row['是否缺料'] ? '缺料' : '充足',
                 demand_date: row['需求日期'],
                 buyer: row['採購人員'],
