@@ -74,12 +74,13 @@
     cursor: pointer;
     color: var(--link-default);
     text-decoration: underline;
+    font-weight: 600;
     transition: color 0.2s ease;
 }
 
 .buyer-cell:hover {
     color: var(--link-hover);
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .buyer-select {

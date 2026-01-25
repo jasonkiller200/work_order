@@ -773,12 +773,13 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     cursor: pointer;
     color: var(--link-default);
     text-decoration: underline;
+    font-weight: 600;
     transition: color 0.2s ease;
 }
 
 .material-link:hover {
     color: var(--link-hover);
-    font-weight: bold;
+    font-weight: 600;
 }
 
 /* 採購人員可點擊樣式 */
@@ -786,12 +787,13 @@ th.sortable-order-materials[data-sort-key="需求日期"] {
     cursor: pointer;
     color: var(--link-default);
     text-decoration: underline;
+    font-weight: 600;
     transition: color 0.2s ease;
 }
 
 .buyer-cell:hover {
     color: var(--link-hover);
-    font-weight: bold;
+    font-weight: 600;
 }
 
 /* 採購人員下拉選單樣式 */
