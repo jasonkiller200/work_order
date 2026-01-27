@@ -77,11 +77,20 @@
                     </div>
 
                     <!-- 操作按鈕 -->
-                    <div style="display: flex; gap: 0.5em;">
+                    <div style="display: flex; gap: 0.5em; align-items: center;">
                         <button id="apply-filter-btn">🔍 查詢</button>
                         <button id="clear-filter-btn" class="secondary">清除篩選</button>
-                        <button id="export-excel-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
-                            Excel</button>
+                        <div class="export-dropdown" style="position: relative;">
+                            <button id="export-excel-btn" style="background-color: #28a745; border-color: #28a745;">📊 匯出
+                                Excel ▼</button>
+                            <div id="export-menu" class="export-menu"
+                                style="display: none; position: absolute; top: 100%; right: 0; background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; min-width: 200px; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                                <div class="export-option" data-type="all"
+                                    style="padding: 0.8em 1em; cursor: pointer;">📄 匯出全部</div>
+                                <div class="export-option" data-type="supplier"
+                                    style="padding: 0.8em 1em; cursor: pointer;">🏷️ 依供應商分檔匯出</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

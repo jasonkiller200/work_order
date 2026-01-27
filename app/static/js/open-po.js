@@ -216,29 +216,145 @@ function bindEvents() {
         }
     });
 
-    // 匯出 Excel
-    document.getElementById('export-excel-btn').addEventListener('click', exportToExcel);
+    // 匯出 Excel (下拉選單)
+    const exportBtn = document.getElementById('export-excel-btn');
+    const exportMenu = document.getElementById('export-menu');
+    const exportOptions = document.querySelectorAll('#export-menu .export-option');
+
+    exportBtn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        exportMenu.style.display = exportMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    exportOptions.forEach(option => {
+        option.addEventListener('click', function (event) {
+            event.stopPropagation();
+            exportMenu.style.display = 'none';
+
+            const type = this.dataset.type;
+            if (type === 'supplier') {
+                exportToExcelBySupplier();
+            } else {
+                exportToExcel();
+            }
+        });
+    });
+
+    document.addEventListener('click', function () {
+        exportMenu.style.display = 'none';
+    });
+}
+
+function buildExportParams() {
+    const search = document.getElementById('search-input').value.trim();
+    const buyerId = document.getElementById('buyer-filter').value;
+    const dateStart = document.getElementById('date-start').value;
+    const dateEnd = document.getElementById('date-end').value;
+
+    const params = new URLSearchParams({
+        page: 1,
+        per_page: 99999
+    });
+
+    if (search) params.append('search', search);
+    if (buyerId) params.append('buyer_id', buyerId);
+    if (dateStart) params.append('date_start', dateStart);
+    if (dateEnd) params.append('date_end', dateEnd);
+
+    return params;
+}
+
+async function fetchExportData(params) {
+    const response = await fetch(`/api/purchase_orders/open?${params.toString()}`);
+    const data = await response.json();
+    if (data.error) {
+        throw new Error(data.error);
+    }
+    return data.results || [];
+}
+
+function configureWorksheetColumns(worksheet) {
+    worksheet.columns = [
+        { header: '採購單號', key: 'po_number', width: 15 },
+        { header: '物料', key: 'material_id', width: 18 },
+        { header: '圖號', key: 'drawing_number', width: 15 },
+        { header: '物料說明', key: 'description', width: 30 },
+        { header: '採購人員', key: 'buyer_name', width: 12 },
+        { header: '供應商', key: 'supplier', width: 20 },
+        { header: '訂購數量', key: 'ordered_quantity', width: 12 },
+        { header: '未結數量', key: 'outstanding_quantity', width: 12 },
+        { header: '更新交期', key: 'updated_delivery_date', width: 12 },
+        { header: '分批日期', key: 'schedule_date', width: 12 },
+        { header: '分批數量', key: 'schedule_quantity', width: 12 },
+        { header: '維護時間', key: 'maintained_at', width: 18 }
+    ];
+}
+
+function appendExportRows(worksheet, exportData) {
+    exportData.forEach(po => {
+        const hasSchedules = po.delivery_schedules && po.delivery_schedules.length > 0;
+
+        if (hasSchedules) {
+            po.delivery_schedules.forEach(schedule => {
+                worksheet.addRow({
+                    po_number: po.po_number,
+                    material_id: po.material_id,
+                    drawing_number: po.drawing_number || '',
+                    description: po.description || '',
+                    buyer_name: po.buyer_name || '',
+                    supplier: po.supplier || '',
+                    ordered_quantity: Math.round(po.ordered_quantity),
+                    outstanding_quantity: Math.round(po.outstanding_quantity),
+                    updated_delivery_date: po.updated_delivery_date || '',
+                    schedule_date: schedule.expected_date || '',
+                    schedule_quantity: Math.round(schedule.quantity),
+                    maintained_at: schedule.updated_at || ''
+                });
+            });
+        } else {
+            worksheet.addRow({
+                po_number: po.po_number,
+                material_id: po.material_id,
+                drawing_number: po.drawing_number || '',
+                description: po.description || '',
+                buyer_name: po.buyer_name || '',
+                supplier: po.supplier || '',
+                ordered_quantity: Math.round(po.ordered_quantity),
+                outstanding_quantity: Math.round(po.outstanding_quantity),
+                updated_delivery_date: po.updated_delivery_date || '',
+                schedule_date: '',
+                schedule_quantity: '',
+                maintained_at: ''
+            });
+        }
+    });
+}
+
+function styleHeaderRow(worksheet) {
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+    };
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+}
+
+function sanitizeFileName(name) {
+    const cleaned = String(name || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+    return cleaned || '未填供應商';
+}
+
+function sanitizeSheetName(name) {
+    const cleaned = String(name || '').trim().replace(/[\\/*?:\[\]]/g, '_');
+    return (cleaned || '未填供應商').slice(0, 31);
 }
 
 // 匯出 Excel
 async function exportToExcel() {
     try {
-        // 先取得目前的篩選條件
-        const search = document.getElementById('search-input').value.trim();
-        const buyerId = document.getElementById('buyer-filter').value;
-        const dateStart = document.getElementById('date-start').value;
-        const dateEnd = document.getElementById('date-end').value;
-
-        // 組裝查詢參數 (不分頁，取得所有資料)
-        const params = new URLSearchParams({
-            page: 1,
-            per_page: 99999  // 取得所有資料
-        });
-
-        if (search) params.append('search', search);
-        if (buyerId) params.append('buyer_id', buyerId);
-        if (dateStart) params.append('date_start', dateStart);
-        if (dateEnd) params.append('date_end', dateEnd);
+        const params = buildExportParams();
 
         // 顯示載入中提示
         const exportBtn = document.getElementById('export-excel-btn');
@@ -246,15 +362,7 @@ async function exportToExcel() {
         exportBtn.innerHTML = '匯出中...';
         exportBtn.disabled = true;
 
-        // 從 API 取得所有篩選後的資料
-        const response = await fetch(`/api/purchase_orders/open?${params.toString()}`);
-        const data = await response.json();
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        const exportData = data.results || [];
+        const exportData = await fetchExportData(params);
 
         if (exportData.length === 0) {
             alert('沒有資料可匯出');
@@ -266,72 +374,9 @@ async function exportToExcel() {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('未結案採購單');
 
-        // 定義欄位 (包含分批日期和分批數量)
-        worksheet.columns = [
-            { header: '採購單號', key: 'po_number', width: 15 },
-            { header: '物料', key: 'material_id', width: 18 },
-            { header: '圖號', key: 'drawing_number', width: 15 },
-            { header: '物料說明', key: 'description', width: 30 },
-            { header: '採購人員', key: 'buyer_name', width: 12 },
-            { header: '供應商', key: 'supplier', width: 20 },
-            { header: '訂購數量', key: 'ordered_quantity', width: 12 },
-            { header: '未結數量', key: 'outstanding_quantity', width: 12 },
-            { header: '更新交期', key: 'updated_delivery_date', width: 12 },
-            { header: '分批日期', key: 'schedule_date', width: 12 },
-            { header: '分批數量', key: 'schedule_quantity', width: 12 },
-            { header: '維護時間', key: 'maintained_at', width: 18 }
-        ];
-
-        // 加入資料 (展開分批交期為獨立行)
-        exportData.forEach(po => {
-            const hasSchedules = po.delivery_schedules && po.delivery_schedules.length > 0;
-
-            if (hasSchedules) {
-                // 每批交期展開為獨立行
-                po.delivery_schedules.forEach(schedule => {
-                    worksheet.addRow({
-                        po_number: po.po_number,
-                        material_id: po.material_id,
-                        drawing_number: po.drawing_number || '',
-                        description: po.description || '',
-                        buyer_name: po.buyer_name || '',
-                        supplier: po.supplier || '',
-                        ordered_quantity: Math.round(po.ordered_quantity),
-                        outstanding_quantity: Math.round(po.outstanding_quantity),
-                        updated_delivery_date: po.updated_delivery_date || '',
-                        schedule_date: schedule.expected_date || '',
-                        schedule_quantity: Math.round(schedule.quantity),
-                        maintained_at: schedule.updated_at || ''
-                    });
-                });
-            } else {
-                // 沒有分批資料時輸出單行
-                worksheet.addRow({
-                    po_number: po.po_number,
-                    material_id: po.material_id,
-                    drawing_number: po.drawing_number || '',
-                    description: po.description || '',
-                    buyer_name: po.buyer_name || '',
-                    supplier: po.supplier || '',
-                    ordered_quantity: Math.round(po.ordered_quantity),
-                    outstanding_quantity: Math.round(po.outstanding_quantity),
-                    updated_delivery_date: po.updated_delivery_date || '',
-                    schedule_date: '',
-                    schedule_quantity: '',
-                    maintained_at: ''
-                });
-            }
-        });
-
-        // 設定標題列樣式
-        const headerRow = worksheet.getRow(1);
-        headerRow.font = { bold: true };
-        headerRow.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF4472C4' }
-        };
-        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        configureWorksheetColumns(worksheet);
+        appendExportRows(worksheet, exportData);
+        styleHeaderRow(worksheet);
 
         // 產生檔案
         const buffer = await workbook.xlsx.writeBuffer();
@@ -351,6 +396,63 @@ async function exportToExcel() {
         // 還原按鈕
         const exportBtn = document.getElementById('export-excel-btn');
         exportBtn.innerHTML = '📊 匯出 Excel';
+        exportBtn.disabled = false;
+    }
+}
+
+// 依供應商分檔匯出 Excel
+async function exportToExcelBySupplier() {
+    const exportBtn = document.getElementById('export-excel-btn');
+    const originalText = exportBtn.innerHTML;
+
+    try {
+        const params = buildExportParams();
+
+        exportBtn.innerHTML = '分檔匯出中...';
+        exportBtn.disabled = true;
+
+        const exportData = await fetchExportData(params);
+
+        if (exportData.length === 0) {
+            alert('沒有資料可匯出');
+            exportBtn.innerHTML = originalText;
+            exportBtn.disabled = false;
+            return;
+        }
+
+        const grouped = new Map();
+        exportData.forEach(po => {
+            const supplierKey = (po.supplier || '').trim() || '未填供應商';
+            if (!grouped.has(supplierKey)) {
+                grouped.set(supplierKey, []);
+            }
+            grouped.get(supplierKey).push(po);
+        });
+
+        const today = new Date().toISOString().split('T')[0];
+
+        for (const [supplier, items] of grouped.entries()) {
+            const workbook = new ExcelJS.Workbook();
+            const sheetName = sanitizeSheetName(supplier);
+            const worksheet = workbook.addWorksheet(sheetName);
+
+            configureWorksheetColumns(worksheet);
+            appendExportRows(worksheet, items);
+            styleHeaderRow(worksheet);
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+            const safeSupplier = sanitizeFileName(supplier);
+            saveAs(blob, `${safeSupplier}_${today}.xlsx`);
+        }
+
+        exportBtn.innerHTML = originalText;
+        exportBtn.disabled = false;
+    } catch (error) {
+        console.error('分檔匯出失敗:', error);
+        alert('匯出失敗: ' + error.message);
+        exportBtn.innerHTML = originalText;
         exportBtn.disabled = false;
     }
 }
