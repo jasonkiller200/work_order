@@ -429,6 +429,14 @@ async function exportToExcelBySupplier() {
             grouped.get(supplierKey).push(po);
         });
 
+        const supplierCount = grouped.size;
+        const confirmMessage = `即將依供應商分檔匯出。\n預計匯出 ${supplierCount} 份檔案。\n\n是否繼續？`;
+        if (!confirm(confirmMessage)) {
+            exportBtn.innerHTML = originalText;
+            exportBtn.disabled = false;
+            return;
+        }
+
         const today = new Date().toISOString().split('T')[0];
 
         for (const [supplier, items] of grouped.entries()) {
