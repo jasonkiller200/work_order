@@ -383,10 +383,11 @@ class WorkOrderStatsService:
             # 🆕 根據 order_type 選擇資料來源
             if order_type == 'finished':
                 demand_details_map = current_data.get('finished_demand_details_map', {})
-                order_prefix_check = lambda x: x.startswith('1')
             else:
                 demand_details_map = current_data.get('demand_details_map', {})
-                order_prefix_check = lambda x: x.startswith('2') or x.startswith('6')
+            
+            # 🔧 修正: FIFO 計算時需納入所有 1、2、6 開頭工單，與 _calculate_order_statistics 保持一致
+            order_prefix_check = lambda x: x.startswith('1') or x.startswith('2') or x.startswith('6')
             
             inventory_data = current_data.get('inventory_data', [])
             
