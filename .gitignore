@@ -4,6 +4,9 @@ instance/
 # 備份目錄
 _*_backup_*/
 
+# 臨時工具歸檔
+tools/_archive/
+
 # 日誌檔案
 *.log
 

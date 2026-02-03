@@ -892,6 +892,9 @@ class DataService:
         # 同步物料的 buyer_id（前10碼匹配）
         DataService._sync_materials_buyer_id(material_buyer_map)
         
+        # 🆕 自動同步採購單交期到 delivery_schedules
+        DataService._sync_po_delivery_to_schedules()
+        
         app_logger.info(f"採購單同步完成: 成功 {success_count} 筆, 失敗 {error_count} 筆")
     
     @staticmethod
@@ -986,22 +989,77 @@ class DataService:
         """
         處理已刪除的採購單狀態
         
-        簡化邏輯：從 Excel 消失 = 已完成交貨
+        安全邏輯（防止誤判）：
+        1. 當消失數量超過閾值時，發出警告並跳過處理
+        2. 保護有人工維護交期的採購單（updated_delivery_date 在未來）
+        3. 保護有分批交期排程的採購單
+        4. 只有確認安全的採購單才標記為完成
         """
+        from datetime import timedelta
+        
         # 查詢資料庫中所有未完成的採購單
         all_db_pos = PurchaseOrder.query.filter(
             PurchaseOrder.status.in_(['pending', 'partial'])
         ).all()
         
-        updated_count = 0
         today = get_taiwan_time().date()
         
-        for po in all_db_pos:
-            # 如果採購單在 Excel 中，跳過（不是已刪除）
-            if po.po_number in excel_po_numbers:
+        # 計算消失的採購單數量
+        missing_pos = [po for po in all_db_pos if po.po_number not in excel_po_numbers]
+        missing_count = len(missing_pos)
+        total_pending = len(all_db_pos)
+        
+        # 安全檢查：如果消失比例過高，可能是 Excel 格式錯誤
+        SAFETY_THRESHOLD_RATIO = 0.3  # 30% 以上消失視為異常
+        SAFETY_THRESHOLD_COUNT = 100  # 或超過 100 筆視為異常
+        
+        if total_pending > 0:
+            missing_ratio = missing_count / total_pending
+            
+            if missing_count > SAFETY_THRESHOLD_COUNT or missing_ratio > SAFETY_THRESHOLD_RATIO:
+                app_logger.warning(
+                    f"⚠️ 安全警告：已訂未交同步異常！"
+                    f"消失 {missing_count}/{total_pending} 筆採購單 ({missing_ratio:.1%})，"
+                    f"超過安全閾值，本次跳過自動標記完成。"
+                    f"請檢查「已訂未交.xlsx」檔案格式是否正確。"
+                )
+                return
+        
+        updated_count = 0
+        skipped_with_delivery = 0
+        skipped_with_schedule = 0
+        
+        # 取得有分批交期排程的物料清單
+        materials_with_schedules = set()
+        try:
+            schedules = DeliverySchedule.query.filter(
+                DeliverySchedule.status.in_(['pending', 'partial'])
+            ).all()
+            for s in schedules:
+                if s.po_number:
+                    materials_with_schedules.add(s.po_number)
+        except Exception as e:
+            app_logger.error(f"讀取交期排程失敗: {e}")
+        
+        for po in missing_pos:
+            # 保護措施 1：有人工維護的未來交期，不自動標記完成
+            if po.updated_delivery_date:
+                if po.updated_delivery_date > today:
+                    skipped_with_delivery += 1
+                    app_logger.debug(
+                        f"採購單 {po.po_number} 有未來交期 {po.updated_delivery_date}，跳過自動完成"
+                    )
+                    continue
+            
+            # 保護措施 2：有分批交期排程，不自動標記完成
+            if po.po_number in materials_with_schedules:
+                skipped_with_schedule += 1
+                app_logger.debug(
+                    f"採購單 {po.po_number} 有分批交期排程，跳過自動完成"
+                )
                 continue
             
-            # 從 Excel 消失 = 已完成交貨
+            # 通過安全檢查，標記為已完成
             po.status = 'completed'
             po.actual_delivery_date = today
             po.received_quantity = po.ordered_quantity
@@ -1011,7 +1069,14 @@ class DataService:
         
         if updated_count > 0:
             db.session.commit()
-            app_logger.info(f"已更新 {updated_count} 個採購單狀態為已完成")
+        
+        # 記錄處理結果
+        app_logger.info(
+            f"採購單狀態更新完成: "
+            f"標記完成 {updated_count} 筆, "
+            f"保護(有交期) {skipped_with_delivery} 筆, "
+            f"保護(有排程) {skipped_with_schedule} 筆"
+        )
     
     @staticmethod
     def _mark_delivery_for_partial_receipt(material_id, po_number, received_qty, outstanding_qty):
@@ -1098,3 +1163,63 @@ class DataService:
         if updated_count > 0:
             db.session.commit()
             app_logger.info(f"已更新 {updated_count} 個物料的採購人員資訊（前10碼匹配）")
+
+    @staticmethod
+    def _sync_po_delivery_to_schedules():
+        """
+        自動同步採購單交期到 delivery_schedules 表
+        
+        當採購單有 updated_delivery_date（今天或之後）但沒有對應的 delivery_schedule 記錄時，
+        自動建立一筆 delivery_schedule 記錄，讓儀表板能正確顯示預計交貨日。
+        
+        條件：
+        1. 採購單狀態為 pending 或 partial
+        2. updated_delivery_date 不為空且 >= 今天
+        3. 尚未有對應的 delivery_schedule 記錄
+        """
+        from sqlalchemy import and_, exists
+        
+        today = get_taiwan_time().date()
+        
+        try:
+            # 找出符合條件的採購單（有交期但沒有排程）
+            # 使用子查詢檢查是否已有 delivery_schedule
+            subquery = db.session.query(DeliverySchedule.po_number).filter(
+                DeliverySchedule.po_number.isnot(None)
+            ).subquery()
+            
+            missing_schedules = PurchaseOrder.query.filter(
+                PurchaseOrder.status.in_(['pending', 'partial']),
+                PurchaseOrder.updated_delivery_date.isnot(None),
+                PurchaseOrder.updated_delivery_date >= today,
+                ~PurchaseOrder.po_number.in_(db.session.query(subquery))
+            ).all()
+            
+            if not missing_schedules:
+                return
+            
+            synced_count = 0
+            now = get_taiwan_time()
+            
+            for po in missing_schedules:
+                # 建立新的 delivery_schedule 記錄
+                new_schedule = DeliverySchedule(
+                    material_id=po.material_id,
+                    po_number=po.po_number,
+                    expected_date=po.updated_delivery_date,
+                    quantity=float(po.outstanding_quantity or 0),
+                    received_quantity=0,
+                    supplier=po.supplier,
+                    status='pending',
+                    created_at=now,
+                    updated_at=now
+                )
+                db.session.add(new_schedule)
+                synced_count += 1
+            
+            if synced_count > 0:
+                db.session.commit()
+                app_logger.info(f"已自動同步 {synced_count} 筆採購單交期到交期排程表")
+                
+        except Exception as e:
+            app_logger.error(f"同步採購單交期到排程表失敗: {e}", exc_info=True)
