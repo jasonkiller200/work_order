@@ -1,0 +1,26 @@
+/**
+ * Flatpickr 假日樣式
+ */
+
+/* 假日標記 - 紅色文字 */
+.flatpickr-day.holiday {
+    color: #e74c3c !important;
+    font-weight: bold;
+}
+
+/* 假日被禁用時的樣式 */
+.flatpickr-day.holiday.flatpickr-disabled {
+    color: #e74c3c !important;
+    opacity: 0.6;
+}
+
+/* 週末標記 */
+.flatpickr-day.weekend {
+    color: #e67e22 !important;
+}
+
+/* 週末被禁用時的樣式 */
+.flatpickr-day.weekend.flatpickr-disabled {
+    color: #e67e22 !important;
+    opacity: 0.6;
+}

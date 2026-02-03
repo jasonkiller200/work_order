@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1234">
     <!-- Flatpickr 日期選擇器 (Dark Theme) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr-dark.css') }}">
+    <!-- 假日樣式 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/holiday.css') }}">
     <!-- 物料詳情 Modal 樣式 -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components/modals.css') }}?v=1234">
 </head>
@@ -247,12 +249,14 @@
     </dialog>
 
     <script src="{{ url_for('static', filename='js/services/api-service.js') }}?v=1226"></script>
-    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}?v=1234"></script>
-    <script src="{{ url_for('static', filename='js/modules/order-query.js') }}?v=1234"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}?v=1234"></script>
-    <!-- Flatpickr JS (載入供 material-modal.js 使用) -->
+    <!-- Flatpickr JS -->
     <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
+    <!-- 台灣假日工具 (必須在 material-modal.js 之前載入) -->
+    <script src="{{ url_for('static', filename='js/utils/holiday_utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}?v=1235"></script>
+    <script src="{{ url_for('static', filename='js/modules/order-query.js') }}?v=1234"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=1234"></script>
 </body>
 
 </html>

@@ -259,22 +259,62 @@ function openDetailsModal(materialId) {
                 // 找到 modal 內的 article 元素作為 appendTo 目標
                 // 這樣 calendar 會在 dialog 的 top-layer 內渲染，不會被遮住
                 const modalArticle = modal ? modal.querySelector('article') : null;
-                flatpickr(deliveryDateEl, {
-                    locale: 'zh_tw',
-                    dateFormat: 'Y-m-d',
-                    minDate: 'today',
-                    allowInput: true,
-                    defaultDate: deliveryDateEl.value || null,
-                    appendTo: modalArticle || document.body,  // 附加到 modal 內
-                    static: true,  // 使用 static 定位，相對於 input 位置
-                    // 🆕 禁用週六 (6) 和週日 (0)
-                    disable: [
-                        function (date) {
-                            // 0 = 週日, 6 = 週六
-                            return (date.getDay() === 0 || date.getDay() === 6);
+                // 🆕 初始化 flatpickr，並整合假日功能
+                const initFlatpickr = () => {
+                    flatpickr(deliveryDateEl, {
+                        locale: 'zh_tw',
+                        dateFormat: 'Y-m-d',
+                        minDate: 'today',
+                        allowInput: true,
+                        defaultDate: deliveryDateEl.value || null,
+                        appendTo: modalArticle || document.body,  // 附加到 modal 內
+                        static: true,  // 使用 static 定位，相對於 input 位置
+                        // 🆕 禁用週六、週日和台灣假日
+                        disable: [
+                            function (date) {
+                                // 0 = 週日, 6 = 週六
+                                if (date.getDay() === 0 || date.getDay() === 6) {
+                                    return true;
+                                }
+                                // 檢查台灣假日
+                                if (typeof HolidayUtils !== 'undefined' && HolidayUtils.isHoliday(date)) {
+                                    return true;
+                                }
+                                return false;
+                            }
+                        ],
+                        // 🆕 標記假日和週末
+                        onDayCreate: function(dObj, dStr, fp, dayElem) {
+                            const date = dayElem.dateObj;
+                            const day = date.getDay();
+                            
+                            // 標記週末
+                            if (day === 0 || day === 6) {
+                                dayElem.classList.add('weekend');
+                            }
+                            
+                            // 標記假日
+                            if (typeof HolidayUtils !== 'undefined') {
+                                const holidayName = HolidayUtils.getHolidayName(date);
+                                if (holidayName) {
+                                    dayElem.classList.add('holiday');
+                                    dayElem.title = holidayName;
+                                }
+                            }
                         }
-                    ]
-                });
+                    });
+                };
+                
+                // 確保假日資料載入後再初始化
+                if (typeof HolidayUtils !== 'undefined' && HolidayUtils.isReady()) {
+                    initFlatpickr();
+                } else if (typeof HolidayUtils !== 'undefined') {
+                    // 等待假日資料載入
+                    HolidayUtils.waitForInit().then(initFlatpickr);
+                } else {
+                    // 沒有 HolidayUtils，直接初始化
+                    initFlatpickr();
+                }
             }
 
             // 顯示需求訂單

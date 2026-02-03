@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components/modals.css') }}?v=1234">
     <!-- Flatpickr 日期選擇器 (Dark Theme) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr-dark.css') }}">
+    <!-- 假日樣式 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/holiday.css') }}">
     <!-- ExcelJS for Excel export -->
     <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
@@ -553,8 +555,16 @@
         const currentDashboardType = 'main'; 
     </script>
 
+    <script src="{{ url_for('static', filename='js/delivery-helper.js') }}?v=1232"></script>
+    <script src="{{ url_for('static', filename='js/services/api-service.js') }}?v=1232"></script>
+    <!-- Flatpickr JS -->
+    <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
+    <!-- 台灣假日工具 (必須在 material-modal.js 之前載入) -->
+    <script src="{{ url_for('static', filename='js/utils/holiday_utils.js') }}"></script>
+
     <!-- 引入模組 (作為普通腳本引入) -->
-    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}?v=1235"></script>
 
     <script>
         // 初始化模態視窗
@@ -564,12 +574,6 @@
             }
         });
     </script>
-
-    <script src="{{ url_for('static', filename='js/delivery-helper.js') }}?v=1232"></script>
-    <script src="{{ url_for('static', filename='js/services/api-service.js') }}?v=1232"></script>
-    <!-- Flatpickr JS (載入供 material-modal.js 使用) -->
-    <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
 
     <!-- 🆕 快取刷新模組 -->
     <script src="{{ url_for('static', filename='js/cache-refresh.js') }}?v=1235"></script>
