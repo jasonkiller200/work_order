@@ -3,6 +3,7 @@
 
 import logging
 import pandas as pd
+import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, make_response, request
 from urllib.parse import quote
@@ -1834,3 +1835,45 @@ def sync_delivery_to_excel():
     except Exception as e:
         app_logger.error(f"交期同步失敗: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========================================
+# 已撥缺料 API 代理
+# ========================================
+
+@api_bp.route('/allocated-shortage', methods=['GET'])
+def get_allocated_shortage():
+    """
+    代理呼叫領料系統的已撥缺料 API
+    避免前端直接跨域呼叫
+    """
+    try:
+        external_url = 'http://192.168.6.137:8000/requisitions/api/shortage_materials/'
+        
+        # 設定超時時間
+        response = requests.get(external_url, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        return jsonify(data)
+        
+    except requests.exceptions.Timeout:
+        app_logger.error("已撥缺料 API 呼叫超時")
+        return jsonify({
+            'success': False,
+            'error': '領料系統回應超時，請稍後再試'
+        }), 504
+        
+    except requests.exceptions.ConnectionError:
+        app_logger.error("無法連接已撥缺料 API")
+        return jsonify({
+            'success': False,
+            'error': '無法連接領料系統，請確認網路狀態'
+        }), 503
+        
+    except Exception as e:
+        app_logger.error(f"已撥缺料 API 代理失敗: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

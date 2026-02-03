@@ -22,6 +22,14 @@ def procurement():
     TrafficService.record_page_view('procurement.html', request.remote_addr)
     return render_template('procurement.html', is_admin=get_is_admin())
 
+
+@page_bp.route('/allocated-shortage')
+def allocated_shortage():
+    """已撥缺料頁面"""
+    TrafficService.record_page_view('allocated_shortage.html', request.remote_addr)
+    return render_template('allocated_shortage.html', is_admin=get_is_admin())
+
+
 @page_bp.route('/order_query')
 def order_query():
     """訂單查詢頁面"""
