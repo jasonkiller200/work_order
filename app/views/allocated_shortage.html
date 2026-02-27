@@ -18,53 +18,65 @@
             cursor: pointer;
             color: var(--pico-primary);
         }
+
         .clickable-material:hover {
             text-decoration: underline;
         }
+
         .clickable-order {
             cursor: pointer;
             color: var(--pico-primary);
             text-decoration: underline;
         }
+
         .clickable-order:hover {
             color: var(--pico-primary-hover);
         }
+
         .tab-content {
             display: none;
         }
+
         .tab-content.active {
             display: block;
         }
+
         .tab-link.active {
             border-bottom-color: var(--pico-primary) !important;
             color: var(--pico-primary) !important;
             font-weight: bold;
         }
+
         .table-container {
             max-height: 700px;
             overflow-y: auto;
             overflow-x: auto;
         }
+
         .table-container thead th {
             position: sticky;
             top: 0;
             z-index: 10;
             background: #11191f;
             border-bottom: 2px solid var(--pico-muted-border-color);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
+
         .no-arrival-date {
             color: #f44336;
             font-weight: bold;
         }
+
         .has-arrival-date {
             color: #4caf50;
         }
+
         .orders-list {
             display: flex;
             flex-wrap: wrap;
             gap: 0.3em;
         }
+
         .order-badge {
             display: inline-block;
             padding: 0.15em 0.5em;
@@ -73,9 +85,11 @@
             font-size: 0.85em;
             cursor: pointer;
         }
+
         .order-badge:hover {
             background: rgba(59, 130, 246, 0.4);
         }
+
         .stat-summary {
             display: flex;
             gap: 2em;
@@ -84,16 +98,19 @@
             background: var(--pico-card-background-color);
             border-radius: 8px;
         }
+
         .stat-item {
             display: flex;
             flex-direction: column;
             align-items: center;
         }
+
         .stat-number {
             font-size: 1.8em;
             font-weight: bold;
             color: var(--pico-primary);
         }
+
         .stat-label {
             font-size: 0.85em;
             color: var(--pico-muted-color);
@@ -117,7 +134,7 @@
         <nav>
             <ul>
                 <li><a href="/procurement">採購儀表板</a></li>
-                <li><a href="/allocated-shortage" class="active">已撥缺料</a></li>
+                <li><a href="/allocated-shortage" class="active">已撥缺料(測試中)</a></li>
                 <li><a href="/order_query">訂單查詢</a></li>
                 <li><a href="/open-purchase-orders">未結案採購單</a></li>
                 <li><a href="/admin_dashboard">後台管理</a></li>
@@ -147,6 +164,10 @@
 
             <!-- 半成品缺料頁籤 -->
             <div id="semi-tab" class="tab-content active">
+                <!-- 搜尋區塊 -->
+                <div class="search-box" style="margin-bottom: 1em;">
+                    <input type="text" id="semi-search" placeholder="請輸入2或63開頭工單號碼或後4碼" style="max-width: 350px;">
+                </div>
                 <!-- 統計摘要 -->
                 <div class="stat-summary">
                     <div class="stat-item">
@@ -170,13 +191,16 @@
                             <tr>
                                 <th>物料編號</th>
                                 <th>品名</th>
+                                <th>採購人員</th>
                                 <th>缺料數量</th>
                                 <th>關聯訂單</th>
                                 <th>預計到貨日</th>
                             </tr>
                         </thead>
                         <tbody id="semi-tbody">
-                            <tr><td colspan="5" style="text-align: center;">載入中...</td></tr>
+                            <tr>
+                                <td colspan="6" style="text-align: center;">載入中...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -184,6 +208,10 @@
 
             <!-- 成品缺料頁籤 -->
             <div id="finished-tab" class="tab-content">
+                <!-- 搜尋區塊 -->
+                <div class="search-box" style="margin-bottom: 1em;">
+                    <input type="text" id="finished-search" placeholder="請輸入1開頭工單號碼或後4碼" style="max-width: 350px;">
+                </div>
                 <!-- 統計摘要 -->
                 <div class="stat-summary">
                     <div class="stat-item">
@@ -207,13 +235,16 @@
                             <tr>
                                 <th>物料編號</th>
                                 <th>品名</th>
+                                <th>採購人員</th>
                                 <th>缺料數量</th>
                                 <th>關聯訂單</th>
                                 <th>預計到貨日</th>
                             </tr>
                         </thead>
                         <tbody id="finished-tbody">
-                            <tr><td colspan="5" style="text-align: center;">載入中...</td></tr>
+                            <tr>
+                                <td colspan="6" style="text-align: center;">載入中...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -240,15 +271,20 @@
                     <div id="stock-summary-section">
                         <h4>📦 庫存總覽</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-bottom: 0.5em;">
-                            <p>未限制: <span id="unrestricted-stock" style="font-weight: bold; color: var(--color-success);"></span></p>
-                            <p>品檢中: <span id="inspection-stock" style="font-weight: bold; color: var(--color-warning);"></span></p>
+                            <p>未限制: <span id="unrestricted-stock"
+                                    style="font-weight: bold; color: var(--color-success);"></span></p>
+                            <p>品檢中: <span id="inspection-stock"
+                                    style="font-weight: bold; color: var(--color-warning);"></span></p>
                         </div>
-                        <p>已訂未入 (PO): <span id="on-order-stock" style="font-weight: bold; color: var(--color-info);"></span></p>
+                        <p>已訂未入 (PO): <span id="on-order-stock"
+                                style="font-weight: bold; color: var(--color-info);"></span></p>
 
                         <div id="shortage-alert" class="shortage-alert"
                             style="display: none; margin-top: 1em; padding: 0.8em; border-radius: 4px; background: rgba(211, 47, 47, 0.1); border-left: 4px solid var(--color-danger);">
-                            <p style="margin: 0; font-weight: bold; color: var(--color-danger);">⚠️ 當前缺料: <strong id="current-shortage-qty">0</strong> 件</p>
-                            <p style="margin: 0.3em 0 0 0; font-size: 0.85em; color: var(--text-secondary);">📅 開始缺料日: <strong id="earliest-demand-date">-</strong></p>
+                            <p style="margin: 0; font-weight: bold; color: var(--color-danger);">⚠️ 當前缺料: <strong
+                                    id="current-shortage-qty">0</strong> 件</p>
+                            <p style="margin: 0.3em 0 0 0; font-size: 0.85em; color: var(--text-secondary);">📅 開始缺料日:
+                                <strong id="earliest-demand-date">-</strong></p>
                         </div>
                     </div>
 
@@ -275,34 +311,45 @@
                         <h4 class="delivery-form-title">📅 交期/分批維護</h4>
                         <form id="delivery-form">
                             <div style="margin-bottom: 0.5em;">
-                                <label for="po-select" style="font-size: 0.85em; margin-bottom: 2px; display: block;">關聯採購單</label>
-                                <select id="po-select" style="font-size: 0.9em; padding: 4px; height: auto; margin-bottom: 0;">
+                                <label for="po-select"
+                                    style="font-size: 0.85em; margin-bottom: 2px; display: block;">關聯採購單</label>
+                                <select id="po-select"
+                                    style="font-size: 0.9em; padding: 4px; height: auto; margin-bottom: 0;">
                                     <option value="">-- 新建 (不關聯) --</option>
                                 </select>
                             </div>
 
                             <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 0.5em;">
                                 <div>
-                                    <label for="delivery-date" style="font-size: 0.85em; margin-bottom: 2px;">預計到貨 <span class="required-mark">*</span></label>
-                                    <input type="text" id="delivery-date" style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="選擇日期..." required>
-                                    <small style="color: var(--pico-muted-color); font-size: 0.7em; display: block; margin-top: 0.2em;">
+                                    <label for="delivery-date" style="font-size: 0.85em; margin-bottom: 2px;">預計到貨 <span
+                                            class="required-mark">*</span></label>
+                                    <input type="text" id="delivery-date"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="選擇日期..."
+                                        required>
+                                    <small
+                                        style="color: var(--pico-muted-color); font-size: 0.7em; display: block; margin-top: 0.2em;">
                                         💡 提示: 點擊欄位開啟日期選擇器
                                     </small>
                                 </div>
                                 <div>
-                                    <label for="delivery-qty" style="font-size: 0.85em; margin-bottom: 2px;">數量 <span class="required-mark">*</span></label>
-                                    <input type="number" id="delivery-qty" min="1" style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="數量" required>
+                                    <label for="delivery-qty" style="font-size: 0.85em; margin-bottom: 2px;">數量 <span
+                                            class="required-mark">*</span></label>
+                                    <input type="number" id="delivery-qty" min="1"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="數量"
+                                        required>
                                 </div>
                             </div>
 
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-top: 0.5em;">
                                 <div>
                                     <label for="po-number" style="font-size: 0.8em;">採購單號</label>
-                                    <input type="text" id="po-number" style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="選填">
+                                    <input type="text" id="po-number"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="選填">
                                 </div>
                                 <div>
                                     <label for="supplier" style="font-size: 0.8em;">供應商</label>
-                                    <input type="text" id="supplier" style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="選填">
+                                    <input type="text" id="supplier"
+                                        style="font-size: 0.85em; padding: 4px; height: auto;" placeholder="選填">
                                 </div>
                             </div>
 
@@ -311,19 +358,25 @@
 
                             <div id="delivery-calculation"
                                 style="display: none; margin-top: 0.5em; background: rgba(33, 150, 243, 0.1); padding: 8px; border-radius: 4px; border-left: 3px solid var(--color-info);">
-                                <p style="margin: 0; font-size: 0.85em; color: var(--color-info);">✅ 到貨後可用: <strong id="calc-available-stock">0</strong></p>
-                                <p style="margin: 0; font-size: 0.8em; color: var(--text-secondary);">滿足至: <strong id="calc-satisfy-until">-</strong></p>
+                                <p style="margin: 0; font-size: 0.85em; color: var(--color-info);">✅ 到貨後可用: <strong
+                                        id="calc-available-stock">0</strong></p>
+                                <p style="margin: 0; font-size: 0.8em; color: var(--text-secondary);">滿足至: <strong
+                                        id="calc-satisfy-until">-</strong></p>
                             </div>
 
                             <div style="margin-top: 0.8em; display: flex; gap: 0.4em;">
-                                <button type="button" id="save-delivery-btn" style="flex: 1.5; padding: 4px 8px; font-size: 0.9em;">💾 儲存</button>
-                                <button type="button" id="clear-delivery-btn" class="secondary" style="flex: 1; padding: 4px 8px; font-size: 0.9em;">🗑️ 清除</button>
+                                <button type="button" id="save-delivery-btn"
+                                    style="flex: 1.5; padding: 4px 8px; font-size: 0.9em;">💾 儲存</button>
+                                <button type="button" id="clear-delivery-btn" class="secondary"
+                                    style="flex: 1; padding: 4px 8px; font-size: 0.9em;">🗑️ 清除</button>
                             </div>
                         </form>
 
                         <details style="margin-top: 0.8em; font-size: 0.85em;">
                             <summary>📜 交期歷史記錄</summary>
-                            <div id="delivery-history" style="max-height: 200px; overflow-y: auto; margin-top: 0.5em; border-top: 1px dashed var(--pico-border-color); padding-top: 0.5em;"></div>
+                            <div id="delivery-history"
+                                style="max-height: 200px; overflow-y: auto; margin-top: 0.5em; border-top: 1px dashed var(--pico-border-color); padding-top: 0.5em;">
+                            </div>
                         </details>
                     </div>
                 </div>

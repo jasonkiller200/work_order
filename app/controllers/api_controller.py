@@ -1845,7 +1845,7 @@ def sync_delivery_to_excel():
 def get_allocated_shortage():
     """
     代理呼叫領料系統的已撥缺料 API
-    避免前端直接跨域呼叫
+    避免前端直接跨域呼叫，並附加本地採購人員資料
     """
     try:
         external_url = 'http://192.168.6.137:8000/requisitions/api/shortage_materials/'
@@ -1855,6 +1855,29 @@ def get_allocated_shortage():
         response.raise_for_status()
         
         data = response.json()
+        
+        # 附加採購人員資訊（使用物料前10碼匹配）
+        try:
+            buyer_id_to_name = {}
+            buyers = User.query.filter_by(role='buyer').all()
+            buyer_id_to_name = {b.id: b.full_name for b in buyers}
+            
+            material_buyer_map = {}
+            materials_with_buyer = Material.query.filter(Material.buyer_id.isnot(None)).all()
+            for m in materials_with_buyer:
+                if m.buyer_id and m.base_material_id:
+                    buyer_name = buyer_id_to_name.get(m.buyer_id, m.buyer_id)
+                    material_buyer_map[m.base_material_id] = buyer_name
+            
+            # 為每筆缺料資料附加採購人員
+            shortage_list = data.get('shortage_materials', [])
+            for item in shortage_list:
+                mat_num = item.get('material_number', '')
+                base_id = str(mat_num)[:10] if mat_num else ''
+                item['buyer'] = material_buyer_map.get(base_id, '')
+        except Exception as e:
+            app_logger.warning(f"附加採購人員資訊失敗: {e}")
+        
         return jsonify(data)
         
     except requests.exceptions.Timeout:

@@ -14,23 +14,23 @@
             border-collapse: collapse;
             margin-top: 1rem;
         }
-        
+
         .user-table th,
         .user-table td {
             padding: 0.75rem;
             text-align: left;
             border-bottom: 1px solid var(--pico-muted-border-color);
         }
-        
+
         .user-table th {
             background: var(--pico-card-background-color);
             font-weight: 600;
         }
-        
+
         .user-table tr:hover {
             background: var(--pico-card-background-color);
         }
-        
+
         .badge {
             display: inline-block;
             padding: 0.25rem 0.5rem;
@@ -38,44 +38,44 @@
             font-size: 0.8rem;
             font-weight: 500;
         }
-        
+
         .badge-admin {
             background: #dc3545;
             color: white;
         }
-        
+
         .badge-buyer {
             background: #0d6efd;
             color: white;
         }
-        
+
         .badge-viewer {
             background: #6c757d;
             color: white;
         }
-        
+
         .badge-active {
             background: #198754;
             color: white;
         }
-        
+
         .badge-inactive {
             background: #ffc107;
             color: black;
         }
-        
+
         .action-buttons {
             display: flex;
             gap: 0.5rem;
             flex-wrap: wrap;
         }
-        
+
         .action-buttons button {
             padding: 0.25rem 0.5rem;
             font-size: 0.85rem;
             margin: 0;
         }
-        
+
         .toolbar {
             display: flex;
             gap: 1rem;
@@ -83,17 +83,17 @@
             align-items: center;
             margin-bottom: 1rem;
         }
-        
+
         .toolbar input,
         .toolbar select {
             margin: 0;
             min-width: 150px;
         }
-        
+
         .toolbar button {
             margin: 0;
         }
-        
+
         .modal-backdrop {
             display: none;
             position: fixed;
@@ -104,13 +104,13 @@
             background: rgba(0, 0, 0, 0.7);
             z-index: 999;
         }
-        
+
         .modal-backdrop.active {
             display: flex;
             justify-content: center;
             align-items: center;
         }
-        
+
         .modal-content {
             background: var(--pico-card-background-color);
             padding: 2rem;
@@ -120,58 +120,58 @@
             max-height: 90vh;
             overflow-y: auto;
         }
-        
+
         .modal-content h3 {
             margin-top: 0;
         }
-        
+
         .form-group {
             margin-bottom: 1rem;
         }
-        
+
         .form-group label {
             display: block;
             margin-bottom: 0.25rem;
             font-weight: 500;
         }
-        
+
         .form-group input,
         .form-group select {
             width: 100%;
         }
-        
+
         .modal-buttons {
             display: flex;
             justify-content: flex-end;
             gap: 0.5rem;
             margin-top: 1.5rem;
         }
-        
+
         .stats-cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 1rem;
             margin-bottom: 1.5rem;
         }
-        
+
         .stat-card {
             background: var(--pico-card-background-color);
             padding: 1rem;
             border-radius: 8px;
             text-align: center;
         }
-        
+
         .stat-card .number {
             font-size: 2rem;
             font-weight: bold;
             color: var(--pico-primary);
         }
-        
+
         .stat-card .label {
             font-size: 0.9rem;
             color: var(--pico-muted-color);
         }
-        
+
         .empty-message {
             text-align: center;
             padding: 2rem;
@@ -207,7 +207,7 @@
 
         <section id="user-management-section">
             <h2>使用者管理</h2>
-            
+
             <!-- 統計卡片 -->
             <div class="stats-cards">
                 <div class="stat-card">
@@ -223,7 +223,7 @@
                     <div class="label">已停用</div>
                 </div>
             </div>
-            
+
             <!-- 工具列 -->
             <div class="toolbar">
                 <input type="text" id="search-input" placeholder="搜尋 (員工編號、帳號、姓名...)">
@@ -240,7 +240,7 @@
                 </select>
                 <button id="btn-add-user" class="primary">+ 新增使用者</button>
             </div>
-            
+
             <!-- 使用者列表 -->
             <div id="user-list-container">
                 <table class="user-table">
@@ -272,37 +272,37 @@
             <form id="user-form">
                 <input type="hidden" id="edit-mode" value="create">
                 <input type="hidden" id="original-id" value="">
-                
+
                 <div class="form-group">
                     <label for="user-id">員工編號 *</label>
                     <input type="text" id="user-id" required maxlength="10">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="user-username">帳號 *</label>
                     <input type="text" id="user-username" required maxlength="50">
                 </div>
-                
+
                 <div class="form-group" id="password-group">
                     <label for="user-password">密碼 *</label>
                     <input type="password" id="user-password" required minlength="6">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="user-fullname">姓名</label>
                     <input type="text" id="user-fullname" maxlength="100">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="user-email">電子郵件</label>
                     <input type="email" id="user-email" maxlength="100">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="user-department">部門</label>
                     <input type="text" id="user-department" maxlength="100">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="user-role">角色 *</label>
                     <select id="user-role" required>
@@ -311,7 +311,7 @@
                         <option value="admin">管理員</option>
                     </select>
                 </div>
-                
+
                 <div class="modal-buttons">
                     <button type="button" class="secondary" onclick="closeModal()">取消</button>
                     <button type="submit" class="primary">儲存</button>
@@ -327,17 +327,17 @@
             <p>為使用者 <strong id="reset-user-name"></strong> 設定新密碼</p>
             <form id="password-form">
                 <input type="hidden" id="reset-user-id" value="">
-                
+
                 <div class="form-group">
                     <label for="new-password">新密碼 *</label>
                     <input type="password" id="new-password" required minlength="6">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="confirm-password">確認密碼 *</label>
                     <input type="password" id="confirm-password" required minlength="6">
                 </div>
-                
+
                 <div class="modal-buttons">
                     <button type="button" class="secondary" onclick="closePasswordModal()">取消</button>
                     <button type="submit" class="primary">確認重設</button>

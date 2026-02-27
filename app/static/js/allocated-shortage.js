@@ -18,6 +18,7 @@ let finishedData = [];
 document.addEventListener('DOMContentLoaded', function() {
     initTabEvents();
     initModalEvents();
+    initSearchEvents();
     loadShortageData();
     
     // 初始化物料詳情模態視窗
@@ -25,6 +26,70 @@ document.addEventListener('DOMContentLoaded', function() {
         setupModal();
     }
 });
+
+/**
+ * 初始化搜尋事件
+ */
+function initSearchEvents() {
+    // 半成品搜尋
+    const semiSearch = document.getElementById('semi-search');
+    if (semiSearch) {
+        semiSearch.addEventListener('input', function() {
+            const keyword = this.value.trim();
+            filterAndRenderTable('semi', semiData, keyword);
+        });
+    }
+    
+    // 成品搜尋
+    const finishedSearch = document.getElementById('finished-search');
+    if (finishedSearch) {
+        finishedSearch.addEventListener('input', function() {
+            const keyword = this.value.trim();
+            filterAndRenderTable('finished', finishedData, keyword);
+        });
+    }
+}
+
+/**
+ * 過濾並渲染表格
+ * @param {string} type - 'semi' 或 'finished'
+ * @param {Array} data - 原始資料
+ * @param {string} keyword - 搜尋關鍵字
+ */
+function filterAndRenderTable(type, data, keyword) {
+    let filteredData = data;
+    
+    if (keyword) {
+        filteredData = data.filter(item => {
+            const orders = item.orders || [];
+            // 檢查是否有任一訂單符合搜尋條件
+            return orders.some(order => {
+                // 完整比對（前綴或完整）
+                if (order.startsWith(keyword)) return true;
+                // 後4碼比對
+                if (order.length >= 4 && order.slice(-4).includes(keyword)) return true;
+                // 一般包含比對
+                if (order.includes(keyword)) return true;
+                return false;
+            });
+        });
+    }
+    
+    const tbody = document.getElementById(`${type}-tbody`);
+    
+    // 更新統計（使用過濾後的資料）
+    updateStats(type, filteredData);
+    
+    if (filteredData.length === 0) {
+        const noDataMsg = keyword 
+            ? `🔍 找不到符合「${keyword}」的工單`
+            : (type === 'semi' ? '🎉 目前無半成品缺料' : '🎉 目前無成品缺料');
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--pico-muted-color);">${noDataMsg}</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = filteredData.map(item => renderRow(item)).join('');
+}
 
 /**
  * 初始化頁籤切換事件
@@ -80,9 +145,9 @@ async function loadShortageData() {
     } catch (error) {
         console.error('載入已撥缺料資料失敗:', error);
         document.getElementById('semi-tbody').innerHTML = 
-            `<tr><td colspan="5" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
+            `<tr><td colspan="6" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
         document.getElementById('finished-tbody').innerHTML = 
-            `<tr><td colspan="5" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
+            `<tr><td colspan="6" style="text-align: center; color: #f44336;">載入失敗: ${error.message}</td></tr>`;
     }
 }
 
@@ -127,34 +192,18 @@ function classifyData() {
  * 渲染半成品缺料表格
  */
 function renderSemiTable() {
-    const tbody = document.getElementById('semi-tbody');
-    
-    // 更新統計
-    updateStats('semi', semiData);
-    
-    if (semiData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--pico-muted-color);">🎉 目前無半成品缺料</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = semiData.map(item => renderRow(item)).join('');
+    const searchInput = document.getElementById('semi-search');
+    const keyword = searchInput ? searchInput.value.trim() : '';
+    filterAndRenderTable('semi', semiData, keyword);
 }
 
 /**
  * 渲染成品缺料表格
  */
 function renderFinishedTable() {
-    const tbody = document.getElementById('finished-tbody');
-    
-    // 更新統計
-    updateStats('finished', finishedData);
-    
-    if (finishedData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--pico-muted-color);">🎉 目前無成品缺料</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = finishedData.map(item => renderRow(item)).join('');
+    const searchInput = document.getElementById('finished-search');
+    const keyword = searchInput ? searchInput.value.trim() : '';
+    filterAndRenderTable('finished', finishedData, keyword);
 }
 
 /**
@@ -166,6 +215,7 @@ function renderRow(item) {
     const totalShortage = item.total_shortage || 0;
     const orders = item.orders || [];
     const arrivalDate = item.estimated_arrival_date;
+    const buyer = item.buyer || '';
     
     // 預計到貨日顯示
     const arrivalDateHtml = arrivalDate 
@@ -179,12 +229,18 @@ function renderRow(item) {
           ).join('')}</div>`
         : '-';
     
+    // 採購人員顯示
+    const buyerHtml = buyer 
+        ? `<span style="color: var(--pico-primary);">${buyer}</span>` 
+        : `<span style="color: var(--pico-muted-color);">-</span>`;
+    
     return `
         <tr>
             <td>
                 <span class="clickable-material" onclick="openDetailsModal('${materialNumber}')">${materialNumber}</span>
             </td>
             <td title="${itemName}">${truncateText(itemName, 30)}</td>
+            <td>${buyerHtml}</td>
             <td style="text-align: center; font-weight: bold; color: #f44336;">${totalShortage}</td>
             <td>${ordersHtml}</td>
             <td>${arrivalDateHtml}</td>
