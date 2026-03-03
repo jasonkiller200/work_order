@@ -29,7 +29,20 @@ window.enhanceMaterialsData = function (materialsData, demandDetailsData, delive
     return materialsData.map(material => {
         const materialId = material['物料'];
 
-        // 🆕 取得該物料的所有分批交期資料(陣列格式)
+        // 🆕 從需求明細中計算最早需求日期
+        const materialDemands = (demandDetailsData && demandDetailsData[materialId]) || material.demand_details || [];
+        let earliestDemandDate = null;
+        if (materialDemands.length > 0) {
+            const dates = materialDemands
+                .map(d => d['需求日期'])
+                .filter(d => d)
+                .sort();
+            if (dates.length > 0) {
+                earliestDemandDate = dates[0]; // 已排序，取最早的
+            }
+        }
+
+        // 取得該物料的所有分批交期資料(陣列格式)
         const deliverySchedules = deliveryData[materialId] || [];
 
         // 向下相容:如果有分批資料,取第一批作為主要交期
@@ -37,7 +50,9 @@ window.enhanceMaterialsData = function (materialsData, demandDetailsData, delive
 
         return {
             ...material,
-            delivery_schedules: deliverySchedules, // 🆕 所有分批資訊
+            demand_details: materialDemands,
+            earliest_demand_date: earliestDemandDate, // 🆕 最早需求日期
+            delivery_schedules: deliverySchedules,
             delivery_date: firstDelivery ? firstDelivery.expected_date : null,
             delivery_status: firstDelivery ? firstDelivery.status : null,
             delivery_qty: firstDelivery ? firstDelivery.quantity : null
