@@ -240,9 +240,23 @@ function calculateStats(materials, deliveryData) {
             }
         }
 
-        // 需求逾期欠料（最早需求日已過且仍有缺料）
-        if (earliestDemand && earliestDemand < today && hasShortage) {
-            stats.overdueDemand++;
+        // 需求逾期欠料（模擬庫存配賦後，第一筆無法滿足的需求日已過）
+        if (hasShortage && m.demand_details && m.demand_details.length > 0) {
+            let simStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
+            const sortedDemands = m.demand_details
+                .map(d => ({ qty: d['未結數量 (EINHEIT)'] || 0, date: new Date(d['需求日期']) }))
+                .sort((a, b) => a.date - b.date);
+
+            for (const demand of sortedDemands) {
+                simStock -= demand.qty;
+                if (simStock < 0) {
+                    // 找到第一筆無法滿足的需求
+                    if (demand.date < today) {
+                        stats.overdueDemand++;
+                    }
+                    break;
+                }
+            }
         }
 
         // 庫存充足
@@ -372,7 +386,18 @@ window.filterMaterialsByStats = function (materials) {
                 return false;
 
             case 'overdue-demand':
-                return earliestDemand && earliestDemand < today && hasShortage;
+                if (!(hasShortage && m.demand_details && m.demand_details.length > 0)) return false;
+                let odStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
+                const odDemands = m.demand_details
+                    .map(d => ({ qty: d['未結數量 (EINHEIT)'] || 0, date: new Date(d['需求日期']) }))
+                    .sort((a, b) => a.date - b.date);
+                for (const demand of odDemands) {
+                    odStock -= demand.qty;
+                    if (odStock < 0) {
+                        return demand.date < today;
+                    }
+                }
+                return false;
 
             case 'sufficient':
                 return !hasShortage;
