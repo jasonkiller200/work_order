@@ -6,7 +6,7 @@
 // 狀態管理
 const state = {
     search: '',
-    sortBy: '生產開始',
+    sortBy: '需求日期',
     sortOrder: 'asc',
     totalCount: 0,
     orderType: 'semi'  // 'semi' = 半品工單, 'finished' = 成品工單
