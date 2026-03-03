@@ -96,7 +96,7 @@ class WorkOrderStatsService:
             # 處理日期欄位
             for date_col in ['生產開始', '生產結束', '生產開始.1', '生產結束.1']:
                 if date_col in df.columns:
-                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce', format='mixed')
             
             # 篩選 2 開頭和 6 開頭
             df = df[

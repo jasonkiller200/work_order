@@ -668,9 +668,11 @@ class DataService:
             
             df_filtered_summary['廠別'] = df_filtered_summary.apply(determine_factory, axis=1)
             
-            # 處理重複的 '工單號碼'
+            # 處理重複的 '工單號碼'（確保移除浮點數 .0 後綴）
             if '工單號碼' in df_filtered_summary.columns:
-                df_filtered_summary['工單號碼'] = df_filtered_summary['工單號碼'].astype(str)
+                df_filtered_summary['工單號碼'] = df_filtered_summary['工單號碼'].apply(
+                    lambda x: str(int(x)) if pd.notna(x) and isinstance(x, (float, int)) else str(x) if pd.notna(x) else ''
+                )
                 df_filtered_summary.drop_duplicates(subset=['工單號碼'], keep='first', inplace=True)
             
             # 根據 '工單號碼' 建立映射

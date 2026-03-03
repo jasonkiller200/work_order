@@ -305,9 +305,11 @@ def load_and_process_data():
             # 處理 NaN 值
             df_filtered_summary = df_filtered_summary.fillna('')
 
-            # 處理重複的 '工單號碼'，保留第一個
+            # 處理重複的 '工單號碼'，保留第一個（確保移除浮點數 .0 後綴）
             if '工單號碼' in df_filtered_summary.columns:
-                df_filtered_summary['工單號碼'] = df_filtered_summary['工單號碼'].astype(str) # 確保工單號碼是字串
+                df_filtered_summary['工單號碼'] = df_filtered_summary['工單號碼'].apply(
+                    lambda x: str(int(x)) if pd.notna(x) and isinstance(x, (float, int)) else str(x) if pd.notna(x) else ''
+                )
                 df_filtered_summary.drop_duplicates(subset=['工單號碼'], keep='first', inplace=True)
 
             # 根據 '工單號碼' 建立映射
