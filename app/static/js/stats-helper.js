@@ -92,7 +92,7 @@ function applyStatFilter(filterType) {
         'due-soon': '即將到期',
         'all-shortage': '總缺料項目',
         'delivery-delayed': '交貨延期',
-        'this-week': '本週需求',
+        'overdue-demand': '需求逾期欠料',
         'sufficient': '庫存充足',
         'substitute-notify': '替代用料通知',
         'in-inspection': '品檢中'
@@ -151,7 +151,7 @@ function calculateStats(materials, deliveryData) {
         dueSoon: 0,
         allShortage: 0,
         deliveryDelayed: 0,
-        thisWeek: 0,
+        overdueDemand: 0,
         sufficient: 0,
         substituteNotify: 0,
         inInspection: 0
@@ -225,9 +225,9 @@ function calculateStats(materials, deliveryData) {
             }
         }
 
-        // 本週需求
-        if (earliestDemand && earliestDemand >= weekStart && earliestDemand <= weekEnd) {
-            stats.thisWeek++;
+        // 需求逾期欠料（最早需求日已過且仍有缺料）
+        if (earliestDemand && earliestDemand < today && hasShortage) {
+            stats.overdueDemand++;
         }
 
         // 庫存充足
@@ -262,7 +262,7 @@ window.updateStatsCards = function () {
         'stat-due-soon': stats.dueSoon,
         'stat-all-shortage': stats.allShortage,
         'stat-delivery-delayed': stats.deliveryDelayed,
-        'stat-this-week': stats.thisWeek,
+        'stat-overdue-demand': stats.overdueDemand,
         'stat-sufficient': stats.sufficient,
         'stat-substitute-notify': stats.substituteNotify,
         'stat-in-inspection': stats.inInspection
@@ -356,8 +356,8 @@ window.filterMaterialsByStats = function (materials) {
                 }
                 return false;
 
-            case 'this-week':
-                return earliestDemand && earliestDemand >= weekStart && earliestDemand <= weekEnd;
+            case 'overdue-demand':
+                return earliestDemand && earliestDemand < today && hasShortage;
 
             case 'sufficient':
                 return !hasShortage;
