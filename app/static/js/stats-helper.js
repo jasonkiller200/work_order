@@ -348,7 +348,11 @@ window.filterMaterialsByStats = function (materials) {
                     const scheduleDate = new Date(firstSchedule.expected_date);
                     const demandDate = targetDemand.date;
 
-                    return scheduleDate > demandDate;
+                    if (scheduleDate > demandDate) {
+                        // 計算延遲天數並儲存供排序使用
+                        m._computed_delay_days = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
+                        return true;
+                    }
                 }
                 return false;
 
@@ -373,6 +377,17 @@ window.filterMaterialsByStats = function (materials) {
 
 // 排序物料資料（30日內缺料優先，然後按預計交貨日期）
 window.sortMaterialsByPriority = function (materials) {
+    // 🆕 如果是「交貨延期」篩選，預設按延遲天數由多到少排序
+    if (currentStatFilter === 'delivery-delayed') {
+        return materials.sort((a, b) => {
+            const aDelay = a._computed_delay_days || 0;
+            const bDelay = b._computed_delay_days || 0;
+            if (aDelay !== bDelay) return bDelay - aDelay; // 延遲天數多的排最前
+            // 延遲天數相同時，按缺料數量排序
+            return (b.current_shortage || 0) - (a.current_shortage || 0);
+        });
+    }
+
     return materials.sort((a, b) => {
         // 第一優先：30日內缺料排最前
         const a30Days = a.shortage_within_30_days || false;
