@@ -153,6 +153,7 @@ function clearStatFilter() {
 // 計算統計數據
 function calculateStats(materials, deliveryData) {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay()); // 本週日
@@ -312,6 +313,7 @@ window.filterMaterialsByStats = function (materials) {
     }
 
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay());
