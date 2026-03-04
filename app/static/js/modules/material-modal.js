@@ -1061,17 +1061,31 @@ function renderSubstituteSection(substituteInventory, notifiedList, materialId) 
     substituteInventory.forEach((s, idx) => {
         const availableStock = s.unrestricted_stock || 0;
         const inspectionStock = s.inspection_stock || 0;
+        const totalDemand = s.total_demand || 0;
+
+        // ✨ 計算「淨可用庫存」: 替代品的可用庫存 - 替代品本身的需求
+        const netAvailableStock = Math.max(0, availableStock - totalDemand);
+
         const isNotified = notifiedList.includes(s['物料']);
         const checkedAttr = isNotified ? 'checked' : '';
 
-        // 計算此替代品可以滿足多少需求
-        const coverageInfo = calculateSubstituteCoverage(demandDetails, availableStock);
-        const coverageText = coverageInfo.coveredCount > 0
-            ? `可滿足 ${coverageInfo.coveredCount} 筆工單`
-            : '-';
-        const coverageStyle = coverageInfo.coveredCount > 0
-            ? 'color: var(--pico-primary); font-weight: bold;'
-            : '';
+        // 計算此替代品可以滿足多少需求 (使用淨可用庫存)
+        const coverageInfo = calculateSubstituteCoverage(demandDetails, netAvailableStock);
+
+        let coverageText = '-';
+        let coverageStyle = '';
+
+        if (netAvailableStock > 0) {
+            coverageText = coverageInfo.coveredCount > 0
+                ? `可滿足 ${coverageInfo.coveredCount} 筆工單`
+                : '-';
+            coverageStyle = coverageInfo.coveredCount > 0
+                ? 'color: var(--pico-primary); font-weight: bold;'
+                : '';
+        } else {
+            // 淨庫存不夠
+            coverageText = '<span style="color: var(--color-danger, red);"><small>無淨庫存</small></span>';
+        }
 
         subHTML += `<tr>
             <td><input type="checkbox" ${checkedAttr} 
@@ -1080,7 +1094,10 @@ function renderSubstituteSection(substituteInventory, notifiedList, materialId) 
                 onchange="window.toggleSubstituteNotify('${materialId}', '${s['物料']}', this)"></td>
             <td>${s['物料']}</td>
             <td>${s['物料說明']}</td>
-            <td>${availableStock.toFixed(0)}</td>
+            <td>
+                <div>${availableStock.toFixed(0)}</div>
+                ${totalDemand > 0 ? `<div style="font-size: 0.8em; color: var(--text-muted);">需: ${totalDemand.toFixed(0)} | 淨: ${netAvailableStock.toFixed(0)}</div>` : ''}
+            </td>
             <td>${inspectionStock.toFixed(0)}</td>
             <td style="${coverageStyle}">${coverageText}</td>
         </tr>`;
@@ -1089,12 +1106,12 @@ function renderSubstituteSection(substituteInventory, notifiedList, materialId) 
         if (isNotified && coverageInfo.coveredOrders.length > 0) {
             subHTML += `<tr><td colspan="6" style="padding: 0;">
                 <div style="margin-left: 2em; margin-bottom: 0.5em; background: rgba(255,255,255,0.03); padding: 0.5em; border-radius: 4px;">
-                    <strong style="color: var(--pico-primary);">🔄 可替代工單需求 (庫存 ${availableStock.toFixed(0)} 可滿足)：</strong>
+                    <strong style="color: var(--pico-primary);">🔄 可替代工單需求 (淨可用庫存 ${netAvailableStock.toFixed(0)} 可滿足)：</strong>
                     <table style="font-size: 0.85em; margin-top: 0.3em;">
                         <thead><tr><th>工單</th><th>需求日期</th><th>需求數量</th><th>滿足狀態</th></tr></thead>
                         <tbody>`;
 
-            let remainingStock = availableStock;
+            let remainingStock = netAvailableStock;
             coverageInfo.coveredOrders.forEach(order => {
                 const orderNum = order['訂單'] || order['order_number'] || '-';
                 const demandDate = order['需求日期'] || '-';
