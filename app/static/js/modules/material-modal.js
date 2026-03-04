@@ -1096,7 +1096,7 @@ function renderSubstituteSection(substituteInventory, notifiedList, materialId) 
             <td>${s['物料說明']}</td>
             <td>
                 <div>${availableStock.toFixed(0)}</div>
-                ${totalDemand > 0 ? `<div style="font-size: 0.8em; color: var(--text-muted);">需: ${totalDemand.toFixed(0)} | 淨: ${netAvailableStock.toFixed(0)}</div>` : ''}
+                ${totalDemand > 0 ? `<div style="font-size: 0.85em; color: var(--text-main, #d1d1d1); font-weight: 500; margin-top: 2px;">需: ${totalDemand.toFixed(0)} | <span style="color: var(--pico-primary);">淨: ${netAvailableStock.toFixed(0)}</span></div>` : ''}
             </td>
             <td>${inspectionStock.toFixed(0)}</td>
             <td style="${coverageStyle}">${coverageText}</td>
