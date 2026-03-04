@@ -957,10 +957,21 @@ function updateMainCacheDrawing(partNumber, newDrawing) {
 // ¶ 點擊訂單號碼顯示工單資訊浮動面板
 function showOrderInfoPopup(orderId, event) {
     event.stopPropagation();
+    event.preventDefault();
 
     // 移除先前的 popup
     const existing = document.getElementById('order-info-popup');
     if (existing) existing.remove();
+
+    // 找到 modal 的 article 容器（popup 必須在 dialog 內才能顯示在 top-layer 上）
+    const modal = document.getElementById('details-modal');
+    const modalArticle = modal ? modal.querySelector('article') : null;
+    const container = modalArticle || document.body;
+
+    // 確保容器有 position: relative
+    if (container.style.position !== 'relative') {
+        container.style.position = 'relative';
+    }
 
     // 建立浮動面板
     const popup = document.createElement('div');
@@ -971,24 +982,23 @@ function showOrderInfoPopup(orderId, event) {
         border: 1px solid var(--border-default, #333); border-radius: 8px;
         padding: 1em 1.2em; min-width: 260px; max-width: 360px;
         box-shadow: 0 8px 24px rgba(0,0,0,0.4); font-size: 0.9em;
-        animation: fadeIn 0.15s ease-out;
     `;
-    popup.innerHTML = '<div style="text-align:center; padding: 0.5em;">\u8F09\u5165\u4E2D...</div>';
+    popup.innerHTML = '<div style="text-align:center; padding: 0.5em;">載入中...</div>';
 
-    // 定位: 取按鈕位置
+    // 定位
     const rect = event.target.getBoundingClientRect();
     popup.style.left = Math.min(rect.left, window.innerWidth - 380) + 'px';
     popup.style.top = (rect.bottom + 6) + 'px';
-    document.body.appendChild(popup);
+    container.appendChild(popup);
 
     // 點擊外部關閉
     const closePopup = (e) => {
-        if (!popup.contains(e.target)) {
+        if (!popup.contains(e.target) && e.target !== event.target) {
             popup.remove();
             document.removeEventListener('click', closePopup, true);
         }
     };
-    setTimeout(() => document.addEventListener('click', closePopup, true), 50);
+    setTimeout(() => document.addEventListener('click', closePopup, true), 100);
 
     // 呼叫 API
     fetch(`/api/order-info/${orderId}`)
