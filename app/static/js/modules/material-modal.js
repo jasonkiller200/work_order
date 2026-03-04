@@ -284,15 +284,15 @@ function openDetailsModal(materialId) {
                             }
                         ],
                         // 🆕 標記假日和週末
-                        onDayCreate: function(dObj, dStr, fp, dayElem) {
+                        onDayCreate: function (dObj, dStr, fp, dayElem) {
                             const date = dayElem.dateObj;
                             const day = date.getDay();
-                            
+
                             // 標記週末
                             if (day === 0 || day === 6) {
                                 dayElem.classList.add('weekend');
                             }
-                            
+
                             // 標記假日
                             if (typeof HolidayUtils !== 'undefined') {
                                 const holidayName = HolidayUtils.getHolidayName(date);
@@ -304,7 +304,7 @@ function openDetailsModal(materialId) {
                         }
                     });
                 };
-                
+
                 // 確保假日資料載入後再初始化
                 if (typeof HolidayUtils !== 'undefined' && HolidayUtils.isReady()) {
                     initFlatpickr();
@@ -322,8 +322,13 @@ function openDetailsModal(materialId) {
             if (data.demand_details && data.demand_details.length > 0) {
                 data.demand_details.forEach(d => {
                     const shortageClass = d.is_shortage_point ? ' class="shortage-warning"' : '';
+                    const orderId = d['訂單'];
+                    const isClickable = orderId && (orderId.startsWith('1') || orderId.startsWith('2') || orderId.startsWith('6'));
+                    const orderCell = isClickable
+                        ? `<span class="material-link" onclick="showOrderInfoPopup('${orderId}', event)">${orderId}</span>`
+                        : orderId;
                     demandHTML += `<tr>
-                        <td>${d['訂單']}</td>
+                        <td>${orderCell}</td>
                         <td${shortageClass}>${d['未結數量 (EINHEIT)'].toFixed(0)}</td>
                         <td>${d['需求日期']}</td>
                         <td>${d.remaining_stock.toFixed(0)}</td>
@@ -948,6 +953,88 @@ function updateMainCacheDrawing(partNumber, newDrawing) {
         renderMaterialsTable();
     }
 }
+
+// ¶ 點擊訂單號碼顯示工單資訊浮動面板
+function showOrderInfoPopup(orderId, event) {
+    event.stopPropagation();
+
+    // 移除先前的 popup
+    const existing = document.getElementById('order-info-popup');
+    if (existing) existing.remove();
+
+    // 建立浮動面板
+    const popup = document.createElement('div');
+    popup.id = 'order-info-popup';
+    popup.style.cssText = `
+        position: fixed; z-index: 10000;
+        background: var(--bg-card, #1e1e1e); color: var(--text-primary, #e0e0e0);
+        border: 1px solid var(--border-default, #333); border-radius: 8px;
+        padding: 1em 1.2em; min-width: 260px; max-width: 360px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4); font-size: 0.9em;
+        animation: fadeIn 0.15s ease-out;
+    `;
+    popup.innerHTML = '<div style="text-align:center; padding: 0.5em;">\u8F09\u5165\u4E2D...</div>';
+
+    // 定位: 取按鈕位置
+    const rect = event.target.getBoundingClientRect();
+    popup.style.left = Math.min(rect.left, window.innerWidth - 380) + 'px';
+    popup.style.top = (rect.bottom + 6) + 'px';
+    document.body.appendChild(popup);
+
+    // 點擊外部關閉
+    const closePopup = (e) => {
+        if (!popup.contains(e.target)) {
+            popup.remove();
+            document.removeEventListener('click', closePopup, true);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closePopup, true), 50);
+
+    // 呼叫 API
+    fetch(`/api/order-info/${orderId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.found) {
+                popup.innerHTML = `
+                    <div style="font-weight:bold; margin-bottom:0.5em;">📋 工單: ${orderId}</div>
+                    <div style="color: var(--text-muted, #999);">${data.message || '找不到資訊'}</div>
+                `;
+                return;
+            }
+
+            let html = '';
+            if (data.type === 'semi') {
+                html = `
+                    <div style="font-weight:bold; margin-bottom:0.6em; border-bottom:1px solid var(--border-light,#333); padding-bottom:0.4em;">
+                        📋 半品工單: ${orderId}
+                    </div>
+                    <div style="line-height:1.8;">
+                        <div>🏭 品名: <strong>${data.product_name || '-'}</strong></div>
+                        <div>🔗 對應成品: <strong>${data.corresponding_finished || '-'}</strong></div>
+                        <div>🖥️ 機型: <strong>${data.machine_type || '-'}</strong></div>
+                        <div>📅 成品出貨日: <strong style="color: var(--color-warning, #ff9800);">${data.shipment_date || '-'}</strong></div>
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div style="font-weight:bold; margin-bottom:0.6em; border-bottom:1px solid var(--border-light,#333); padding-bottom:0.4em;">
+                        📋 成品工單: ${orderId}
+                    </div>
+                    <div style="line-height:1.8;">
+                        <div>🖥️ 機型: <strong>${data.machine_type || '-'}</strong></div>
+                        <div>👤 客戶: <strong>${data.customer || '-'}</strong></div>
+                        <div>📅 出貨日: <strong style="color: var(--color-warning, #ff9800);">${data.shipment_date || '-'}</strong></div>
+                        <div>🏭 廠別: <strong>${data.factory || '-'}</strong></div>
+                    </div>
+                `;
+            }
+            popup.innerHTML = html;
+        })
+        .catch(err => {
+            popup.innerHTML = `<div style="color: var(--color-danger, red);">載入失敗: ${err.message}</div>`;
+        });
+}
+window.showOrderInfoPopup = showOrderInfoPopup;
 
 document.addEventListener('DOMContentLoaded', function () {
     setupModal();

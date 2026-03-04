@@ -1686,6 +1686,79 @@ def batch_import_component_requirements():
         return jsonify({'error': str(e)}), 500
 
 
+# =================== 工單資訊查詢 API ===================
+
+@api_bp.route('/order-info/<order_id>')
+@cache_required
+def get_order_info(order_id):
+    """查詢工單對應的成品資訊（機型、出貨日）"""
+    try:
+        from app.services.work_order_stats_service import WorkOrderStatsService
+        
+        order_id = str(order_id).strip()
+        
+        if order_id.startswith('2') or order_id.startswith('6'):
+            # 半品工單 → 從半品總表查詢
+            semi_map = WorkOrderStatsService._load_semi_finished_table()
+            info = semi_map.get(order_id, {})
+            
+            if info:
+                return jsonify({
+                    'found': True,
+                    'type': 'semi',
+                    'order_id': order_id,
+                    'product_name': info.get('品名', ''),
+                    'corresponding_finished': info.get('對應成品', ''),
+                    'machine_type': info.get('機型', ''),
+                    'shipment_date': info.get('成品出貨日', '')
+                })
+            else:
+                return jsonify({
+                    'found': False,
+                    'type': 'semi',
+                    'order_id': order_id,
+                    'message': '此工單不在半品總表中（可能為預備用料）'
+                })
+        
+        elif order_id.startswith('1'):
+            # 成品工單 → 從 order_summary_map 查詢
+            current_data = cache_manager.get_current_data()
+            order_summary_map = current_data.get('order_summary_map', {}) if current_data else {}
+            info = order_summary_map.get(order_id, {})
+            
+            if info:
+                return jsonify({
+                    'found': True,
+                    'type': 'finished',
+                    'order_id': order_id,
+                    'machine_type': info.get('物料說明', ''),
+                    'order_number': info.get('訂單號碼', ''),
+                    'customer': info.get('下單客戶名稱', ''),
+                    'shipment_date': info.get('生產結束', ''),
+                    'production_start': info.get('生產開始', ''),
+                    'factory': info.get('廠別', '')
+                })
+            else:
+                return jsonify({
+                    'found': False,
+                    'type': 'finished',
+                    'order_id': order_id,
+                    'message': '找不到此成品工單的資訊'
+                })
+        
+        else:
+            return jsonify({
+                'found': False,
+                'type': 'unknown',
+                'order_id': order_id,
+                'message': '不支援的工單號碼格式'
+            })
+    
+    except Exception as e:
+        app_logger.error(f"查詢工單資訊失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 # =================== 工單詳情統計 API ===================
 
 @api_bp.route('/work-order-statistics')
