@@ -154,6 +154,8 @@ function clearStatFilter() {
 function calculateStats(materials, deliveryData) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(today);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay()); // 本週日
@@ -189,8 +191,8 @@ function calculateStats(materials, deliveryData) {
             stats.noDelivery++;
         }
 
-        // 已延誤（有交期但已過期且未標記完成）
-        if (delivery && delivery < today && m.delivery_status !== 'completed') {
+        // 今日要到貨（預計交貨日 = 今天）
+        if (delivery && delivery >= today && delivery < tomorrowStart) {
             stats.delayed++;
         }
 
@@ -314,6 +316,8 @@ window.filterMaterialsByStats = function (materials) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(today);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay());
@@ -337,7 +341,7 @@ window.filterMaterialsByStats = function (materials) {
                 return hasShortage && !delivery;
 
             case 'delayed':
-                return delivery && delivery < today && m.delivery_status !== 'completed';
+                return delivery && delivery >= today && delivery < tomorrowStart;
 
             case 'due-soon':
                 return delivery && delivery >= today && delivery <= in7Days;
