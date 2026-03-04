@@ -398,9 +398,32 @@ window.renderMaterialsTable = function () {
     } else {
         paginatedData.forEach(m => {
             const buyer = m['採購人員'] || '-';
-            // 檢查是否在30日內有缺料需求
+            // 🆕 判斷行底色優先級：紅底（逾期欠料） > 綠底（30日內缺料）
             const shortage30Days = m.shortage_within_30_days || false;
-            const rowClass = shortage30Days ? ' class="shortage-30-days"' : '';
+            let rowClass = '';
+            // 檢查是否為需求逾期欠料（模擬庫存配賦，第一筆不足的需求日已過今天）
+            const hasShortage = (m.current_shortage || 0) > 0 || (m.projected_shortage || 0) > 0;
+            if (hasShortage && m.demand_details && m.demand_details.length > 0) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                let simStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
+                const sortedDemands = m.demand_details
+                    .map(d => ({ qty: d['未結數量 (EINHEIT)'] || 0, date: new Date(d['需求日期']) }))
+                    .sort((a, b) => a.date - b.date);
+                for (const demand of sortedDemands) {
+                    simStock -= demand.qty;
+                    if (simStock < 0) {
+                        if (demand.date < today) {
+                            rowClass = ' class="overdue-shortage"';
+                        }
+                        break;
+                    }
+                }
+            }
+            // 如果不是逾期欠料，但在30日內有缺料，則使用綠底
+            if (!rowClass && shortage30Days) {
+                rowClass = ' class="shortage-30-days"';
+            }
 
             // 🆕 格式化預計交貨日期 (支援分批顯示)
             let deliveryDateStr = '-';

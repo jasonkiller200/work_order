@@ -13,7 +13,8 @@ table {
     font-size: 0.95em;
 }
 
-th, td {
+th,
+td {
     padding: 0.5em 0.75em;
     white-space: nowrap;
 }
@@ -44,6 +45,15 @@ td:nth-child(2) {
 
 .shortage-30-days:hover {
     background-color: var(--status-warning-30days-hover) !important;
+}
+
+/* 需求逾期欠料項目標示（紅底，優先於綠底） */
+.overdue-shortage {
+    background-color: var(--status-overdue-shortage) !important;
+}
+
+.overdue-shortage:hover {
+    background-color: var(--status-overdue-shortage-hover) !important;
 }
 
 /* === 可點擊的表格行 === */

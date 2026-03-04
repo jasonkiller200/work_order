@@ -54,6 +54,8 @@
     --status-shortage: var(--color-danger);
     --status-warning-30days: #e8f5e9;
     --status-warning-30days-hover: #c8e6c9;
+    --status-overdue-shortage: #ffebee;
+    --status-overdue-shortage-hover: #ffcdd2;
     --status-highlight: #c27039;
     --status-indicator-online: #4caf50;
     --status-indicator-loading: #ff9800;
@@ -135,6 +137,8 @@
     --status-shortage: #ff6b6b;
     --status-warning-30days: #2d4a2b;
     --status-warning-30days-hover: #3d5a3b;
+    --status-overdue-shortage: #4a2020;
+    --status-overdue-shortage-hover: #5a2a2a;
     --status-highlight: #d98c4e;
     --status-indicator-online: #66bb6a;
     --status-indicator-loading: #ffa726;
@@ -228,6 +232,15 @@ td:nth-child(2) {
 
 .shortage-30-days:hover {
     background-color: var(--status-warning-30days-hover) !important;
+}
+
+/* 需求逾期欠料項目標示（紅底，優先於綠底） */
+.overdue-shortage {
+    background-color: var(--status-overdue-shortage) !important;
+}
+
+.overdue-shortage:hover {
+    background-color: var(--status-overdue-shortage-hover) !important;
 }
 
 /* 讓表格行有可點擊的視覺提示 */
