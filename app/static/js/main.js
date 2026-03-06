@@ -235,7 +235,7 @@ document.addEventListener('close', function (e) {
 
 // 全局變數來儲存當前儀表板的資料和狀態
 let currentDashboardType = 'main'; // 'main' 或 'finished'
-let currentMaterialsData = []; // 儲存主儀表板的物料資料
+let currentMaterialsData = []; // 儲存半品儀表板的物料資料
 let currentFinishedMaterialsData = []; // 儲存成品儀表板的物料資料
 let allDeliveryData = {}; // 儲存所有物料的交期資料
 let currentStatFilter = 'all'; // 儲存當前統計圖卡的篩選狀態 ('all', 'shortage-30-days', ...)
@@ -281,7 +281,7 @@ window.renderMaterialsTable = function () {
 
     console.log('=== renderMaterialsTable 被呼叫 ===');
     console.log('當前儀表板類型:', currentDashboardType);
-    console.log('主儀表板分頁:', mainDashboardPage, '每頁:', mainDashboardItemsPerPage);
+    console.log('半品儀表板分頁:', mainDashboardPage, '每頁:', mainDashboardItemsPerPage);
     console.log('成品儀表板分頁:', finishedDashboardPage, '每頁:', finishedDashboardItemsPerPage);
 
     // 🆕 根據當前儀表板類型選擇對應的分頁變數
@@ -926,7 +926,7 @@ function setupItemsPerPageHandler() {
             console.log('=== 選擇器 change 事件觸發 (事件委派) ===');
             console.log('新值:', newValue);
             console.log('當前儀表板類型:', currentDashboardType);
-            console.log('修改前 - 主儀表板:', mainDashboardItemsPerPage, '成品儀表板:', finishedDashboardItemsPerPage);
+            console.log('修改前 - 半品儀表板:', mainDashboardItemsPerPage, '成品儀表板:', finishedDashboardItemsPerPage);
 
             // 根據當前儀表板類型更新對應的全域變數
             if (currentDashboardType === 'main') {
@@ -937,7 +937,7 @@ function setupItemsPerPageHandler() {
                 finishedDashboardPage = 1; // 重置到第一頁
             }
 
-            console.log('修改後 - 主儀表板:', mainDashboardItemsPerPage, '成品儀表板:', finishedDashboardItemsPerPage);
+            console.log('修改後 - 半品儀表板:', mainDashboardItemsPerPage, '成品儀表板:', finishedDashboardItemsPerPage);
             console.log('準備重新渲染...');
             renderMaterialsTable();
         }
@@ -964,7 +964,7 @@ async function exportToExcel() {
 
     // 根據當前儀表板類型選擇資料源
     const sourceData = currentDashboardType === 'main' ? currentMaterialsData : currentFinishedMaterialsData;
-    const dashboardName = currentDashboardType === 'main' ? '主儀表板' : '成品儀表板';
+    const dashboardName = currentDashboardType === 'main' ? '半品儀表板' : '成品儀表板';
 
     // 複製資料並應用篩選條件
     let processedData = [...sourceData];
