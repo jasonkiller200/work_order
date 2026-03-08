@@ -6,3 +6,4 @@ xlrd==2.0.1
 waitress==2.1.2
 pytz==2023.3
 holidays>=0.40
+Flask-Compress==1.14

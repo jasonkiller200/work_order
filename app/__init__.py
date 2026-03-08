@@ -3,6 +3,7 @@
 
 import logging
 from flask import Flask
+from flask_compress import Compress
 from app.config import Config
 from app.controllers import page_bp, api_bp, auth_bp, user_api_bp
 from app.api.holidays import holidays_bp
@@ -21,6 +22,9 @@ def create_app():
     app = Flask(__name__, 
                 template_folder='views',
                 static_folder='static')
+    
+    # 初始化 Flask-Compress
+    Compress(app)
     
     # 載入設定
     app.config.from_object(Config)
