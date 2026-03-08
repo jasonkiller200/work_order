@@ -11,7 +11,7 @@ class Config:
     # 伺服器設定
     HOST = '0.0.0.0'
     PORT = 5002
-    THREADS = 2
+    THREADS = 12
     
     # 快取更新設定
     CACHE_UPDATE_INTERVAL = 900  # 30 分鐘（秒）

@@ -5,18 +5,18 @@
 
 
 
-window.loadProcurementDashboard = function() {
+window.loadProcurementDashboard = function () {
     // 🆕 初始化自動清理按鈕狀態
     if (typeof initAutoClearButton === 'function') {
         initAutoClearButton();
     }
-    
+
     // 🆕 檢查並執行自動清理
     if (typeof checkAndAutoClearOverdue === 'function') {
         checkAndAutoClearOverdue();
     }
-    
-    // 同時載入主儀表板、成品儀表板、交期資料
+
+    // 同時載入半品儀表板、成品儀表板、交期資料
     Promise.all([
         fetch('/api/materials').then(r => r.json()),
         fetch('/api/finished_materials').then(r => r.json()),

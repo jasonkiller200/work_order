@@ -936,7 +936,7 @@ function promptUpdateDrawingNumber(partNumber, currentDrawing) {
  * 🆕 更新主畫面快取中的圖號
  */
 function updateMainCacheDrawing(partNumber, newDrawing) {
-    // 遍歷主儀表板資料
+    // 遍歷半品儀表板資料
     const mainItem = currentMaterialsData.find(m => m['物料'] === partNumber);
     if (mainItem) {
         mainItem['drawing_number'] = newDrawing;
