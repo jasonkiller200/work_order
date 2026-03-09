@@ -448,6 +448,44 @@ def get_order_details(order_id):
         app_logger.error(f"在 get_order_details 函式中發生錯誤: {e}", exc_info=True)
         return jsonify({"error": "一個後端錯誤發生了"}), 500
 
+@api_bp.route('/orders/finished/requirements')
+@cache_required
+def get_finished_orders_requirements():
+    """取得成品工單(1開頭)的物料需求"""
+    try:
+        current_data = cache_manager.get_current_data()
+        
+        if not current_data:
+            app_logger.error("get_finished_orders_requirements: 資料尚未載入")
+            return jsonify({"error": "資料尚未載入"}), 500
+            
+        order_details_map = current_data.get("order_details_map", {})
+        
+        # 篩選 1 開頭的訂單
+        finished_orders = {}
+        for order_id, materials in order_details_map.items():
+            order_id_str = str(order_id).strip()
+            if order_id_str.startswith('1'):
+                # 處理日期格式
+                processed_materials = []
+                for item in materials:
+                    processed_item = item.copy() if isinstance(item, dict) else item
+                    if isinstance(processed_item, dict) and '需求日期' in processed_item:
+                        processed_item['需求日期'] = format_date(processed_item.get('需求日期'))
+                    processed_materials.append(processed_item)
+                
+                finished_orders[order_id_str] = processed_materials
+                
+        return jsonify({
+            "success": True,
+            "data": finished_orders,
+            "count": len(finished_orders)
+        })
+        
+    except Exception as e:
+        app_logger.error(f"在 get_finished_orders_requirements 函式中發生錯誤: {e}", exc_info=True)
+        return jsonify({"error": "一個後端錯誤發生了"}), 500
+
 @api_bp.route('/download_specs/<order_id>')
 @cache_required
 def download_specs(order_id):

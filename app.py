@@ -519,46 +519,6 @@ def get_order_details(order_id):
         app_logger.error(f"在 get_order_details 函式中發生錯誤: {e}", exc_info=True)
         return jsonify({"error": "一個後端錯誤發生了"}), 500
 
-@app.route('/api/orders/finished/requirements')
-def get_finished_orders_requirements():
-    try:
-        with cache_lock:
-            current_data = data_cache[live_cache_pointer]
-        
-        if not current_data:
-            app_logger.error("get_finished_orders_requirements: 資料尚未載入")
-            return jsonify({"error": "資料尚未載入"}), 500
-
-        order_details_map = current_data.get("order_details_map", {})
-        
-        # 篩選出 1 開頭的成品工單
-        finished_orders_data = {}
-        for order_id, materials in order_details_map.items():
-            if str(order_id).startswith('1'):
-                # 確保需求日期格式為 YYYY-MM-DD
-                formatted_materials = []
-                for item in materials:
-                    # 避免修改到原始快取中的資料，使用 copy
-                    item_copy = item.copy()
-                    if isinstance(item_copy.get('需求日期'), pd.Timestamp):
-                        item_copy['需求日期'] = item_copy['需求日期'].strftime('%Y-%m-%d')
-                    elif pd.isna(item_copy.get('需求日期')):
-                        item_copy['需求日期'] = ''
-                    formatted_materials.append(item_copy)
-                
-                finished_orders_data[str(order_id)] = formatted_materials
-
-        return jsonify({
-            "status": "success",
-            "count": len(finished_orders_data),
-            "data": finished_orders_data
-        })
-
-    except Exception as e:
-        app_logger.error(f"在 get_finished_orders_requirements 函式中發生錯誤: {e}", exc_info=True)
-        return jsonify({"error": "一個內部伺服器錯誤發生了"}), 500
-
-
 def _filter_order_specs(raw_specs):
     """
     輔助函式：篩選並重新排序訂單規格的欄位，使其與前端顯示一致。
