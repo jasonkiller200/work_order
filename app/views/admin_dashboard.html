@@ -53,12 +53,16 @@
 
         <section id="data-sync-section">
             <h2>📤 資料同步</h2>
-            <p style="color: var(--pico-muted-color); margin-bottom: 1em;">
+            <p style="color: var(--pico-muted-color); margin-bottom: 0.5em;">
                 將系統中的交期資料同步到外部 Excel 檔案
+            </p>
+            <p style="color: var(--pico-muted-color); margin-bottom: 1em; font-size: 0.9em;">
+                ⏰ 自動排程：每 30 分鐘同步一次 ｜
+                <span id="last-sync-time">上次同步：載入中...</span>
             </p>
             <div style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
                 <button id="sync-delivery-excel-btn" style="margin: 0;">
-                    📅 同步交期到缺料 Excel
+                    📅 立即同步交期到缺料 Excel
                 </button>
                 <span id="sync-result" style="color: var(--pico-muted-color);"></span>
             </div>

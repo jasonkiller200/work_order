@@ -1948,6 +1948,18 @@ def sync_delivery_to_excel():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@api_bp.route('/sync/delivery-to-excel/status')
+def get_sync_status():
+    """取得交期同步狀態（上次自動同步時間與結果）"""
+    try:
+        from app.services.cache_service import cache_manager
+        info = cache_manager.get_last_excel_sync_info()
+        return jsonify(info)
+    except Exception as e:
+        app_logger.error(f"取得同步狀態失敗: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 # ========================================
 # 已撥缺料 API 代理
 # ========================================

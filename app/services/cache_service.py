@@ -182,6 +182,41 @@ class CacheManager:
         thread = threading.Thread(target=update_periodically, daemon=True)
         thread.start()
         app_logger.info(f"訂單備註快取更新執行緒已啟動，更新間隔：{update_interval} 秒")
+    
+    def start_excel_sync_thread(self, update_interval, sync_function):
+        """
+        啟動 Excel 交期同步執行緒
+        
+        Args:
+            update_interval: 同步間隔（秒）
+            sync_function: 同步函式
+        """
+        self.last_excel_sync_time = None
+        self.last_excel_sync_result = None
+        
+        def sync_periodically():
+            while True:
+                time.sleep(update_interval)
+                app_logger.info("背景執行緒：準備執行交期同步到 Excel...")
+                try:
+                    result = sync_function()
+                    self.last_excel_sync_time = datetime.now(self.taiwan_tz)
+                    self.last_excel_sync_result = result
+                except Exception as e:
+                    app_logger.error(f"背景執行緒：交期同步失敗: {e}", exc_info=True)
+                    self.last_excel_sync_time = datetime.now(self.taiwan_tz)
+                    self.last_excel_sync_result = {'success': False, 'error': str(e)}
+        
+        thread = threading.Thread(target=sync_periodically, daemon=True)
+        thread.start()
+        app_logger.info(f"Excel 交期同步執行緒已啟動，同步間隔：{update_interval} 秒")
+    
+    def get_last_excel_sync_info(self):
+        """取得上次 Excel 同步資訊"""
+        return {
+            'last_sync_time': self.last_excel_sync_time.strftime('%Y-%m-%d %H:%M:%S') if getattr(self, 'last_excel_sync_time', None) else None,
+            'last_sync_result': getattr(self, 'last_excel_sync_result', None)
+        }
 
 # 建立全域快取管理器實例
 cache_manager = CacheManager()

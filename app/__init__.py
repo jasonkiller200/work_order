@@ -153,4 +153,28 @@ def start_background_threads(app):
         Config.ORDER_NOTE_CACHE_UPDATE_INTERVAL
     )
     
+    # 🆕 啟動 Excel 交期同步執行緒
+    def sync_excel_delivery():
+        with app.app_context():
+            try:
+                from app.services.excel_sync_service import sync_delivery_to_excel
+                result = sync_delivery_to_excel()
+                if result['success']:
+                    app_logger.info(
+                        f"背景執行緒：交期自動同步完成 - "
+                        f"成功 {result['synced_count']} 筆, "
+                        f"跳過 {result['skipped_count']} 筆"
+                    )
+                else:
+                    app_logger.error(f"背景執行緒：交期自動同步失敗 - {result['error']}")
+                return result
+            except Exception as e:
+                app_logger.error(f"背景執行緒：交期自動同步發生異常: {e}", exc_info=True)
+                return {'success': False, 'error': str(e)}
+    
+    cache_manager.start_excel_sync_thread(
+        Config.EXCEL_SYNC_INTERVAL,
+        sync_excel_delivery
+    )
+    
     app_logger.info("背景執行緒已全部啟動")

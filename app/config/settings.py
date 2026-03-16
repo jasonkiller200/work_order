@@ -14,8 +14,9 @@ class Config:
     THREADS = 12
     
     # 快取更新設定
-    CACHE_UPDATE_INTERVAL = 900  # 30 分鐘（秒）
+    CACHE_UPDATE_INTERVAL = 900  # 15 分鐘（秒）
     ORDER_NOTE_CACHE_UPDATE_INTERVAL = 3600  # 60 分鐘（秒）
+    EXCEL_SYNC_INTERVAL = 1800  # 30 分鐘（秒）- 交期同步到 Excel 的間隔
     
     # 日誌設定
     LOG_FILE = 'app_errors.log'

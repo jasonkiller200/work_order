@@ -1,9 +1,33 @@
 document.addEventListener('DOMContentLoaded', function () {
     if (window.location.pathname === '/admin_dashboard') {
         loadTrafficData();
-        initSyncButtons();  // 🆕 初始化同步按鈕
+        initSyncButtons();
+        loadSyncStatus();  // 🆕 載入上次同步狀態
     }
 });
+
+// 🆕 載入上次自動同步狀態
+function loadSyncStatus() {
+    const statusSpan = document.getElementById('last-sync-time');
+    if (!statusSpan) return;
+
+    fetch('/api/sync/delivery-to-excel/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.last_sync_time) {
+                const result = data.last_sync_result;
+                const statusText = result && result.success
+                    ? `上次同步：${data.last_sync_time} ✅ (${result.synced_count} 筆)`
+                    : `上次同步：${data.last_sync_time} ❌ 失敗`;
+                statusSpan.textContent = statusText;
+            } else {
+                statusSpan.textContent = '上次同步：尚未執行';
+            }
+        })
+        .catch(() => {
+            statusSpan.textContent = '上次同步：無法取得';
+        });
+}
 
 // 🆕 初始化資料同步按鈕
 function initSyncButtons() {
@@ -40,7 +64,9 @@ function initSyncButtons() {
             } finally {
                 // 恢復按鈕
                 syncBtn.disabled = false;
-                syncBtn.innerHTML = '📅 同步交期到缺料 Excel';
+                syncBtn.innerHTML = '📅 立即同步交期到缺料 Excel';
+                // 🆕 同步後刷新狀態
+                loadSyncStatus();
             }
         });
     }
