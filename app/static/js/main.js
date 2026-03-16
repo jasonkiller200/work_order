@@ -1069,22 +1069,7 @@ async function exportToExcel() {
         });
 
         // 自動調整欄位寬度(根據內容)
-        worksheet.columns.forEach((column, index) => {
-            let maxLength = column.header.length;
-            worksheet.eachRow((row, rowNumber) => {
-                if (rowNumber > 1) { // 跳過標題列
-                    const cell = row.getCell(index + 1);
-                    const cellValue = cell.value ? cell.value.toString() : '';
-                    // 計算字元寬度 (中文字元算2個單位)
-                    let length = 0;
-                    for (let i = 0; i < cellValue.length; i++) {
-                        length += cellValue.charCodeAt(i) > 127 ? 2 : 1;
-                    }
-                    maxLength = Math.max(maxLength, length);
-                }
-            });
-            column.width = Math.min(maxLength + 2, 50); // 設定最大寬度為 50
-        });
+        autoAdjustColumnWidth(worksheet);
 
         // 生成檔案名稱
         const today = new Date();
@@ -1154,6 +1139,31 @@ function calculateColumnWidths(data) {
     }
 
     return columnWidths;
+}
+
+// 🆕 自動適應欄寬輔助函式
+function autoAdjustColumnWidth(worksheet) {
+    worksheet.columns.forEach(column => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, cell => {
+            let adjustedLength = 0;
+            if (cell.value !== null && cell.value !== undefined) {
+                const str = cell.value.toString();
+                for (let i = 0; i < str.length; i++) {
+                    // 全形/中文字元給予更寬的比例
+                    if (str.charCodeAt(i) > 255) {
+                        adjustedLength += 2.1;
+                    } else {
+                        adjustedLength += 1.1;
+                    }
+                }
+            }
+            if (adjustedLength > maxLength) {
+                maxLength = adjustedLength;
+            }
+        });
+        column.width = Math.min(Math.max(maxLength + 2, 10), 100);
+    });
 }
 
 

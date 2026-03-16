@@ -551,6 +551,8 @@ async function exportToExcel() {
         };
         worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
+        autoAdjustColumnWidth(worksheet);
+
         // 產生檔案
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -718,6 +720,8 @@ async function exportFinishedToExcel() {
         headerRow.font = { bold: true };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4CAF50' } };
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+        autoAdjustColumnWidth(worksheet);
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -933,6 +937,8 @@ async function exportShortageDetails(orderType) {
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
+        autoAdjustColumnWidth(worksheet);
+
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
@@ -1066,6 +1072,9 @@ async function exportBothSheetsData(orderType) {
         headerRow2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4CAF50' } };
         headerRow2.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
+        autoAdjustColumnWidth(sheet1);
+        autoAdjustColumnWidth(sheet2);
+
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
@@ -1082,3 +1091,28 @@ async function exportBothSheetsData(orderType) {
 
 // 供表格渲染使用
 window.handleCheckboxChange = handleCheckboxChange;
+
+// 🆕 自動適應欄寬輔助函式
+function autoAdjustColumnWidth(worksheet) {
+    worksheet.columns.forEach(column => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, cell => {
+            let adjustedLength = 0;
+            if (cell.value !== null && cell.value !== undefined) {
+                const str = cell.value.toString();
+                for (let i = 0; i < str.length; i++) {
+                    // 全形/中文字元給予更寬的比例
+                    if (str.charCodeAt(i) > 255) {
+                        adjustedLength += 2.1;
+                    } else {
+                        adjustedLength += 1.1;
+                    }
+                }
+            }
+            if (adjustedLength > maxLength) {
+                maxLength = adjustedLength;
+            }
+        });
+        column.width = Math.min(Math.max(maxLength + 2, 10), 100);
+    });
+}

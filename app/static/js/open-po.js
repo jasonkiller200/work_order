@@ -377,6 +377,7 @@ async function exportToExcel() {
         configureWorksheetColumns(worksheet);
         appendExportRows(worksheet, exportData);
         styleHeaderRow(worksheet);
+        autoAdjustColumnWidth(worksheet);
 
         // 產生檔案
         const buffer = await workbook.xlsx.writeBuffer();
@@ -447,6 +448,7 @@ async function exportToExcelBySupplier() {
             configureWorksheetColumns(worksheet);
             appendExportRows(worksheet, items);
             styleHeaderRow(worksheet);
+            autoAdjustColumnWidth(worksheet);
 
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -563,3 +565,29 @@ function sortData() {
         return currentSortDirection === 'asc' ? comparison : -comparison;
     });
 }
+
+// 🆕 自動適應欄寬輔助函式
+function autoAdjustColumnWidth(worksheet) {
+    worksheet.columns.forEach(column => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, cell => {
+            let adjustedLength = 0;
+            if (cell.value !== null && cell.value !== undefined) {
+                const str = cell.value.toString();
+                for (let i = 0; i < str.length; i++) {
+                    // 全形/中文字元給予更寬的比例
+                    if (str.charCodeAt(i) > 255) {
+                        adjustedLength += 2.1;
+                    } else {
+                        adjustedLength += 1.1;
+                    }
+                }
+            }
+            if (adjustedLength > maxLength) {
+                maxLength = adjustedLength;
+            }
+        });
+        column.width = Math.min(Math.max(maxLength + 2, 10), 100);
+    });
+}
+
