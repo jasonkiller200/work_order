@@ -258,6 +258,14 @@ class DataService:
             
             # 提取工單總表摘要資訊
             order_summary_map = DataService._build_order_summary_map(df_work_order_summary)
+
+            # 載入半品工單對照（2/6 工單 -> 1 工單）供採購儀表板成品出貨日欄位使用
+            semi_finished_map = {}
+            try:
+                from app.services.work_order_stats_service import WorkOrderStatsService
+                semi_finished_map = WorkOrderStatsService._load_semi_finished_table()
+            except Exception as e:
+                app_logger.warning(f"載入半品工單對照失敗，成品出貨日將部分為空: {e}")
             
             app_logger.info("資料載入與處理完畢。")
             
@@ -270,11 +278,35 @@ class DataService:
                 material_id = material.get('物料')
                 material['delivery_schedules'] = delivery_schedules_map.get(material_id, [])
                 material['demand_details'] = demand_details_map.get(material_id, [])
+
+                # 依配賦後第一筆開始缺料工單，回填成品工單與成品出貨日
+                first_shortage_order = DataService._get_first_shortage_order(material['demand_details'])
+                finished_order_id, finished_shipment_date, source_order = DataService._resolve_finished_shipment_from_order(
+                    first_shortage_order,
+                    semi_finished_map,
+                    order_summary_map
+                )
+                material['first_shortage_order'] = first_shortage_order
+                material['shipment_source_order'] = source_order
+                material['finished_order_id'] = finished_order_id
+                material['finished_shipment_date'] = finished_shipment_date
             
             for material in finished_dashboard_cleaned:
                 material_id = material.get('物料')
                 material['delivery_schedules'] = delivery_schedules_map.get(material_id, [])
                 material['demand_details'] = finished_demand_details_map.get(material_id, [])
+
+                # 成品儀表板同樣依第一筆缺料工單回填成品出貨日欄位
+                first_shortage_order = DataService._get_first_shortage_order(material['demand_details'])
+                finished_order_id, finished_shipment_date, source_order = DataService._resolve_finished_shipment_from_order(
+                    first_shortage_order,
+                    semi_finished_map,
+                    order_summary_map
+                )
+                material['first_shortage_order'] = first_shortage_order
+                material['shipment_source_order'] = source_order
+                material['finished_order_id'] = finished_order_id
+                material['finished_shipment_date'] = finished_shipment_date
             
             specs_data_cleaned = df_specs.fillna('').to_dict(orient='records')
             inventory_data_cleaned = df_inventory.fillna('').to_dict(orient='records')
@@ -583,6 +615,56 @@ class DataService:
             df_main['drawing_number'] = ''
         
         return df_main
+
+    @staticmethod
+    def _get_first_shortage_order(demand_details):
+        """取得配賦後第一筆開始缺料的工單號碼。"""
+        if not demand_details:
+            return ''
+
+        for demand in demand_details:
+            try:
+                if float(demand.get('remaining_stock', 0) or 0) < 0:
+                    return str(demand.get('訂單', '') or '').strip()
+            except (TypeError, ValueError):
+                continue
+
+        return ''
+
+    @staticmethod
+    def _resolve_finished_shipment_from_order(order_id, semi_finished_map, order_summary_map):
+        """
+        根據工單號碼解析成品工單與成品出貨日。
+        - 1 開頭：直接使用本身工單的生產結束(出貨日)
+        - 2/6 開頭：先映射到對應 1 開頭工單，再取該工單交貨日
+        """
+        order_id = str(order_id or '').strip()
+        if not order_id:
+            return '', '', ''
+
+        # 1 開頭工單：直接使用本身
+        if order_id.startswith('1'):
+            order_info = order_summary_map.get(order_id, {}) if order_summary_map else {}
+            return order_id, str(order_info.get('生產結束', '') or '').strip(), order_id
+
+        # 2/6 開頭工單：映射到對應成品工單
+        if order_id.startswith('2') or order_id.startswith('6'):
+            semi_info = semi_finished_map.get(order_id, {}) if semi_finished_map else {}
+            mapped_finished_order = str(semi_info.get('對應成品', '') or '').strip()
+
+            if mapped_finished_order.startswith('1'):
+                mapped_info = order_summary_map.get(mapped_finished_order, {}) if order_summary_map else {}
+                shipment_date = str(mapped_info.get('生產結束', '') or '').strip()
+                # 若工單總表無日期，退回半品總表的成品出貨日欄位
+                if not shipment_date:
+                    shipment_date = str(semi_info.get('成品出貨日', '') or '').strip()
+                return mapped_finished_order, shipment_date, order_id
+
+            # 找不到對應 1 開頭工單時，仍保留半品總表日期資訊
+            fallback_date = str(semi_info.get('成品出貨日', '') or '').strip()
+            return '', fallback_date, order_id
+
+        return '', '', order_id
     
     @staticmethod
     def _build_order_details_map(df_wip_parts, df_finished_parts, df_inventory):

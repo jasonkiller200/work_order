@@ -385,6 +385,7 @@ window.renderMaterialsTable = function () {
         <th data-sort-key="物料說明" class="sortable">物料說明 <span class="sort-icon"></span></th>
         <th data-sort-key="採購人員" class="sortable">採購人員 <span class="sort-icon"></span></th>
         <th data-sort-key="delivery_date" class="sortable">預計交貨日 <span class="sort-icon"></span></th>
+        <th data-sort-key="finished_shipment_date" class="sortable">成品出貨日 <span class="sort-icon"></span></th>
         <th data-sort-key="total_demand" class="sortable">總需求 <span class="sort-icon"></span></th>
         <th data-sort-key="unrestricted_stock" class="sortable">庫存 <span class="sort-icon"></span></th>
         <th data-sort-key="inspection_stock" class="sortable">品檢中 <span class="sort-icon"></span></th>
@@ -394,7 +395,7 @@ window.renderMaterialsTable = function () {
         </tr></thead><tbody>`;
 
     if (paginatedData.length === 0) {
-        tableHTML += '<tr><td colspan="10" style="text-align: center;">🎉 太棒了！目前沒有任何符合條件的缺料項目。</td></tr>';
+        tableHTML += '<tr><td colspan="11" style="text-align: center;">🎉 太棒了！目前沒有任何符合條件的缺料項目。</td></tr>';
     } else {
         paginatedData.forEach(m => {
             const buyer = m['採購人員'] || '-';
@@ -546,12 +547,26 @@ window.renderMaterialsTable = function () {
                 }
             }
 
+            // 成品出貨日欄位：可點擊查看對應成品工單資訊
+            const finishedOrderId = (m.finished_order_id || '').toString().trim();
+            const shipmentDateText = (m.finished_shipment_date || '').toString().trim() || '-';
+            const shipmentSourceOrder = (m.shipment_source_order || '').toString().trim();
+            let shipmentCellHtml = shipmentDateText;
+
+            if (finishedOrderId) {
+                const sourceTag = shipmentSourceOrder && shipmentSourceOrder !== finishedOrderId
+                    ? `<div><small style="color: #888;">來源: ${shipmentSourceOrder} → ${finishedOrderId}</small></div>`
+                    : `<div><small style="color: #888;">工單: ${finishedOrderId}</small></div>`;
+                shipmentCellHtml = `<span class="material-link" onclick="showOrderInfoPopup('${finishedOrderId}', event)">${shipmentDateText}</span>${sourceTag}`;
+            }
+
             tableHTML += `
                 <tr${rowClass}>
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
                     <td${dateClass} class="delivery-date-cell${m.delivery_schedules && m.delivery_schedules.length > 0 ? ' clickable-delivery' : ''}" data-schedules='${m.delivery_schedules ? JSON.stringify(m.delivery_schedules) : '[]'}' data-first-demand="${firstShortageOrder ? firstShortageOrder['需求日期'] : ''}">${deliveryDateStr}</td>
+                    <td>${shipmentCellHtml}</td>
                     <td>${m.total_demand.toFixed(0)}</td>
                     <td>${m.unrestricted_stock.toFixed(0)}</td>
                     <td>${m.inspection_stock.toFixed(0)}</td>
@@ -1016,6 +1031,7 @@ async function exportToExcel() {
             { header: '圖號', key: 'drawing_number', width: 12 },
             { header: '物料說明', key: 'description', width: 30 },
             { header: '採購人員', key: 'buyer', width: 12 },
+            { header: '成品出貨日', key: 'finished_shipment_date', width: 12 },
             { header: '預計交貨日', key: 'delivery_date', width: 12 },
             { header: '總需求', key: 'total_demand', width: 10 },
             { header: '庫存', key: 'stock', width: 10 },
@@ -1042,11 +1058,14 @@ async function exportToExcel() {
                 deliveryDateStr = date.toISOString().split('T')[0];
             }
 
+            const finishedShipmentDateStr = m.finished_shipment_date || '';
+
             const row = worksheet.addRow({
                 material: m['物料'] || '',
                 drawing_number: m['drawing_number'] || '',
                 description: m['物料說明'] || '',
                 buyer: m['採購人員'] || '',
+                finished_shipment_date: finishedShipmentDateStr,
                 delivery_date: deliveryDateStr,
                 total_demand: m.total_demand ? parseFloat(m.total_demand.toFixed(0)) : 0,
                 stock: m.unrestricted_stock ? parseFloat(m.unrestricted_stock.toFixed(0)) : 0,
