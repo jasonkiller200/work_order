@@ -557,7 +557,7 @@ window.renderMaterialsTable = function () {
                 const sourceTag = shipmentSourceOrder && shipmentSourceOrder !== finishedOrderId
                     ? `<div><small style="color: #888;">來源: ${shipmentSourceOrder} → ${finishedOrderId}</small></div>`
                     : `<div><small style="color: #888;">工單: ${finishedOrderId}</small></div>`;
-                shipmentCellHtml = `<span class="material-link" onclick="showOrderInfoPopup('${finishedOrderId}', event)">${shipmentDateText}</span>${sourceTag}`;
+                shipmentCellHtml = `<span class="shipment-order-link" style="cursor: pointer; color: var(--pico-primary); text-decoration: underline;" onclick="showOrderInfoPopup('${finishedOrderId}', event)">${shipmentDateText}</span>${sourceTag}`;
             }
 
             tableHTML += `

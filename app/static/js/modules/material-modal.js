@@ -963,9 +963,9 @@ function showOrderInfoPopup(orderId, event) {
     const existing = document.getElementById('order-info-popup');
     if (existing) existing.remove();
 
-    // 找到 modal 的 article 容器（popup 必須在 dialog 內才能顯示在 top-layer 上）
+    // 找到 modal 的 article 容器（僅在 modal 開啟時使用，否則掛到 body）
     const modal = document.getElementById('details-modal');
-    const modalArticle = modal ? modal.querySelector('article') : null;
+    const modalArticle = (modal && modal.open) ? modal.querySelector('article') : null;
     const container = modalArticle || document.body;
 
     // 確保容器有 position: relative
