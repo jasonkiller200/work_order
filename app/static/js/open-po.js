@@ -276,16 +276,16 @@ async function fetchExportData(params) {
 function configureWorksheetColumns(worksheet) {
     worksheet.columns = [
         { header: '採購單號', key: 'po_number', width: 15 },
-        { header: '物料', key: 'material_id', width: 18 },
-        { header: '圖號', key: 'drawing_number', width: 15 },
-        { header: '物料說明', key: 'description', width: 30 },
-        { header: '採購人員', key: 'buyer_name', width: 12 },
         { header: '供應商', key: 'supplier', width: 20 },
+        { header: '物料', key: 'material_id', width: 18 },
+        { header: '分批數量', key: 'schedule_quantity', width: 12 },
+        { header: '物料說明', key: 'description', width: 30 },
+        { header: '圖號', key: 'drawing_number', width: 15 },
+        { header: '採購人員', key: 'buyer_name', width: 12 },
         { header: '訂購數量', key: 'ordered_quantity', width: 12 },
         { header: '未結數量', key: 'outstanding_quantity', width: 12 },
         { header: '更新交期', key: 'updated_delivery_date', width: 12 },
         { header: '分批日期', key: 'schedule_date', width: 12 },
-        { header: '分批數量', key: 'schedule_quantity', width: 12 },
         { header: '維護時間', key: 'maintained_at', width: 18 }
     ];
 }
