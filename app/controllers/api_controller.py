@@ -1901,8 +1901,8 @@ def get_batch_shortage_details():
                 item['工單號碼'] = order_id
             all_details.extend(details)
         
-        # 排序：缺料優先
-        all_details.sort(key=lambda x: (not x.get('是否缺料', False), x.get('工單號碼', ''), x.get('物料', '')))
+        # 排序：缺料優先，需求數量>0次之，需求數量=0排最後
+        all_details.sort(key=lambda x: (not x.get('是否缺料', False), x.get('需求數量', 0) <= 0, x.get('工單號碼', ''), x.get('物料', '')))
         
         return jsonify({
             'data': all_details,

@@ -559,8 +559,8 @@ class WorkOrderStatsService:
                     '預計交貨日': expected_delivery
                 })
             
-            # 排序：缺料的排前面
-            result.sort(key=lambda x: (not x['是否缺料'], x['物料']))
+            # 排序：缺料優先，需求數量>0次之，需求數量=0排最後
+            result.sort(key=lambda x: (not x['是否缺料'], x['需求數量'] <= 0, x['物料']))
             
             return result
             
