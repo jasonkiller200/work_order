@@ -43,6 +43,23 @@ class DataService:
 
         try:
             return pd.read_excel(source, engine='calamine', **kwargs)
+        except ValueError as exc:
+            if (
+                allow_missing_usecols
+                and 'Usecols do not match columns' in str(exc)
+                and isinstance(kwargs.get('usecols'), list)
+            ):
+                matched_usecols = DataService._resolve_available_usecols(
+                    source,
+                    'calamine',
+                    kwargs['usecols'],
+                    sheet_name=kwargs.get('sheet_name', 0),
+                )
+                retry_kwargs = dict(kwargs)
+                retry_kwargs['usecols'] = matched_usecols
+                DataService._rewind_excel_source(source)
+                return pd.read_excel(source, engine='calamine', **retry_kwargs)
+            raise
         except ImportError as exc:
             error_message = str(exc).lower()
             if 'python-calamine' not in error_message and 'calamine' not in error_message:
