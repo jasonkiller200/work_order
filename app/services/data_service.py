@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 import os
 from datetime import datetime
-from app.models.database import db, ComponentRequirement, Material, User, PurchaseOrder, PartDrawingMapping, DeliverySchedule
+from app.models.database import db, ComponentRequirement, Material, User, PurchaseOrder, PartDrawingMapping, DeliverySchedule, SubstituteNotification
 from sqlalchemy.orm import joinedload
 
 from app.config import FilePaths
@@ -17,6 +17,170 @@ class DataService:
     """資料載入與處理服務"""
     
     @staticmethod
+    def _compute_dashboard_flags(materials_list, demand_details_map, delivery_schedules_map, notified_substitutes):
+        """
+        計算並嵌入每個物料物件所需的彙整與圖卡狀態欄位，以實現後端計算下推，並進行 API 瘦身
+        """
+        from datetime import datetime, timedelta
+        import pandas as pd
+        
+        today_date = get_taiwan_time().date()
+        
+        for material in materials_list:
+            material_id = material.get('物料')
+            if not material_id:
+                continue
+                
+            # 取得該物料的需求明細與交期排程
+            demands = demand_details_map.get(material_id, [])
+            schedules = delivery_schedules_map.get(material_id, [])
+            
+            # 1. 最早需求日期 (earliest_demand_date)
+            earliest_demand_date = None
+            if demands:
+                dates = [d.get('需求日期') for d in demands if d.get('需求日期')]
+                if dates:
+                    earliest_demand_date = sorted(dates)[0]
+            material['earliest_demand_date'] = earliest_demand_date
+            
+            # 2. 主要交期屬性 (delivery_date, delivery_status, delivery_qty, delivery_batches_count)
+            delivery_batches_count = len(schedules)
+            first_delivery = schedules[0] if schedules else None
+            
+            delivery_date = None
+            if first_delivery:
+                fd_expected = first_delivery.get('expected_date')
+                if hasattr(fd_expected, 'strftime'):
+                    delivery_date = fd_expected.strftime('%Y-%m-%d')
+                else:
+                    delivery_date = fd_expected
+            
+            material['delivery_date'] = delivery_date
+            material['delivery_status'] = first_delivery.get('status') if first_delivery else None
+            material['delivery_qty'] = first_delivery.get('quantity') if first_delivery else None
+            material['delivery_batches_count'] = delivery_batches_count
+            
+            # 3. 缺料狀態與庫存充足 flag
+            has_shortage = float(material.get('current_shortage', 0) or 0) > 0 or float(material.get('projected_shortage', 0) or 0) > 0
+            material['is_all_shortage'] = has_shortage
+            material['is_sufficient'] = not has_shortage
+            
+            # 4. 無交期項目 (has_shortage 且沒有 delivery_date)
+            material['no_delivery'] = has_shortage and not delivery_date
+            
+            # 5. 品檢中狀態
+            material['is_in_inspection'] = float(material.get('inspection_stock', 0) or 0) > 0
+            
+            # 6. 替代品通知 flag
+            material['is_substitute_notified'] = material_id in notified_substitutes
+            
+            # 7. 交貨延期 (is_delivery_delayed) 與延遲天數 (_computed_delay_days) 模擬
+            is_delivery_delayed = False
+            _computed_delay_days = 0
+            
+            # 8. 需求逾期欠料 (is_overdue_demand) 旗標
+            is_overdue_demand = False
+            
+            # 準備模擬
+            current_stock = float(material.get('unrestricted_stock', 0) or 0) + float(material.get('inspection_stock', 0) or 0)
+            
+            # 排序需求明細
+            sorted_demands = []
+            for d in demands:
+                d_date_str = d.get('需求日期')
+                if d_date_str:
+                    try:
+                        d_date = datetime.strptime(d_date_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        continue
+                    sorted_demands.append({
+                        'qty': float(d.get('未結數量 (EINHEIT)', 0) or 0),
+                        'date': d_date,
+                        'order': d.get('訂單', '')
+                    })
+            sorted_demands.sort(key=lambda x: x['date'])
+            
+            # 找出第一個缺料點
+            target_demand = None
+            temp_stock = current_stock
+            for demand in sorted_demands:
+                temp_stock -= demand['qty']
+                if temp_stock < 0:
+                    target_demand = demand
+                    break
+            
+            # 檢查交貨延期
+            if target_demand and first_delivery:
+                first_del_date = first_delivery.get('expected_date')
+                if isinstance(first_del_date, str):
+                    try:
+                        first_del_date = datetime.strptime(first_del_date, '%Y-%m-%d').date()
+                    except ValueError:
+                        first_del_date = None
+                
+                if first_del_date and first_del_date > target_demand['date']:
+                    is_delivery_delayed = True
+                    _computed_delay_days = (first_del_date - target_demand['date']).days
+            
+            # 檢查需求逾期
+            if target_demand and target_demand['date'] < today_date:
+                is_overdue_demand = True
+                
+            material['is_delivery_delayed'] = is_delivery_delayed
+            material['_computed_delay_days'] = _computed_delay_days
+            material['is_overdue_demand'] = is_overdue_demand
+            
+            # 9. 今日要到貨 & 即將到期 (is_today_arrival & is_due_soon)
+            is_today_arrival = False
+            is_due_soon = False
+            if delivery_date:
+                try:
+                    del_date = datetime.strptime(delivery_date, '%Y-%m-%d').date()
+                    diff_days = (del_date - today_date).days
+                    if diff_days == 0:
+                        is_today_arrival = True
+                    elif 0 < diff_days <= 7:
+                        is_due_soon = True
+                except Exception:
+                    pass
+            material['is_today_arrival'] = is_today_arrival
+            material['is_due_soon'] = is_due_soon
+            
+            # 10. 預選交期顯示 HTML (delivery_date_display) 與顏色樣式 (delivery_date_style)
+            delivery_date_display = '-'
+            delivery_date_style = ''
+            if first_delivery and delivery_date:
+                qty_str = f"{int(first_delivery['quantity'])}件"
+                delivery_date_display = f"{delivery_date} ({qty_str})"
+                
+                if is_delivery_delayed and _computed_delay_days > 0:
+                    order_str = target_demand.get('order', '') if target_demand else ''
+                    target_date_str = target_demand['date'].strftime('%Y-%m-%d') if target_demand else ''
+                    delivery_date_display += f' <span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;" title="工單 {order_str} 需求 {target_date_str}">⚠️ 延遲{_computed_delay_days}天</span>'
+                
+                if delivery_batches_count > 1:
+                    delivery_date_display += f' <span style="background: #3b82f6; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;">+{delivery_batches_count - 1}批</span>'
+                
+                # 確定樣式
+                try:
+                    del_date = datetime.strptime(delivery_date, '%Y-%m-%d').date()
+                    diff_days = (del_date - today_date).days
+                except Exception:
+                    diff_days = 9999
+                    
+                if is_delivery_delayed:
+                    delivery_date_style = ' style="color: #d32f2f; font-weight: bold;"'
+                elif diff_days < 0:
+                    delivery_date_style = ' style="color: #d32f2f; font-weight: bold;"'
+                elif diff_days <= 7:
+                    delivery_date_style = ' style="color: #ff9800; font-weight: bold;"'
+                elif diff_days <= 30:
+                    delivery_date_style = ' style="color: #4caf50; font-weight: bold;"'
+                    
+            material['delivery_date_display'] = delivery_date_display
+            material['delivery_date_style'] = delivery_date_style
+
+    @staticmethod
     def load_and_process_data():
         """
         載入並處理所有資料
@@ -27,7 +191,11 @@ class DataService:
         app_logger.info("開始載入與處理資料...")
         try:
             # 載入各個 Excel 檔案
-            df_inventory = pd.read_excel(FilePaths.INVENTORY_FILE)
+            df_inventory = pd.read_excel(
+                FilePaths.INVENTORY_FILE, 
+                engine='calamine', 
+                usecols=['物料', '物料說明', '儲存地點', '基礎計量單位', '未限制', '在途和移轉', '品質檢驗中', '限制使用庫存', '閒置天數']
+            )
             
             # 🆕 庫存資料加總邏輯：針對重複的物料 ID (不同儲位) 進行合併
             if not df_inventory.empty:
@@ -53,9 +221,11 @@ class DataService:
                 df_inventory = df_inventory.groupby('物料', as_index=False).agg(agg_dict)
                 app_logger.info("已執行庫存資料合併 (Aggregation)")
 
-            df_wip_parts = pd.read_excel(FilePaths.WIP_PARTS_FILE)
-            df_finished_parts = pd.read_excel(FilePaths.FINISHED_PARTS_FILE)
-            df_prep_semi_finished = pd.read_excel(FilePaths.PREP_SEMI_FINISHED_FILE)
+            # 用 cols_demand 讀取需求明細，提速 Excel 讀取
+            cols_demand = ['訂單', '物料', '物料說明', '需求數量 (EINHEIT)', '領料數量 (EINHEIT)', '未結數量 (EINHEIT)', '需求日期']
+            df_wip_parts = pd.read_excel(FilePaths.WIP_PARTS_FILE, engine='calamine', usecols=cols_demand)
+            df_finished_parts = pd.read_excel(FilePaths.FINISHED_PARTS_FILE, engine='calamine', usecols=cols_demand)
+            df_prep_semi_finished = pd.read_excel(FilePaths.PREP_SEMI_FINISHED_FILE, engine='calamine', usecols=cols_demand)
             
             # 根據訂單號碼首位數字篩選
             df_wip_parts['訂單'] = df_wip_parts['訂單'].astype(str)
@@ -230,7 +400,7 @@ class DataService:
                 finished_demand_details_map[material_id] = details
 
             # --- 共通處理 ---
-            df_specs = pd.read_excel(FilePaths.SPECS_FILE)
+            df_specs = pd.read_excel(FilePaths.SPECS_FILE, engine='calamine', usecols=['訂單', '內部特性號碼', '特性說明', '特性值', '值說明'])
             df_work_order_summary = DataService._load_work_order_summary()
             df_on_order = DataService._load_on_order_data()
             
@@ -273,7 +443,16 @@ class DataService:
             materials_dashboard_cleaned = df_main.fillna('').to_dict(orient='records')
             finished_dashboard_cleaned = df_finished_dashboard.fillna('').to_dict(orient='records')
             
-            # 🆕 為每個物料加入 delivery_schedules 和 demand_details
+            # 🆕 載入替代品通知設定，用於後端計算標籤
+            notified_substitutes = set()
+            try:
+                sub_notifies = SubstituteNotification.query.filter_by(is_notified=True).all()
+                notified_substitutes = {sn.material_id for sn in sub_notifies}
+                app_logger.info(f"已載入 {len(notified_substitutes)} 筆替代品通知設定")
+            except Exception as e:
+                app_logger.error(f"讀取替代品通知設定失敗: {e}")
+
+            # 🆕 為每個物料暫時加入 delivery_schedules 和 demand_details，用以計算工單出貨日等資訊
             for material in materials_dashboard_cleaned:
                 material_id = material.get('物料')
                 material['delivery_schedules'] = delivery_schedules_map.get(material_id, [])
@@ -307,6 +486,22 @@ class DataService:
                 material['shipment_source_order'] = source_order
                 material['finished_order_id'] = finished_order_id
                 material['finished_shipment_date'] = finished_shipment_date
+
+            # 🆕 執行後端計算下推，預先計算所有圖卡布林標籤與顯示格式
+            DataService._compute_dashboard_flags(
+                materials_dashboard_cleaned, demand_details_map, delivery_schedules_map, notified_substitutes
+            )
+            DataService._compute_dashboard_flags(
+                finished_dashboard_cleaned, finished_demand_details_map, delivery_schedules_map, notified_substitutes
+            )
+
+            # 🆕 API 瘦身：移除巨大明細陣列 (已被計算下推所取代，當前頁面需要時才非同步懶載入)
+            for material in materials_dashboard_cleaned:
+                material['delivery_schedules'] = []
+                material['demand_details'] = []
+            for material in finished_dashboard_cleaned:
+                material['delivery_schedules'] = []
+                material['demand_details'] = []
             
             specs_data_cleaned = df_specs.fillna('').to_dict(orient='records')
             inventory_data_cleaned = df_inventory.fillna('').to_dict(orient='records')
@@ -374,7 +569,12 @@ class DataService:
                 excel_data = BytesIO(response.content)
                 df_work_order_summary = pd.read_excel(
                     excel_data, 
-                    sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET
+                    sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET,
+                    engine='calamine',
+                    usecols=lambda col: col in [
+                        '工單號碼', '訂單號碼', '下單客戶名稱', '物料品號', '物料說明', '品號說明',
+                        '生產開始', '生產結束', '機械外包', '電控外包', '噴漆外包', '鏟花外包', '捆包外包'
+                    ]
                 )
                 
                 # 重新命名欄位以匹配預期
@@ -399,7 +599,12 @@ class DataService:
                 try:
                     df_work_order_summary = pd.read_excel(
                         local_path, 
-                        sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET
+                        sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET,
+                        engine='calamine',
+                        usecols=lambda col: col in [
+                            '工單號碼', '訂單號碼', '下單客戶名稱', '物料品號', '物料說明', '品號說明',
+                            '生產開始', '生產結束', '機械外包', '電控外包', '噴漆外包', '鏟花外包', '捆包外包'
+                        ]
                     )
                     if '品號說明' in df_work_order_summary.columns and '物料說明' not in df_work_order_summary.columns:
                         df_work_order_summary.rename(columns={'品號說明': '物料說明'}, inplace=True)
@@ -422,7 +627,14 @@ class DataService:
             app_logger.warning("警告：找不到 '已訂未交.XLSX' 檔案。")
             df_on_order = pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
         else:
-            df_on_order = pd.read_excel(on_order_path)
+            df_on_order = pd.read_excel(
+                on_order_path,
+                engine='calamine',
+                usecols=[
+                    '物料', '仍待交貨〈數量〉', '採購文件', '項目', '供應商/供應工廠', '短文',
+                    '文件日期', '採購文件類型', '採購群組', '工廠', '儲存地點', '採購單數量'
+                ]
+            )
             app_logger.info(f"已讀取 {len(df_on_order)} 筆採購單資料")
             
             # 同步到資料庫
@@ -436,7 +648,15 @@ class DataService:
         df_casting = pd.DataFrame()
         if os.path.exists(casting_order_path):
             try:
-                df_casting = pd.read_excel(casting_order_path)
+                df_casting = pd.read_excel(
+                    casting_order_path,
+                    engine='calamine',
+                    usecols=[
+                        '訂單', '物料', '訂單數量 (GMEIN)', '已交貨數量 (GMEIN)', '物料說明', '訂單類型',
+                        '核發日期（實際）', '基本開始日期', '基本完成日期', '建立日期', '系統狀態', '輸入者',
+                        'MRP 範圍', '儲存地點'
+                    ]
+                )
                 app_logger.info(f"已讀取 {len(df_casting)} 筆鑄件訂單資料")
                 
                 # 計算未交數量

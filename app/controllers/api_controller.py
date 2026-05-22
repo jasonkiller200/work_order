@@ -26,18 +26,46 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 @cache_required
 def get_materials():
     """取得主儀表板物料清單"""
-    current_data = cache_manager.get_current_data()
-    if current_data:
-        return jsonify(current_data.get("materials_dashboard", []))
+    last_update = cache_manager.last_update_time
+    if last_update:
+        from email.utils import formatdate
+        import time
+        last_modified_str = formatdate(time.mktime(last_update.timetuple()), usegmt=True)
+        if request.headers.get('If-Modified-Since') == last_modified_str:
+            return make_response('', 304)
+    else:
+        last_modified_str = None
+
+    serialized_data = cache_manager.get_serialized_data("materials")
+    if serialized_data:
+        response = make_response(serialized_data)
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        if last_modified_str:
+            response.headers['Last-Modified'] = last_modified_str
+        return response
     return jsonify([])
 
 @api_bp.route('/finished_materials')
 @cache_required
 def get_finished_materials():
     """取得成品儀表板物料清單"""
-    current_data = cache_manager.get_current_data()
-    if current_data:
-        return jsonify(current_data.get("finished_dashboard", []))
+    last_update = cache_manager.last_update_time
+    if last_update:
+        from email.utils import formatdate
+        import time
+        last_modified_str = formatdate(time.mktime(last_update.timetuple()), usegmt=True)
+        if request.headers.get('If-Modified-Since') == last_modified_str:
+            return make_response('', 304)
+    else:
+        last_modified_str = None
+
+    serialized_data = cache_manager.get_serialized_data("finished_materials")
+    if serialized_data:
+        response = make_response(serialized_data)
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        if last_modified_str:
+            response.headers['Last-Modified'] = last_modified_str
+        return response
     return jsonify([])
 
 @api_bp.route('/material/<material_id>/details')

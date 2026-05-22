@@ -20,42 +20,13 @@ window.loadNotifiedSubstitutes = async function () {
 // 🆕 檢查某物料是否有已通知的替代品
 window.hasNotifiedSubstitute = function (materialId) {
     if (!materialId) return false;
-    // 檢查這個物料是否有已啟用通知的替代品
-    return window.notifiedSubstitutesMap.hasOwnProperty(materialId) &&
-        window.notifiedSubstitutesMap[materialId].length > 0;
-};
 // 增強物料資料(加入預計交貨日期資訊) - 🆕 支援分批顯示
 window.enhanceMaterialsData = function (materialsData, demandDetailsData, deliveryData) {
     return materialsData.map(material => {
-        const materialId = material['物料'];
-
-        // 🆕 從需求明細中計算最早需求日期
-        const materialDemands = (demandDetailsData && demandDetailsData[materialId]) || material.demand_details || [];
-        let earliestDemandDate = null;
-        if (materialDemands.length > 0) {
-            const dates = materialDemands
-                .map(d => d['需求日期'])
-                .filter(d => d)
-                .sort();
-            if (dates.length > 0) {
-                earliestDemandDate = dates[0]; // 已排序，取最早的
-            }
-        }
-
-        // 取得該物料的所有分批交期資料(陣列格式)
-        const deliverySchedules = deliveryData[materialId] || [];
-
-        // 向下相容:如果有分批資料,取第一批作為主要交期
-        const firstDelivery = deliverySchedules.length > 0 ? deliverySchedules[0] : null;
-
         return {
             ...material,
-            demand_details: materialDemands,
-            earliest_demand_date: earliestDemandDate, // 🆕 最早需求日期
-            delivery_schedules: deliverySchedules,
-            delivery_date: firstDelivery ? firstDelivery.expected_date : null,
-            delivery_status: firstDelivery ? firstDelivery.status : null,
-            delivery_qty: firstDelivery ? firstDelivery.quantity : null
+            demand_details: material.demand_details || [],
+            delivery_schedules: material.delivery_schedules || []
         };
     });
 }
@@ -126,6 +97,7 @@ function applyStatFilter(filterType) {
 }
 
 // 清除統計篩選
+// 清除統計篩選
 function clearStatFilter() {
     currentStatFilter = 'all';
 
@@ -151,17 +123,7 @@ function clearStatFilter() {
 }
 
 // 計算統計數據
-function calculateStats(materials, deliveryData) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrowStart = new Date(today);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay()); // 本週日
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6); // 本週六
-
+function calculateStats(materials) {
     const stats = {
         shortage30Days: 0,
         noDelivery: 0,
@@ -176,107 +138,16 @@ function calculateStats(materials, deliveryData) {
     };
 
     materials.forEach(m => {
-        const hasShortage = m.current_shortage > 0 || m.projected_shortage > 0;
-        const shortage30 = m.shortage_within_30_days || false;
-        const delivery = m.delivery_date ? new Date(m.delivery_date) : null;
-        const earliestDemand = m.earliest_demand_date ? new Date(m.earliest_demand_date) : null;
-
-        // 30日內缺料
-        if (shortage30) {
-            stats.shortage30Days++;
-        }
-
-        // 無交期項目（有缺料但無交期）
-        if (hasShortage && !delivery) {
-            stats.noDelivery++;
-        }
-
-        // 今日要到貨（預計交貨日 = 今天）
-        if (delivery && delivery >= today && delivery < tomorrowStart) {
-            stats.delayed++;
-        }
-
-        // 即將到期（7日內）
-        if (delivery && delivery >= today && delivery <= in7Days) {
-            stats.dueSoon++;
-        }
-
-        // 總缺料
-        if (hasShortage) {
-            stats.allShortage++;
-        }
-
-        // 交貨延期：使用和渲染相同的邏輯計算
-        // 判斷第一批交貨日是否超過對應缺料點的需求日期
-        if (m.delivery_schedules && m.delivery_schedules.length > 0 && m.demand_details && m.demand_details.length > 0) {
-            // 1. 初始化模擬庫存
-            let currentStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
-
-            // 2. 複製需求列表並排序
-            let demands = m.demand_details.map(d => ({
-                ...d,
-                qty: d['未結數量 (EINHEIT)'] || 0,
-                date: new Date(d['需求日期'])
-            })).sort((a, b) => a.date - b.date);
-
-            // 3. 找出第一個缺料點對應的需求
-            let targetDemand = null;
-            let tempRunningStock = currentStock;
-
-            for (const demand of demands) {
-                tempRunningStock -= demand.qty;
-                if (tempRunningStock < 0) {
-                    targetDemand = demand;
-                    break;
-                }
-            }
-
-            // 4. 如果有缺料點，比較第一批交貨日期和缺料需求日期
-            if (targetDemand) {
-                const firstSchedule = m.delivery_schedules[0];
-                const scheduleDate = new Date(firstSchedule.expected_date);
-                const demandDate = targetDemand.date;
-
-                if (scheduleDate > demandDate) {
-                    stats.deliveryDelayed++;
-                }
-            }
-        }
-
-        // 需求逾期欠料（模擬庫存配賦後，第一筆無法滿足的需求日已過）
-        if (hasShortage && m.demand_details && m.demand_details.length > 0) {
-            let simStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
-            const sortedDemands = m.demand_details
-                .map(d => ({ qty: d['未結數量 (EINHEIT)'] || 0, date: new Date(d['需求日期']) }))
-                .sort((a, b) => a.date - b.date);
-
-            for (const demand of sortedDemands) {
-                simStock -= demand.qty;
-                if (simStock < 0) {
-                    // 找到第一筆無法滿足的需求
-                    if (demand.date < today) {
-                        stats.overdueDemand++;
-                    }
-                    break;
-                }
-            }
-        }
-
-        // 庫存充足
-        if (!hasShortage) {
-            stats.sufficient++;
-        }
-
-        // 🆕 替代用料通知（檢查該物料是否有已啟用通知的替代品）
-        if (window.hasNotifiedSubstitute(m['物料'])) {
-            stats.substituteNotify++;
-        }
-
-        // 🆕 品檢中（品檢中數量 > 0）
-        const inspectionStock = m.inspection_stock || m['品質檢驗中'] || 0;
-        if (inspectionStock > 0) {
-            stats.inInspection++;
-        }
+        if (m.shortage_within_30_days) stats.shortage30Days++;
+        if (m.no_delivery) stats.noDelivery++;
+        if (m.is_today_arrival) stats.delayed++;
+        if (m.is_due_soon) stats.dueSoon++;
+        if (m.is_all_shortage) stats.allShortage++;
+        if (m.is_delivery_delayed) stats.deliveryDelayed++;
+        if (m.is_overdue_demand) stats.overdueDemand++;
+        if (m.is_sufficient) stats.sufficient++;
+        if (m.is_substitute_notified || window.hasNotifiedSubstitute(m['物料'])) stats.substituteNotify++;
+        if (m.is_in_inspection) stats.inInspection++;
     });
 
     return stats;
@@ -285,7 +156,7 @@ function calculateStats(materials, deliveryData) {
 // 更新統計圖卡數字
 window.updateStatsCards = function () {
     const materials = currentDashboardType === 'main' ? currentMaterialsData : currentFinishedMaterialsData;
-    const stats = calculateStats(materials, allDeliveryData);
+    const stats = calculateStats(materials);
 
     const elements = {
         'stat-shortage-30': stats.shortage30Days,
@@ -314,106 +185,37 @@ window.filterMaterialsByStats = function (materials) {
         return materials;
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrowStart = new Date(today);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-
     return materials.filter(m => {
-        // 確保數值正確處理，避免 undefined 或 null
-        const currentShortage = m.current_shortage || 0;
-        const projectedShortage = m.projected_shortage || 0;
-        const hasShortage = currentShortage > 0 || projectedShortage > 0;
-        const shortage30 = m.shortage_within_30_days || false;
-        const delivery = m.delivery_date ? new Date(m.delivery_date) : null;
-        const earliestDemand = m.earliest_demand_date ? new Date(m.earliest_demand_date) : null;
-
         switch (currentStatFilter) {
             case 'shortage-30-days':
-                return shortage30;
+                return m.shortage_within_30_days || false;
 
             case 'no-delivery':
-                return hasShortage && !delivery;
+                return m.no_delivery || false;
 
             case 'delayed':
-                return delivery && delivery >= today && delivery < tomorrowStart;
+                return m.is_today_arrival || false;
 
             case 'due-soon':
-                return delivery && delivery >= today && delivery <= in7Days;
+                return m.is_due_soon || false;
 
             case 'all-shortage':
-                return hasShortage;
+                return m.is_all_shortage || false;
 
             case 'delivery-delayed':
-                // 交貨延期：使用和渲染相同的邏輯計算
-                if (!(m.delivery_schedules && m.delivery_schedules.length > 0 && m.demand_details && m.demand_details.length > 0)) {
-                    return false;
-                }
-
-                // 1. 初始化模擬庫存
-                let currentStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
-
-                // 2. 複製需求列表並排序
-                let demands = m.demand_details.map(d => ({
-                    ...d,
-                    qty: d['未結數量 (EINHEIT)'] || 0,
-                    date: new Date(d['需求日期'])
-                })).sort((a, b) => a.date - b.date);
-
-                // 3. 找出第一個缺料點對應的需求
-                let targetDemand = null;
-                let tempRunningStock = currentStock;
-
-                for (const demand of demands) {
-                    tempRunningStock -= demand.qty;
-                    if (tempRunningStock < 0) {
-                        targetDemand = demand;
-                        break;
-                    }
-                }
-
-                // 4. 如果有缺料點，比較第一批交貨日期和缺料需求日期
-                if (targetDemand) {
-                    const firstSchedule = m.delivery_schedules[0];
-                    const scheduleDate = new Date(firstSchedule.expected_date);
-                    const demandDate = targetDemand.date;
-
-                    if (scheduleDate > demandDate) {
-                        // 計算延遲天數並儲存供排序使用
-                        m._computed_delay_days = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
-                        return true;
-                    }
-                }
-                return false;
+                return m.is_delivery_delayed || false;
 
             case 'overdue-demand':
-                if (!(hasShortage && m.demand_details && m.demand_details.length > 0)) return false;
-                let odStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
-                const odDemands = m.demand_details
-                    .map(d => ({ qty: d['未結數量 (EINHEIT)'] || 0, date: new Date(d['需求日期']) }))
-                    .sort((a, b) => a.date - b.date);
-                for (const demand of odDemands) {
-                    odStock -= demand.qty;
-                    if (odStock < 0) {
-                        return demand.date < today;
-                    }
-                }
-                return false;
+                return m.is_overdue_demand || false;
 
             case 'sufficient':
-                return !hasShortage;
+                return m.is_sufficient || false;
 
             case 'substitute-notify':
-                return window.hasNotifiedSubstitute(m['物料']);
+                return m.is_substitute_notified || window.hasNotifiedSubstitute(m['物料']);
 
             case 'in-inspection':
-                const inspectionStock = m.inspection_stock || m['品質檢驗中'] || 0;
-                return inspectionStock > 0;
+                return m.is_in_inspection || false;
 
             default:
                 return true;
@@ -475,7 +277,7 @@ function toggleBatchActionsBar(filterType) {
     if (filterType === 'delayed') {
         // 計算過期交期數量
         const materials = currentDashboardType === 'main' ? currentMaterialsData : currentFinishedMaterialsData;
-        const stats = calculateStats(materials, allDeliveryData);
+        const stats = calculateStats(materials);
 
         bar.style.display = 'block';
         countElem.textContent = `共 ${stats.delayed} 個物料有過期交期`;

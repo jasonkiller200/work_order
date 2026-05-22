@@ -17,6 +17,10 @@ class CacheManager:
     def __init__(self):
         """初始化快取管理器"""
         self.data_cache = {"A": None, "B": None}
+        self.serialized_cache = {
+            "A": {"materials": None, "finished_materials": None},
+            "B": {"materials": None, "finished_materials": None}
+        }
         self.live_cache_pointer = "A"
         self.cache_lock = threading.Lock()
         
@@ -33,6 +37,14 @@ class CacheManager:
         """取得當前快取資料"""
         with self.cache_lock:
             return self.data_cache[self.live_cache_pointer]
+            
+    def get_serialized_data(self, key):
+        """
+        取得當前快取資料中已序列化的 JSON 字串
+        key: 'materials' 或 'finished_materials'
+        """
+        with self.cache_lock:
+            return self.serialized_cache[self.live_cache_pointer].get(key)
     
     def update_cache(self, new_data):
         """
@@ -41,14 +53,32 @@ class CacheManager:
         Args:
             new_data: 新的資料
         """
+        import json
         target_buffer = "B" if self.live_cache_pointer == "A" else "A"
         self.data_cache[target_buffer] = new_data
+        
+        # 預先序列化為 JSON
+        serialized_materials = ""
+        serialized_finished = ""
+        if new_data:
+            materials_list = new_data.get("materials_dashboard", [])
+            finished_list = new_data.get("finished_dashboard", [])
+            try:
+                serialized_materials = json.dumps(materials_list, ensure_ascii=False)
+                serialized_finished = json.dumps(finished_list, ensure_ascii=False)
+            except Exception as e:
+                app_logger.error(f"預先序列化失敗: {e}", exc_info=True)
+                
+        self.serialized_cache[target_buffer] = {
+            "materials": serialized_materials,
+            "finished_materials": serialized_finished
+        }
         
         with self.cache_lock:
             self.live_cache_pointer = target_buffer
             self.last_update_time = datetime.now(self.taiwan_tz)
         
-        app_logger.info(f"快取更新完畢，線上服務已切換至緩衝區 {self.live_cache_pointer}")
+        app_logger.info(f"快取更新完畢，線上服務已切換至緩衝區 {self.live_cache_pointer} (預序列化完成)")
     
     def set_update_interval(self, interval):
         """設定快取更新間隔（秒）"""

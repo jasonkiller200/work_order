@@ -16,20 +16,15 @@ window.loadProcurementDashboard = function () {
         checkAndAutoClearOverdue();
     }
 
-    // 同時載入半品儀表板、成品儀表板、交期資料
+    // 同時載入半品儀表板、成品儀表板
     Promise.all([
         fetch('/api/materials').then(r => r.json()),
-        fetch('/api/finished_materials').then(r => r.json()),
-        fetch('/api/delivery/all').then(r => r.json()),
-        fetch('/api/demand_details/all').then(r => r.json())
+        fetch('/api/finished_materials').then(r => r.json())
     ])
-        .then(([materialsData, finishedData, deliveryData, demandDetailsData]) => {
-            // 儲存資料
-            allDeliveryData = deliveryData.schedules || {};
-
-            // 🆕 為每個物料加入最早需求日期和交期資訊
-            currentMaterialsData = enhanceMaterialsData(materialsData, demandDetailsData, allDeliveryData);
-            currentFinishedMaterialsData = enhanceMaterialsData(finishedData, demandDetailsData, allDeliveryData);
+        .then(([materialsData, finishedData]) => {
+            // 🆕 儲存資料，使用後端已預先計算下推的輕量物料資料
+            currentMaterialsData = enhanceMaterialsData(materialsData);
+            currentFinishedMaterialsData = enhanceMaterialsData(finishedData);
 
             // 🆕 計算並更新統計
             updateStatsCards();

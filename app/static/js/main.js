@@ -400,151 +400,11 @@ window.renderMaterialsTable = function () {
         paginatedData.forEach(m => {
             const buyer = m['採購人員'] || '-';
             // 🆕 判斷行底色優先級：紅底（逾期欠料） > 綠底（30日內缺料）
-            const shortage30Days = m.shortage_within_30_days || false;
             let rowClass = '';
-            // 檢查是否為需求逾期欠料（模擬庫存配賦，第一筆不足的需求日已過今天）
-            const hasShortage = (m.current_shortage || 0) > 0 || (m.projected_shortage || 0) > 0;
-            if (hasShortage && m.demand_details && m.demand_details.length > 0) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                let simStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
-                const sortedDemands = m.demand_details
-                    .map(d => ({ qty: d['未結數量 (EINHEIT)'] || 0, date: new Date(d['需求日期']) }))
-                    .sort((a, b) => a.date - b.date);
-                for (const demand of sortedDemands) {
-                    simStock -= demand.qty;
-                    if (simStock < 0) {
-                        if (demand.date < today) {
-                            rowClass = ' class="overdue-shortage"';
-                        }
-                        break;
-                    }
-                }
-            }
-            // 如果不是逾期欠料，但在30日內有缺料，則使用綠底
-            if (!rowClass && shortage30Days) {
+            if (m.is_overdue_demand) {
+                rowClass = ' class="overdue-shortage"';
+            } else if (m.shortage_within_30_days) {
                 rowClass = ' class="shortage-30-days"';
-            }
-
-            // 🆕 格式化預計交貨日期 (支援分批顯示)
-            let deliveryDateStr = '-';
-            let dateClass = '';
-            let deliveryTooltip = '';
-            let firstShortageOrder = null; // 🆕 移動到這裡
-
-            if (m.delivery_schedules && m.delivery_schedules.length > 0) {
-                // 有分批交貨資料
-
-                // 🆕 模擬每個分批交期對應的缺料狀況
-                // 1. 初始化模擬庫存
-                let currentStock = (m.unrestricted_stock || 0) + (m.inspection_stock || 0);
-
-                // 2. 複製需求列表並確保排序
-                let demands = [];
-                if (m.demand_details && m.demand_details.length > 0) {
-                    demands = m.demand_details.map(d => ({
-                        ...d,
-                        qty: d['未結數量 (EINHEIT)'] || 0,
-                        date: new Date(d['需求日期'])
-                    })).sort((a, b) => a.date - b.date);
-                }
-
-                // 3. 為每個交貨批次計算對應的缺料
-                m.delivery_schedules.forEach(schedule => {
-                    // 找出當前庫存不足的第一個需求 (缺料點)
-                    let targetDemand = null;
-                    let tempRunningStock = currentStock;
-
-                    for (const demand of demands) {
-                        tempRunningStock -= demand.qty;
-                        if (tempRunningStock < 0) {
-                            targetDemand = demand;
-                            break;
-                        }
-                    }
-
-                    if (targetDemand) {
-                        schedule.target_demand_date = targetDemand['需求日期']; // 記錄目標需求日期
-                        const scheduleDate = new Date(schedule.expected_date);
-                        const demandDate = targetDemand.date;
-
-                        if (scheduleDate > demandDate) {
-                            schedule.delay_days = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
-                        } else {
-                            schedule.delay_days = 0;
-                        }
-                    } else {
-                        schedule.delay_days = 0;
-                    }
-
-                    // 更新模擬庫存 (這批貨入庫後,可以用來滿足後續需求)
-                    currentStock += schedule.quantity;
-                });
-
-                const firstSchedule = m.delivery_schedules[0];
-                const date = new Date(firstSchedule.expected_date);
-                const today = new Date();
-                const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
-
-                // 顯示第一批的日期和數量
-                deliveryDateStr = `${firstSchedule.expected_date} (${Math.round(firstSchedule.quantity)}件)`;
-
-                // 檢查第一批是否有延遲 (使用剛才計算的結果)
-                let delayDays = firstSchedule.delay_days || 0;
-                // 為了向後相容顯示,如果第一批有延遲,設定 firstShortageOrder (僅用於 tooltip)
-                if (delayDays > 0 && m.demand_details) {
-                    // 嘗試找到對應的需求物件以顯示資訊
-                    firstShortageOrder = m.demand_details.find(d => d['需求日期'] === firstSchedule.target_demand_date);
-                }
-
-                if (delayDays > 0 && firstShortageOrder) {
-                    // 加入延遲警告標記(包含工單資訊)
-                    deliveryDateStr += ` <span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;" title="工單 ${firstShortageOrder['訂單']} 需求 ${firstShortageOrder['需求日期']}">⚠️ 延遲${delayDays}天</span>`;
-                }
-
-                // 如果有多批次,顯示批次數量標記
-                if (m.delivery_schedules.length > 1) {
-                    deliveryDateStr += ` <span style="background: #3b82f6; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; white-space: nowrap;">+${m.delivery_schedules.length - 1}批</span>`;
-                }
-
-                // 根據天數設定顏色 (如果有延遲,優先顯示紅色)
-                if (delayDays > 0) {
-                    dateClass = ' style="color: #d32f2f; font-weight: bold;"';
-                } else if (diffDays < 0) {
-                    dateClass = ' style="color: #d32f2f; font-weight: bold;"';
-                } else if (diffDays <= 7) {
-                    dateClass = ' style="color: #ff9800; font-weight: bold;"';
-                } else if (diffDays <= 30) {
-                    dateClass = ' style="color: #4caf50; font-weight: bold;"';
-                }
-
-                // 🆕 建立 tooltip 內容 (最多顯示5筆)
-                const displaySchedules = m.delivery_schedules.slice(0, 5);
-                deliveryTooltip = displaySchedules.map((s, idx) => {
-                    const statusText = getStatusText(s.status);
-                    let delayText = s.delay_days > 0 ? ` (⚠️延遲${s.delay_days}天)` : '';
-                    return `第${idx + 1}批: ${s.expected_date} (${Math.round(s.quantity)}件) - ${statusText}${delayText}`;
-                }).join('\n'); // 使用換行符號
-
-                if (m.delivery_schedules.length > 5) {
-                    deliveryTooltip += `\n... 還有 ${m.delivery_schedules.length - 5} 批 (點擊物料查看完整清單)`;
-                }
-
-            } else if (m.delivery_date) {
-                // 向下相容:舊資料格式
-                const date = new Date(m.delivery_date);
-                const today = new Date();
-                const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
-
-                deliveryDateStr = date.toISOString().split('T')[0];
-
-                if (diffDays < 0) {
-                    dateClass = ' style="color: #d32f2f; font-weight: bold;"';
-                } else if (diffDays <= 7) {
-                    dateClass = ' style="color: #ff9800; font-weight: bold;"';
-                } else if (diffDays <= 30) {
-                    dateClass = ' style="color: #4caf50; font-weight: bold;"';
-                }
             }
 
             // 成品出貨日欄位：可點擊查看對應成品工單資訊
@@ -565,7 +425,7 @@ window.renderMaterialsTable = function () {
                     <td><span class="material-link" data-material-id="${m['物料']}">${m['物料']}</span></td>
                     <td>${m['物料說明']}</td>
                     <td class="buyer-cell" data-material-id="${m['物料']}">${buyer}</td>
-                    <td${dateClass} class="delivery-date-cell${m.delivery_schedules && m.delivery_schedules.length > 0 ? ' clickable-delivery' : ''}" data-schedules='${m.delivery_schedules ? JSON.stringify(m.delivery_schedules) : '[]'}' data-first-demand="${firstShortageOrder ? firstShortageOrder['需求日期'] : ''}">${deliveryDateStr}</td>
+                    <td${m.delivery_date_style || ''} class="delivery-date-cell${m.delivery_batches_count > 0 ? ' clickable-delivery' : ''}" data-material-id="${m['物料']}">${m.delivery_date_display || '-'}</td>
                     <td>${shipmentCellHtml}</td>
                     <td>${m.total_demand.toFixed(0)}</td>
                     <td>${m.unrestricted_stock.toFixed(0)}</td>
@@ -627,21 +487,81 @@ window.renderMaterialsTable = function () {
     updateSortIcons(); // 更新排序圖示
 }
 
-// 🆕 添加交貨日期點擊事件監聽器
+// 🆕 添加交貨日期點擊事件監聽器 (非同步懶載入與庫存延遲模擬)
 function addDeliveryDateClickListeners() {
     const deliveryCells = document.querySelectorAll('.clickable-delivery');
     deliveryCells.forEach(cell => {
         cell.addEventListener('click', function () {
-            const schedulesData = this.getAttribute('data-schedules');
-            // 移除 data-first-demand,因為現在延遲資訊已經包含在 schedules 中
-            if (schedulesData) {
-                try {
-                    const schedules = JSON.parse(schedulesData);
-                    showDeliverySchedulesModal(schedules);
-                } catch (e) {
-                    console.error('Failed to parse delivery schedules:', e);
-                }
-            }
+            const materialId = this.getAttribute('data-material-id');
+            if (!materialId) return;
+
+            const self = this;
+            const originalHTML = self.innerHTML;
+            self.innerHTML = '<span style="color: var(--pico-primary); font-size: 0.85em; display: inline-flex; align-items: center; gap: 4px;">⏳ 載入中...</span>';
+
+            const detailsType = currentDashboardType === 'main' ? 'main' : 'finished';
+
+            Promise.all([
+                fetch(`/api/delivery/${encodeURIComponent(materialId)}`).then(r => {
+                    if (!r.ok) throw new Error('交期 API 異常');
+                    return r.json();
+                }),
+                fetch(`/api/material/${encodeURIComponent(materialId)}/details?type=${detailsType}`).then(r => {
+                    if (!r.ok) throw new Error('詳情 API 異常');
+                    return r.json();
+                })
+            ]).then(([deliveryData, materialDetails]) => {
+                self.innerHTML = originalHTML;
+
+                const schedules = deliveryData.history || [];
+                const demands = materialDetails.demand_details || [];
+                const stockSummary = materialDetails.stock_summary || { unrestricted: 0, inspection: 0 };
+
+                // 於前端針對單一物料動態進行庫存模擬配賦與延遲天數計算
+                let currentStock = (stockSummary.unrestricted || 0) + (stockSummary.inspection || 0);
+
+                let sortedDemands = demands.map(d => ({
+                    ...d,
+                    qty: d['未結數量 (EINHEIT)'] || 0,
+                    date: new Date(d['需求日期'])
+                })).sort((a, b) => a.date - b.date);
+
+                schedules.forEach(schedule => {
+                    let targetDemand = null;
+                    let tempRunningStock = currentStock;
+
+                    for (const demand of sortedDemands) {
+                        tempRunningStock -= demand.qty;
+                        if (tempRunningStock < 0) {
+                            targetDemand = demand;
+                            break;
+                        }
+                    }
+
+                    if (targetDemand) {
+                        schedule.target_demand_date = targetDemand['需求日期'];
+                        const scheduleDate = new Date(schedule.expected_date);
+                        const demandDate = targetDemand.date;
+
+                        if (scheduleDate > demandDate) {
+                            schedule.delay_days = Math.ceil((scheduleDate - demandDate) / (1000 * 60 * 60 * 24));
+                        } else {
+                            schedule.delay_days = 0;
+                        }
+                    } else {
+                        schedule.delay_days = 0;
+                    }
+
+                    // 更新模擬庫存
+                    currentStock += schedule.quantity;
+                });
+
+                showDeliverySchedulesModal(schedules);
+            }).catch(err => {
+                self.innerHTML = originalHTML;
+                console.error('載入交期詳情失敗:', err);
+                alert('載入交期詳情失敗，請稍後重試。');
+            });
         });
     });
 }
