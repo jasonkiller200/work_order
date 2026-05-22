@@ -15,6 +15,79 @@ app_logger = logging.getLogger(__name__)
 
 class DataService:
     """資料載入與處理服務"""
+
+    @staticmethod
+    def _rewind_excel_source(source):
+        """重設可 seek 的 Excel 輸入來源，避免重試時讀取位置錯誤。"""
+        if hasattr(source, 'seek'):
+            source.seek(0)
+
+    @staticmethod
+    def _resolve_available_usecols(source, engine, requested_usecols, sheet_name=0):
+        """在來源欄位浮動時，保留實際存在的欄位並記錄缺漏。"""
+        DataService._rewind_excel_source(source)
+        header_df = pd.read_excel(source, engine=engine, sheet_name=sheet_name, nrows=0)
+        available_columns = header_df.columns.tolist()
+        matched_usecols = [column for column in requested_usecols if column in available_columns]
+        missing_columns = [column for column in requested_usecols if column not in available_columns]
+
+        if missing_columns:
+            app_logger.warning("Excel 缺少欄位，將以現有欄位繼續: %s", missing_columns)
+
+        return matched_usecols
+
+    @staticmethod
+    def _read_excel_with_fallback(source, source_name=None, allow_missing_usecols=False, **kwargs):
+        """優先使用 calamine，缺少依賴時回退到 openpyxl/xlrd。"""
+        DataService._rewind_excel_source(source)
+
+        try:
+            return pd.read_excel(source, engine='calamine', **kwargs)
+        except ImportError as exc:
+            error_message = str(exc).lower()
+            if 'python-calamine' not in error_message and 'calamine' not in error_message:
+                raise
+
+            resolved_source_name = source_name or getattr(source, 'name', source)
+            source_name_text = str(resolved_source_name).lower()
+            if source_name_text.endswith('.xls'):
+                fallback_engines = ['xlrd', 'openpyxl']
+            elif source_name_text.endswith(('.xlsx', '.xlsm', '.xltx', '.xltm')):
+                fallback_engines = ['openpyxl', 'xlrd']
+            else:
+                fallback_engines = ['openpyxl', 'xlrd']
+
+            last_error = None
+            for fallback_engine in fallback_engines:
+                try:
+                    app_logger.warning(
+                        "python-calamine 未安裝，改用 %s 讀取 Excel: %s",
+                        fallback_engine,
+                        resolved_source_name,
+                    )
+                    DataService._rewind_excel_source(source)
+                    return pd.read_excel(source, engine=fallback_engine, **kwargs)
+                except ValueError as read_exc:
+                    if (
+                        allow_missing_usecols
+                        and 'Usecols do not match columns' in str(read_exc)
+                        and isinstance(kwargs.get('usecols'), list)
+                    ):
+                        matched_usecols = DataService._resolve_available_usecols(
+                            source,
+                            fallback_engine,
+                            kwargs['usecols'],
+                            sheet_name=kwargs.get('sheet_name', 0),
+                        )
+                        retry_kwargs = dict(kwargs)
+                        retry_kwargs['usecols'] = matched_usecols
+                        DataService._rewind_excel_source(source)
+                        return pd.read_excel(source, engine=fallback_engine, **retry_kwargs)
+                    last_error = read_exc
+                except Exception as read_exc:
+                    last_error = read_exc
+
+            raise last_error
     
     @staticmethod
     def _compute_dashboard_flags(materials_list, demand_details_map, delivery_schedules_map, notified_substitutes):
@@ -191,9 +264,8 @@ class DataService:
         app_logger.info("開始載入與處理資料...")
         try:
             # 載入各個 Excel 檔案
-            df_inventory = pd.read_excel(
+            df_inventory = DataService._read_excel_with_fallback(
                 FilePaths.INVENTORY_FILE, 
-                engine='calamine', 
                 usecols=['物料', '物料說明', '儲存地點', '基礎計量單位', '未限制', '在途和移轉', '品質檢驗中', '限制使用庫存', '閒置天數']
             )
             
@@ -223,9 +295,9 @@ class DataService:
 
             # 用 cols_demand 讀取需求明細，提速 Excel 讀取
             cols_demand = ['訂單', '物料', '物料說明', '需求數量 (EINHEIT)', '領料數量 (EINHEIT)', '未結數量 (EINHEIT)', '需求日期']
-            df_wip_parts = pd.read_excel(FilePaths.WIP_PARTS_FILE, engine='calamine', usecols=cols_demand)
-            df_finished_parts = pd.read_excel(FilePaths.FINISHED_PARTS_FILE, engine='calamine', usecols=cols_demand)
-            df_prep_semi_finished = pd.read_excel(FilePaths.PREP_SEMI_FINISHED_FILE, engine='calamine', usecols=cols_demand)
+            df_wip_parts = DataService._read_excel_with_fallback(FilePaths.WIP_PARTS_FILE, usecols=cols_demand)
+            df_finished_parts = DataService._read_excel_with_fallback(FilePaths.FINISHED_PARTS_FILE, usecols=cols_demand)
+            df_prep_semi_finished = DataService._read_excel_with_fallback(FilePaths.PREP_SEMI_FINISHED_FILE, usecols=cols_demand)
             
             # 根據訂單號碼首位數字篩選
             df_wip_parts['訂單'] = df_wip_parts['訂單'].astype(str)
@@ -400,7 +472,7 @@ class DataService:
                 finished_demand_details_map[material_id] = details
 
             # --- 共通處理 ---
-            df_specs = pd.read_excel(FilePaths.SPECS_FILE, engine='calamine', usecols=['訂單', '內部特性號碼', '特性說明', '特性值', '值說明'])
+            df_specs = DataService._read_excel_with_fallback(FilePaths.SPECS_FILE, usecols=['訂單', '內部特性號碼', '特性說明', '特性值', '值說明'])
             df_work_order_summary = DataService._load_work_order_summary()
             df_on_order = DataService._load_on_order_data()
             
@@ -567,10 +639,10 @@ class DataService:
                 
                 # 從記憶體讀取 Excel
                 excel_data = BytesIO(response.content)
-                df_work_order_summary = pd.read_excel(
+                df_work_order_summary = DataService._read_excel_with_fallback(
                     excel_data, 
+                    source_name=bookname,
                     sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET,
-                    engine='calamine',
                     usecols=lambda col: col in [
                         '工單號碼', '訂單號碼', '下單客戶名稱', '物料品號', '物料說明', '品號說明',
                         '生產開始', '生產結束', '機械外包', '電控外包', '噴漆外包', '鏟花外包', '捆包外包'
@@ -597,10 +669,9 @@ class DataService:
             if os.path.exists(local_path):
                 app_logger.info(f"嘗試讀取本地檔案: {local_path}")
                 try:
-                    df_work_order_summary = pd.read_excel(
+                    df_work_order_summary = DataService._read_excel_with_fallback(
                         local_path, 
                         sheet_name=FilePaths.WORK_ORDER_SUMMARY_SHEET,
-                        engine='calamine',
                         usecols=lambda col: col in [
                             '工單號碼', '訂單號碼', '下單客戶名稱', '物料品號', '物料說明', '品號說明',
                             '生產開始', '生產結束', '機械外包', '電控外包', '噴漆外包', '鏟花外包', '捆包外包'
@@ -627,9 +698,9 @@ class DataService:
             app_logger.warning("警告：找不到 '已訂未交.XLSX' 檔案。")
             df_on_order = pd.DataFrame(columns=['物料', '仍待交貨〈數量〉'])
         else:
-            df_on_order = pd.read_excel(
+            df_on_order = DataService._read_excel_with_fallback(
                 on_order_path,
-                engine='calamine',
+                allow_missing_usecols=True,
                 usecols=[
                     '物料', '仍待交貨〈數量〉', '採購文件', '項目', '供應商/供應工廠', '短文',
                     '文件日期', '採購文件類型', '採購群組', '工廠', '儲存地點', '採購單數量'
@@ -648,9 +719,8 @@ class DataService:
         df_casting = pd.DataFrame()
         if os.path.exists(casting_order_path):
             try:
-                df_casting = pd.read_excel(
+                df_casting = DataService._read_excel_with_fallback(
                     casting_order_path,
-                    engine='calamine',
                     usecols=[
                         '訂單', '物料', '訂單數量 (GMEIN)', '已交貨數量 (GMEIN)', '物料說明', '訂單類型',
                         '核發日期（實際）', '基本開始日期', '基本完成日期', '建立日期', '系統狀態', '輸入者',

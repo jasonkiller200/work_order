@@ -20,6 +20,11 @@ window.loadNotifiedSubstitutes = async function () {
 // 🆕 檢查某物料是否有已通知的替代品
 window.hasNotifiedSubstitute = function (materialId) {
     if (!materialId) return false;
+
+    return Object.prototype.hasOwnProperty.call(window.notifiedSubstitutesMap, materialId)
+        && window.notifiedSubstitutesMap[materialId].length > 0;
+};
+
 // 增強物料資料(加入預計交貨日期資訊) - 🆕 支援分批顯示
 window.enhanceMaterialsData = function (materialsData, demandDetailsData, deliveryData) {
     return materialsData.map(material => {
@@ -29,7 +34,7 @@ window.enhanceMaterialsData = function (materialsData, demandDetailsData, delive
             delivery_schedules: material.delivery_schedules || []
         };
     });
-}
+};
 
 // 設定統計圖卡事件
 function setupStatsCardEvents() {
@@ -177,7 +182,7 @@ window.updateStatsCards = function () {
             elem.textContent = elements[id];
         }
     });
-}
+};
 
 // 篩選物料資料
 window.filterMaterialsByStats = function (materials) {
@@ -221,7 +226,7 @@ window.filterMaterialsByStats = function (materials) {
                 return true;
         }
     });
-}
+};
 
 // 排序物料資料（30日內缺料優先，然後按預計交貨日期）
 window.sortMaterialsByPriority = function (materials) {
@@ -265,7 +270,7 @@ window.sortMaterialsByPriority = function (materials) {
         // 第四優先：預計缺料數量大的排前面
         return b.projected_shortage - a.projected_shortage;
     });
-}
+};
 
 // 🆕 顯示/隱藏批量操作欄
 function toggleBatchActionsBar(filterType) {
