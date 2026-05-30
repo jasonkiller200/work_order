@@ -164,11 +164,24 @@ class WorkOrderStatsService:
             # 載入半品總表
             semi_finished_map = cls._load_semi_finished_table()
             
-            # 🆕 根據 order_type 選擇資料來源
-            if order_type == 'finished':
-                demand_details_map = current_data.get('finished_demand_details_map', {})
-            else:
-                demand_details_map = current_data.get('demand_details_map', {})
+            # 🆕 合併成品與半品的需求資料來源
+            # 這是因為：
+            # 1. 1 開頭成品工單的物料需求，部分會因為前 10 碼符合 valid_base_ids 而被分流到 demand_details_map
+            #    若只看 finished_demand_details_map，會導致 1 開頭工單缺料統計與項目嚴重遺漏。
+            # 2. FIFO 庫存分配必須是全域的（成品與半品需求共同消耗庫存），否則各自計算會導致庫存分配不準確。
+            d_map = current_data.get('demand_details_map', {})
+            fd_map = current_data.get('finished_demand_details_map', {})
+            
+            combined_demand_map = {}
+            for m_id, details in d_map.items():
+                combined_demand_map[m_id] = list(details)
+            for m_id, details in fd_map.items():
+                if m_id in combined_demand_map:
+                    combined_demand_map[m_id].extend(details)
+                else:
+                    combined_demand_map[m_id] = list(details)
+            
+            demand_details_map = combined_demand_map
             
             inventory_data = current_data.get('inventory_data', [])
             
@@ -208,7 +221,7 @@ class WorkOrderStatsService:
                         '生產開始': order_info.get('生產開始', ''),
                         '生產結束': order_info.get('生產結束', ''),
                         '廠別': order_info.get('廠別', '一廠'),  # 🆕 新增廠別欄位
-                        '缺料數': stats.get('total_material_count', 0),  # 總物料數
+                        '缺料數': stats.get('total_materials', 0),  # 總物料數
                         '缺料筆數': stats.get('shortage_count', 0),
                         '需求日期': stats.get('earliest_date', '')  # 兼容舊邏輯
                     })
@@ -380,11 +393,24 @@ class WorkOrderStatsService:
             if not current_data:
                 return []
             
-            # 🆕 根據 order_type 選擇資料來源
-            if order_type == 'finished':
-                demand_details_map = current_data.get('finished_demand_details_map', {})
-            else:
-                demand_details_map = current_data.get('demand_details_map', {})
+            # 🆕 合併成品與半品的需求資料來源
+            # 這是因為：
+            # 1. 1 開頭成品工單的物料需求，部分會因為前 10 碼符合 valid_base_ids 而被分流到 demand_details_map
+            #    若只看 finished_demand_details_map，會導致 1 開頭工單缺料統計與項目嚴重遺漏。
+            # 2. FIFO 庫存分配必須是全域的（成品與半品需求共同消耗庫存），否則各自計算會導致庫存分配不準確。
+            d_map = current_data.get('demand_details_map', {})
+            fd_map = current_data.get('finished_demand_details_map', {})
+            
+            combined_demand_map = {}
+            for m_id, details in d_map.items():
+                combined_demand_map[m_id] = list(details)
+            for m_id, details in fd_map.items():
+                if m_id in combined_demand_map:
+                    combined_demand_map[m_id].extend(details)
+                else:
+                    combined_demand_map[m_id] = list(details)
+            
+            demand_details_map = combined_demand_map
             
             # 🔧 修正: FIFO 計算時需納入所有 1、2、6 開頭工單，與 _calculate_order_statistics 保持一致
             order_prefix_check = lambda x: x.startswith('1') or x.startswith('2') or x.startswith('6')
