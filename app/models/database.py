@@ -44,6 +44,11 @@ class Material(db.Model):
     buyer_id = db.Column(db.String(10), db.ForeignKey('users.id'))
     lead_time_days = db.Column(db.Integer, default=0)
     
+    # 🆕 增加索引
+    __table_args__ = (
+        db.Index('idx_material_buyer', 'buyer_id'),
+    )
+    
     # 系統欄位
     created_at = db.Column(db.DateTime, default=get_taiwan_time)
     updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
@@ -164,6 +169,14 @@ class PurchaseOrder(db.Model):
     # 狀態
     status = db.Column(db.String(20), default='pending')  # pending, partial, completed, cancelled
     
+    # 🆕 增加複合索引
+    __table_args__ = (
+        db.Index('idx_po_material_status', 'material_id', 'status'),
+        db.Index('idx_po_delivery_date', 'updated_delivery_date'),
+        db.Index('idx_po_buyer_status', 'purchase_group', 'status'),
+        db.Index('idx_po_material_date', 'material_id', 'updated_delivery_date', 'status'),
+    )
+    
     # 系統欄位
     created_at = db.Column(db.DateTime, default=get_taiwan_time)
     updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
@@ -266,6 +279,13 @@ class DeliverySchedule(db.Model):
     notes = db.Column(db.Text)
     status = db.Column(db.String(20), default='pending')  # pending, partial, completed, cancelled
     
+    # 🆕 增加複合索引
+    __table_args__ = (
+        db.Index('idx_schedule_material_date_status', 'material_id', 'expected_date', 'status'),
+        db.Index('idx_schedule_po_status', 'po_number', 'status'),
+        db.Index('idx_schedule_date_status', 'expected_date', 'status'),
+    )
+    
     # 系統欄位
     created_at = db.Column(db.DateTime, default=get_taiwan_time)
     updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
@@ -331,6 +351,11 @@ class CastingOrder(db.Model):
     
     # 狀態
     status = db.Column(db.String(20), default='pending')  # pending, partial, completed
+    
+    # 🆕 增加複合索引
+    __table_args__ = (
+        db.Index('idx_casting_material_status', 'material_id', 'status'),
+    )
     
     # 系統欄位
     created_at = db.Column(db.DateTime, default=get_taiwan_time)

@@ -75,12 +75,50 @@ def create_app():
     
     return app
 
+def _init_database_indexes(app):
+    """手動在 SQLite 中建立複合索引以優化查詢效能（冪等執行）"""
+    app_logger = logging.getLogger(__name__)
+    app_logger.info("正在檢查並建立資料庫效能複合索引...")
+    
+    from app.models.database import db
+    
+    index_sqls = [
+        # PurchaseOrder 複合索引
+        "CREATE INDEX IF NOT EXISTS idx_po_material_status ON purchase_orders (material_id, status);",
+        "CREATE INDEX IF NOT EXISTS idx_po_delivery_date ON purchase_orders (updated_delivery_date);",
+        "CREATE INDEX IF NOT EXISTS idx_po_buyer_status ON purchase_orders (purchase_group, status);",
+        "CREATE INDEX IF NOT EXISTS idx_po_material_date ON purchase_orders (material_id, updated_delivery_date, status);",
+        
+        # DeliverySchedule 複合索引
+        "CREATE INDEX IF NOT EXISTS idx_schedule_material_date_status ON delivery_schedules (material_id, expected_date, status);",
+        "CREATE INDEX IF NOT EXISTS idx_schedule_po_status ON delivery_schedules (po_number, status);",
+        "CREATE INDEX IF NOT EXISTS idx_schedule_date_status ON delivery_schedules (expected_date, status);",
+        
+        # Material 索引補強 (外鍵 buyer_id 沒有預設索引)
+        "CREATE INDEX IF NOT EXISTS idx_material_buyer ON materials (buyer_id);",
+        
+        # CastingOrder 索引補強 (鑄件未交常用統計欄位)
+        "CREATE INDEX IF NOT EXISTS idx_casting_material_status ON casting_orders (material_id, status);"
+    ]
+    
+    try:
+        for sql in index_sqls:
+            db.session.execute(db.text(sql))
+        db.session.commit()
+        app_logger.info("資料庫複合索引檢查與建立完成！")
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"資料庫複合索引建立失敗: {e}", exc_info=True)
+
 def initialize_app_data(app):
     """初始化應用程式資料"""
     app_logger = logging.getLogger(__name__)
     
     # 在應用上下文中執行資料載入
     with app.app_context():
+        # 🆕 補齊資料庫複合索引以優化效能
+        _init_database_indexes(app)
+        
         # 執行首次工單規格檔案彙總
         app_logger.info("主程式：執行首次工單規格檔案彙總...")
         try:
