@@ -418,36 +418,40 @@ class DataService:
             # 建立需求詳情對應表
             df_demand['需求日期'] = pd.to_datetime(df_demand['需求日期'], errors='coerce')
             
-            # 🆕 計算每筆需求的 remaining_stock
+            # 🆕 計算每筆需求的 remaining_stock (高效向量化優化版)
+            # 1. 建立庫存快速查找字典 (O(1) 效能優化，避免迴圈內進行全表過濾)
+            inv_dict = {}
+            for item in df_inventory.to_dict('records'):
+                mat_key = str(item.get('物料', '')).strip()
+                if mat_key:
+                    inv_dict[mat_key] = (
+                        float(item.get('未限制', 0.0) or 0.0) + 
+                        float(item.get('品質檢驗中', 0.0) or 0.0)
+                    )
+
+            # 2. 建立 df_demand 的需求詳情地圖
             demand_details_map = {}
-            for material_id in df_demand['物料'].unique():
-                material_demands = df_demand[df_demand['物料'] == material_id].copy()
-                material_demands = material_demands.sort_values('需求日期')
+            for material_id, group in df_demand.groupby('物料'):
+                material_demands = group.sort_values('需求日期').copy()
+                available_stock = inv_dict.get(str(material_id), 0.0)
                 
-                # 取得該物料的庫存資訊
-                material_stock = df_inventory[df_inventory['物料'] == material_id]
-                if not material_stock.empty:
-                    unrestricted = float(material_stock.iloc[0].get('未限制', 0) or 0)
-                    inspection = float(material_stock.iloc[0].get('品質檢驗中', 0) or 0)
-                    running_stock = unrestricted + inspection
-                else:
-                    running_stock = 0
+                # 使用 cumsum 進行向量化累積加總計算
+                qtys = material_demands['未結數量 (EINHEIT)'].fillna(0).astype(float)
+                remaining_stocks = available_stock - qtys.cumsum()
                 
-                # 計算每筆需求的剩餘庫存
-                details = []
-                for _, demand in material_demands.iterrows():
-                    qty = float(demand.get('未結數量 (EINHEIT)', 0) or 0)
-                    running_stock -= qty
-                    
-                    details.append({
-                        '訂單': demand['訂單'],
-                        '物料說明': demand.get('物料說明', ''),  # 🆕 加入物料說明
-                        '未結數量 (EINHEIT)': qty,
-                        '需求日期': demand['需求日期'].strftime('%Y-%m-%d') if pd.notna(demand['需求日期']) else '',
-                        'remaining_stock': running_stock  # 🆕 加入剩餘庫存
-                    })
+                material_demands['remaining_stock'] = remaining_stocks
+                material_demands['需求日期_str'] = material_demands['需求日期'].dt.strftime('%Y-%m-%d').fillna('')
                 
-                demand_details_map[material_id] = details
+                demand_details_map[material_id] = [
+                    {
+                        '訂單': row['訂單'],
+                        '物料說明': row.get('物料說明', ''),
+                        '未結數量 (EINHEIT)': row['未結數量 (EINHEIT)'],
+                        '需求日期': row['需求日期_str'],
+                        'remaining_stock': row['remaining_stock']
+                    }
+                    for row in material_demands.to_dict('records')
+                ]
             
             # --- 處理成品儀表板資料 (不符合的成品撥料) ---
             df_finished_demand = df_finished_parts_invalid.copy()
@@ -457,36 +461,29 @@ class DataService:
             # 成品需求詳情
             df_finished_demand['需求日期'] = pd.to_datetime(df_finished_demand['需求日期'], errors='coerce')
             
-            # 🆕 計算成品需求的 remaining_stock
+            # 3. 建立 df_finished_demand 的需求詳情地圖
             finished_demand_details_map = {}
-            for material_id in df_finished_demand['物料'].unique():
-                material_demands = df_finished_demand[df_finished_demand['物料'] == material_id].copy()
-                material_demands = material_demands.sort_values('需求日期')
+            for material_id, group in df_finished_demand.groupby('物料'):
+                material_demands = group.sort_values('需求日期').copy()
+                available_stock = inv_dict.get(str(material_id), 0.0)
                 
-                # 取得該物料的庫存資訊
-                material_stock = df_inventory[df_inventory['物料'] == material_id]
-                if not material_stock.empty:
-                    unrestricted = float(material_stock.iloc[0].get('未限制', 0) or 0)
-                    inspection = float(material_stock.iloc[0].get('品質檢驗中', 0) or 0)
-                    running_stock = unrestricted + inspection
-                else:
-                    running_stock = 0
+                # 使用 cumsum 進行向量化累積加總計算
+                qtys = material_demands['未結數量 (EINHEIT)'].fillna(0).astype(float)
+                remaining_stocks = available_stock - qtys.cumsum()
                 
-                # 計算每筆需求的剩餘庫存
-                details = []
-                for _, demand in material_demands.iterrows():
-                    qty = float(demand.get('未結數量 (EINHEIT)', 0) or 0)
-                    running_stock -= qty
-                    
-                    details.append({
-                        '訂單': demand['訂單'],
-                        '物料說明': demand.get('物料說明', ''),  # 🆕 加入物料說明
-                        '未結數量 (EINHEIT)': qty,
-                        '需求日期': demand['需求日期'].strftime('%Y-%m-%d') if pd.notna(demand['需求日期']) else '',
-                        'remaining_stock': running_stock  # 🆕 加入剩餘庫存
-                    })
+                material_demands['running_stock'] = remaining_stocks
+                material_demands['需求日期_str'] = material_demands['需求日期'].dt.strftime('%Y-%m-%d').fillna('')
                 
-                finished_demand_details_map[material_id] = details
+                finished_demand_details_map[material_id] = [
+                    {
+                        '訂單': row['訂單'],
+                        '物料說明': row.get('物料說明', ''),
+                        '未結數量 (EINHEIT)': row['未結數量 (EINHEIT)'],
+                        '需求日期': row['需求日期_str'],
+                        'remaining_stock': row['running_stock']
+                    }
+                    for row in material_demands.to_dict('records')
+                ]
 
             # --- 共通處理 ---
             df_specs = DataService._read_excel_with_fallback(FilePaths.SPECS_FILE, usecols=['訂單', '內部特性號碼', '特性說明', '特性值', '值說明'])
