@@ -70,6 +70,13 @@ def work_order_statistics():
     return render_template('work_order_statistics.html', is_admin=get_is_admin())
 
 
+@page_bp.route('/finished-wo-materials')
+def finished_wo_materials():
+    """成品工單組件用料查詢頁面"""
+    TrafficService.record_page_view('finished_work_order_materials.html', request.remote_addr)
+    return render_template('finished_work_order_materials.html', is_admin=get_is_admin())
+
+
 @page_bp.route('/user-management')
 @login_required
 def user_management():

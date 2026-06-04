@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成品工單用料查詢 - 生產資訊中心</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1234">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/modals.css') }}?v=1234">
+    <!-- Flatpickr 日期選擇器 (Dark Theme) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr-dark.css') }}">
+    <!-- 假日樣式 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/holiday.css') }}">
+    <!-- ExcelJS for Excel export -->
+    <script src="{{ url_for('static', filename='js/exceljs.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
+    
+    <style>
+        .shortage-badge {
+            display: inline-block;
+            padding: 0.25em 0.6em;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .shortage-badge.has-shortage {
+            background: rgba(211, 47, 47, 0.2);
+            color: #f44336;
+        }
+
+        .shortage-badge.no-shortage {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+
+        .clickable-material {
+            cursor: pointer;
+            color: var(--pico-primary);
+            text-decoration: underline;
+        }
+
+        .clickable-material:hover {
+            color: var(--pico-primary-hover);
+        }
+
+        .shortage-row {
+            background: rgba(211, 47, 47, 0.08) !important;
+        }
+
+        .shortage-row td:first-child::before {
+            content: "⚠️ ";
+        }
+
+        /* 凍結表頭 */
+        .table-container {
+            max-height: 600px;
+            overflow-y: auto;
+            overflow-x: auto;
+            position: relative;
+            margin-top: 1em;
+            border: 1px solid var(--pico-muted-border-color);
+            border-radius: 8px;
+        }
+
+        #materials-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #11191f;
+            border-bottom: 2px solid var(--pico-muted-border-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="light"] #materials-table thead th {
+            background: #ffffff;
+        }
+
+        /* 工單資訊卡片樣式 */
+        .info-card {
+            background: #1a232a;
+            border: 1px solid var(--pico-muted-border-color);
+            border-radius: 8px;
+            padding: 1.5em;
+            margin-bottom: 1.5em;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        [data-theme="light"] .info-card {
+            background: #f8f9fa;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1em;
+        }
+
+        .info-item {
+            margin-bottom: 0.5em;
+        }
+
+        .info-label {
+            font-size: 0.85em;
+            color: var(--pico-muted-color);
+            margin-bottom: 0.2em;
+        }
+
+        .info-value {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        /* 狀態進度條 */
+        .progress-container {
+            margin-top: 1em;
+            display: flex;
+            align-items: center;
+            gap: 1em;
+        }
+
+        .progress-bar-wrapper {
+            flex-grow: 1;
+            height: 12px;
+            background: #2d3b45;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #81c784);
+            transition: width 0.5s ease-in-out;
+        }
+
+        .progress-bar-fill.has-shortage {
+            background: linear-gradient(90deg, #f44336, #e57373);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4em 2em;
+            color: var(--pico-muted-color);
+            border: 2px dashed var(--pico-muted-border-color);
+            border-radius: 8px;
+            margin-top: 1.5em;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1em;
+            fill: currentColor;
+            opacity: 0.5;
+        }
+
+        /* 查詢面板 */
+        .search-panel {
+            background: #141d24;
+            padding: 1.2em;
+            border-radius: 8px;
+            border: 1px solid var(--pico-muted-border-color);
+            margin-bottom: 1.5em;
+        }
+
+        [data-theme="light"] .search-panel {
+            background: #f1f3f5;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 1em;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .search-input-group {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .search-input-group label {
+            margin-bottom: 0.4em;
+            font-weight: bold;
+        }
+
+        .search-input-group input {
+            margin-bottom: 0;
+        }
+
+        .search-actions {
+            display: flex;
+            gap: 0.5em;
+        }
+
+        .search-actions button {
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <header>
+            <h1>生產資訊中心</h1>
+            <p>一個整合工單料況、庫存與規格的查詢系統</p>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="/procurement">採購儀表板</a></li>
+                <li><a href="/allocated-shortage">已撥缺料</a></li>
+                <li><a href="/order_query">訂單查詢</a></li>
+                <li><a href="/open-purchase-orders">未結案採購單</a></li>
+                <li><a href="/admin_dashboard">後台管理</a></li>
+                {% if is_admin %}
+                <li><a href="/part-drawing-management">品號-圖號維護</a></li>
+                <li><a href="/component-requirements">成品組件需求</a></li>
+                {% endif %}
+                <li><a href="/work-order-statistics">工單詳情統計</a></li>
+                <li><a href="/finished-wo-materials" class="active">成品用料查詢</a></li>
+            </ul>
+        </nav>
+
+        <hr>
+
+        <section id="finished-wo-query-section">
+            <h2>🔍 成品工單組件用料查詢</h2>
+            <p style="color: var(--pico-muted-color); margin-bottom: 1em;">
+                輸入成品工單號碼（1開頭），即時從 SAP 需求明細中進行 FIFO 庫存缺料分析，撈出所有組件物料及料況明細。
+            </p>
+
+            <!-- 查詢面板 -->
+            <div class="search-panel">
+                <div class="search-row">
+                    <div class="search-input-group">
+                        <label for="finished-order-input">成品工單號碼</label>
+                        <input type="text" id="finished-order-input" value="10000" placeholder="請輸入 1 開頭的成品工單號碼...">
+                    </div>
+                    <div class="search-actions">
+                        <button id="search-btn">🔍 查詢</button>
+                        <button id="clear-btn" class="secondary">清除</button>
+                        <button id="export-btn" style="background-color: #28a745; border-color: #28a745; display: none;">📊 匯出 Excel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loading-indicator" style="display: none; text-align: center; padding: 3em;">
+                <aria-busy aria-busy="true">正在撈取成品工單資訊與組件需求...</aria-busy>
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state">
+                <svg viewBox="0 0 24 24">
+                    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+                <h3>請輸入成品工單號碼查詢</h3>
+                <p>在上方輸入框輸入 9 位數成品工單號（例如以 10000 開頭的號碼）並點擊查詢。</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="error-message" style="display: none; padding: 1em; background: rgba(211, 47, 47, 0.1); border-left: 4px solid #f44336; border-radius: 4px; color: #ffcdd2; margin-bottom: 1.5em;">
+                <span id="error-text">找不到此成品工單的資訊</span>
+            </div>
+
+            <!-- 查詢結果區塊 -->
+            <div id="query-result" style="display: none;">
+                <!-- 工單資訊卡片 -->
+                <div class="info-card">
+                    <h3 style="margin-top: 0; margin-bottom: 0.8em; color: var(--pico-primary);">🏭 工單基本資訊</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">成品工單號碼</div>
+                            <div class="info-value" id="val-order-id">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">機型 / 品號說明</div>
+                            <div class="info-value" id="val-machine-type">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">訂單號碼</div>
+                            <div class="info-value" id="val-sales-order">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">下單客戶</div>
+                            <div class="info-value" id="val-customer">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">生產期間</div>
+                            <div class="info-value" id="val-production-period">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">廠別</div>
+                            <div class="info-value" id="val-factory">-</div>
+                        </div>
+                    </div>
+
+                    <!-- 用料充足率進度條 -->
+                    <div class="progress-container">
+                        <div style="font-weight: bold; min-width: 100px;">用料充足率:</div>
+                        <div class="progress-bar-wrapper">
+                            <div id="progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+                        </div>
+                        <div style="font-weight: bold; min-width: 80px; text-align: right;" id="val-satisfy-ratio">0%</div>
+                    </div>
+                    <div style="font-size: 0.85em; color: var(--pico-muted-color); margin-top: 0.4em;" id="val-summary-text">
+                        共 0 項組件物料，其中 0 項缺料。
+                    </div>
+                </div>
+
+                <!-- 組件用料表格 -->
+                <h3 style="margin-bottom: 0.5em;">📦 組件用料明細 (FIFO 庫存分配)</h3>
+                <div class="table-container">
+                    <table id="materials-table">
+                        <thead>
+                            <tr>
+                                <th>物料編號</th>
+                                <th>物料說明</th>
+                                <th style="text-align: right;">需求數量</th>
+                                <th style="text-align: right;">可用庫存</th>
+                                <th style="text-align: right;">未限制</th>
+                                <th style="text-align: right;">品檢中</th>
+                                <th style="text-align: center;">狀態</th>
+                                <th style="text-align: center;">需求日期</th>
+                                <th>採購人員</th>
+                                <th style="text-align: center;">預計交貨日</th>
+                            </tr>
+                        </thead>
+                        <tbody id="materials-tbody">
+                            <!-- 動態渲染 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 物料詳情彈出視窗 (Modal) - 與採購儀表板一致 -->
+    <dialog id="details-modal">
+        <article style="min-width: 900px; max-width: 95vw;">
+            <header>
+                <a href="#close" aria-label="Close" class="close" id="close-modal-btn"></a>
+                <h3 id="modal-title">物料詳情</h3>
+            </header>
+
+            <div class="modal-split-container" style="display: flex !important; gap: 1.5em; align-items: flex-start; min-height: 500px;">
+                <!-- 左側分欄：庫存、警示與表單 -->
+                <div class="modal-left-column" style="flex: 0 0 60%; max-width: 60%; min-width: 60%; max-height: 80vh; overflow-y: auto; padding-right: 0.5em;">
+                    <div id="stock-summary-section">
+                        <h4>📦 庫存總覽</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-bottom: 0.5em;">
+                            <p style="margin: 0; font-size: 0.9em;">可用庫存: <span id="unrestricted-stock" style="font-weight: bold; color: var(--color-success);">-</span></p>
+                            <p style="margin: 0; font-size: 0.9em;">待檢庫存: <span id="inspection-stock" style="font-weight: bold; color: var(--color-warning);">-</span></p>
+                            <p style="margin: 0; font-size: 0.9em;">在途庫存: <span id="on-order-stock" style="font-weight: bold; color: var(--color-info);">-</span></p>
+                        </div>
+
+                        <!-- 缺料警示 -->
+                        <div id="shortage-alert" class="shortage-alert" style="display: none; margin-top: 1em; padding: 0.8em; border-radius: 4px; background: rgba(211, 47, 47, 0.1); border-left: 4px solid var(--color-danger);">
+                            <p style="margin: 0; font-weight: bold; color: var(--color-danger);">⚠️ 當前缺料: <strong id="current-shortage-qty">0</strong> 件</p>
+                            <p style="margin: 0.3em 0 0 0; font-size: 0.85em; color: var(--text-secondary);">📅 開始缺料日: <strong id="earliest-demand-date">-</strong></p>
+                        </div>
+                    </div>
+
+                    <!-- 相關採購單區塊 -->
+                    <div id="purchase-orders-section" style="margin-bottom: 1.5em; display: none;">
+                        <h4 class="purchase-orders-title">📋 相關採購單 (SAP)</h4>
+                        <div style="overflow-x: auto; max-height: 200px;">
+                            <table style="font-size: 0.85em; width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>單號</th>
+                                        <th>數量</th>
+                                        <th>交期</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="purchase-orders-tbody">
+                                    <!-- 動態載入 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 交期維護表單 -->
+                    <div id="delivery-form-section" class="delivery-form-section">
+                        <h4 class="delivery-form-title">📅 交期/分批維護</h4>
+                        <form id="delivery-form">
+                            <div style="margin-bottom: 0.8em;">
+                                <label for="po-select" style="font-size: 0.9em;">關聯採購單</label>
+                                <select id="po-select" style="font-size: 0.9em; padding: 0.4em;">
+                                    <option value="">-- 新建 (不關聯) --</option>
+                                </select>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 0.8em;">
+                                <div>
+                                    <label for="delivery-date" style="font-size: 0.9em;">預計到貨 <span class="required-mark">*</span></label>
+                                    <input type="text" id="delivery-date" style="font-size: 0.9em; padding: 0.4em;" placeholder="選擇日期..." required>
+                                    <small style="color: var(--pico-muted-color); font-size: 0.75em; display: block; margin-top: 0.2em;">
+                                        💡 提示: 點擊欄位開啟日期選擇器
+                                    </small>
+                                </div>
+                                <div>
+                                    <label for="delivery-qty" style="font-size: 0.9em;">數量 <span class="required-mark">*</span></label>
+                                    <input type="number" id="delivery-qty" min="1" style="font-size: 0.9em; padding: 0.4em;" required>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8em; margin-top: 0.5em;">
+                                <div>
+                                    <label for="po-number" style="font-size: 0.85em;">採購單號</label>
+                                    <input type="text" id="po-number" style="font-size: 0.9em; padding: 0.4em;">
+                                </div>
+                                <div>
+                                    <label for="supplier" style="font-size: 0.85em;">供應商</label>
+                                    <input type="text" id="supplier" style="font-size: 0.9em; padding: 0.4em;">
+                                </div>
+                            </div>
+
+                            <textarea id="delivery-notes" rows="1" placeholder="備註..." style="margin-top: 0.5em; font-size: 0.9em; padding: 0.4em;"></textarea>
+
+                            <div id="delivery-calculation" style="display: none; margin-top: 0.8em; background: rgba(33, 150, 243, 0.1); padding: 10px; border-radius: 4px; border-left: 3px solid var(--color-info);">
+                                <p style="margin: 0; font-size: 0.9em; color: var(--color-info);">✅ 到貨後可用: <strong id="calc-available-stock">0</strong></p>
+                                <p style="margin: 0; font-size: 0.85em; color: var(--text-secondary);">滿足至: <strong id="calc-satisfy-until">-</strong></p>
+                            </div>
+
+                            <div style="margin-top: 1em; display: flex; gap: 0.5em;">
+                                <button type="button" id="save-delivery-btn" style="flex: 1.5; padding: 0.5em;">💾 儲存</button>
+                                <button type="button" id="clear-delivery-btn" class="secondary" style="flex: 1; padding: 0.5em;">🗑️ 清除</button>
+                            </div>
+                        </form>
+
+                        <details style="margin-top: 1em; font-size: 0.9em;">
+                            <summary>📜 交期歷史記錄</summary>
+                            <div id="delivery-history" style="max-height: 250px; overflow-y: auto; margin-top: 0.5em; border-top: 1px dashed var(--pico-border-color); padding-top: 0.5em;">
+                                <!-- 動態載入 -->
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- 右側分欄：需求訂單與替代版本 -->
+                <div class="modal-right-column" style="flex: 0 0 35%; max-width: 35%; min-width: 35%; border-left: 1px solid var(--pico-muted-border-color); padding-left: 1.5em; display: flex; flex-direction: column;">
+                    <nav style="margin-bottom: 1em;">
+                        <ul style="display: flex; gap: 0.5em; flex-wrap: wrap; list-style: none; padding-left: 0;">
+                            <li><a href="#" class="tab-link active" data-tab="tab-demand" role="button" class="outline" style="padding: 0.3em 0.8em; font-size: 0.9em;">需求訂單</a></li>
+                            <li><a href="#" class="tab-link hidden" data-tab="tab-substitute" role="button" class="secondary outline" style="padding: 0.3em 0.8em; font-size: 0.9em;">替代版本</a></li>
+                        </ul>
+                    </nav>
+
+                    <div id="modal-content">
+                        <div id="tab-demand" class="tab-content active">
+                            <p style="color: var(--pico-muted-color);">載入需求中...</p>
+                        </div>
+                        <div id="tab-substitute" class="tab-content">
+                            <div id="substitute-section">
+                                <p style="color: var(--pico-muted-color);">載入替代品中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <footer>
+                <button class="secondary" id="close-modal-btn-footer" style="margin: 0;">關閉視窗</button>
+            </footer>
+        </article>
+    </dialog>
+
+    <style>
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-link.hidden {
+            display: none !important;
+        }
+        .tab-link.active {
+            border-bottom-color: var(--pico-primary) !important;
+            color: var(--pico-primary) !important;
+            font-weight: bold;
+        }
+    </style>
+
+    <script>
+        // 設定當前儀表板類型，供 material-modal.js 使用
+        const currentDashboardType = 'finished'; 
+        
+        // 全域資料快取，供匯出 Excel 使用
+        let currentOrderData = null;
+        let currentMaterialsData = [];
+    </script>
+
+    <script src="{{ url_for('static', filename='js/delivery-helper.js') }}?v=1232"></script>
+    <script src="{{ url_for('static', filename='js/services/api-service.js') }}?v=1232"></script>
+    <!-- Flatpickr JS -->
+    <script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/flatpickr_zh_tw.js') }}"></script>
+    <!-- 台灣假日工具 -->
+    <script src="{{ url_for('static', filename='js/utils/holiday_utils.js') }}"></script>
+    <!-- 引入 Modal 模組 -->
+    <script src="{{ url_for('static', filename='js/modules/material-modal.js') }}?v=1235"></script>
+
+    <script>
+        // 初始化 Modal 事件
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.setupModal) {
+                window.setupModal();
+            }
+            
+            // 綁定關閉 Modal 腳步按鈕
+            const closeBtnFooter = document.getElementById('close-modal-btn-footer');
+            if (closeBtnFooter) {
+                closeBtnFooter.addEventListener('click', () => {
+                    const modal = document.getElementById('details-modal');
+                    if (modal) modal.close();
+                });
+            }
+            
+            // 註冊 Enter 鍵快速查詢
+            const orderInput = document.getElementById('finished-order-input');
+            orderInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    performQuery();
+                }
+            });
+            
+            // 查詢按鈕點擊
+            document.getElementById('search-btn').addEventListener('click', performQuery);
+            
+            // 清除按鈕點擊
+            document.getElementById('clear-btn').addEventListener('click', () => {
+                orderInput.value = '10000';
+                document.getElementById('query-result').style.display = 'none';
+                document.getElementById('error-message').style.display = 'none';
+                document.getElementById('export-btn').style.display = 'none';
+                document.getElementById('empty-state').style.display = 'block';
+                currentOrderData = null;
+                currentMaterialsData = [];
+            });
+            
+            // 匯出按鈕點擊
+            document.getElementById('export-btn').addEventListener('click', exportToExcel);
+        });
+
+        // 查詢主要邏輯
+        async function performQuery() {
+            const orderInput = document.getElementById('finished-order-input');
+            const orderId = orderInput.value.trim();
+            
+            if (!orderId) {
+                alert('請輸入成品工單號碼！');
+                return;
+            }
+            
+            // 顯示 Loading，隱藏其他狀態
+            document.getElementById('loading-indicator').style.display = 'block';
+            document.getElementById('empty-state').style.display = 'none';
+            document.getElementById('query-result').style.display = 'none';
+            document.getElementById('error-message').style.display = 'none';
+            document.getElementById('export-btn').style.display = 'none';
+            
+            // 設置全域工單追蹤，以供交期更新時重新刷新
+            window.currentShortageModalInfo = { orderId: orderId, orderType: 'finished' };
+            
+            try {
+                // 發起並行請求
+                const [orderInfo, shortageDetails] = await Promise.all([
+                    fetch(`/api/order-info/${orderId}`).then(r => r.json()),
+                    fetch(`/api/work-order-statistics/${orderId}/shortage-details?order_type=finished&filter_components=true`).then(r => r.json())
+                ]);
+                
+                document.getElementById('loading-indicator').style.display = 'none';
+                
+                // 判斷是否查無資料
+                const hasInfo = orderInfo.found;
+                const hasDetails = shortageDetails && shortageDetails.details && shortageDetails.details.length > 0;
+                
+                if (!hasInfo && !hasDetails) {
+                    document.getElementById('error-text').textContent = `找不到此成品工單 ${orderId} 的基本資訊與組件用料需求的資料。`;
+                    document.getElementById('error-message').style.display = 'block';
+                    document.getElementById('empty-state').style.display = 'block';
+                    return;
+                }
+                
+                // 儲存至全域暫存以供匯出
+                currentOrderData = orderInfo;
+                currentMaterialsData = shortageDetails.details || [];
+                
+                // 渲染基本資訊卡片
+                renderOrderInfoCard(orderId, orderInfo, shortageDetails);
+                
+                // 渲染物料明細表格
+                renderMaterialsTable(shortageDetails.details || []);
+                
+                // 顯示查詢結果
+                document.getElementById('query-result').style.display = 'block';
+                document.getElementById('export-btn').style.display = 'inline-block';
+                
+            } catch (error) {
+                console.error('查詢失敗:', error);
+                document.getElementById('loading-indicator').style.display = 'none';
+                document.getElementById('error-text').textContent = `查詢過程中發生錯誤: ${error.message}`;
+                document.getElementById('error-message').style.display = 'block';
+                document.getElementById('empty-state').style.display = 'block';
+            }
+        }
+
+        // 渲染基本資訊
+        function renderOrderInfoCard(orderId, info, shortage) {
+            document.getElementById('val-order-id').textContent = orderId;
+            
+            // 填寫基本資料，如果沒有 API 回傳，使用預設值
+            document.getElementById('val-machine-type').textContent = info.machine_type || shortage.machine_type || '未知機型';
+            document.getElementById('val-sales-order').textContent = info.order_number || '-';
+            document.getElementById('val-customer').textContent = info.customer || '-';
+            
+            const start = info.production_start || '-';
+            const end = info.shipment_date || '-';
+            document.getElementById('val-production-period').textContent = `${start} ~ ${end}`;
+            document.getElementById('val-factory').textContent = info.factory || '一廠';
+            
+            // 計算充足率
+            const total = shortage.total_materials || 0;
+            const shortageCount = shortage.shortage_count || 0;
+            const satisfyCount = total - shortageCount;
+            const satisfyRatio = total > 0 ? Math.round((satisfyCount / total) * 100) : 100;
+            
+            const ratioEl = document.getElementById('val-satisfy-ratio');
+            ratioEl.textContent = `${satisfyRatio}%`;
+            
+            const progressBar = document.getElementById('progress-bar');
+            progressBar.style.width = `${satisfyRatio}%`;
+            
+            if (shortageCount > 0) {
+                progressBar.classList.add('has-shortage');
+                ratioEl.style.color = '#f44336';
+            } else {
+                progressBar.classList.remove('has-shortage');
+                ratioEl.style.color = '#4caf50';
+            }
+            
+            document.getElementById('val-summary-text').innerHTML = `
+                共 <strong>${total}</strong> 項組件物料，其中 
+                <span style="color: ${shortageCount > 0 ? '#f44336' : 'inherit'}; font-weight: bold;">${shortageCount}</span> 項缺料，
+                已備齊 <span style="color: #4caf50; font-weight: bold;">${satisfyCount}</span> 項。
+            `;
+        }
+
+        // 渲染物料表格
+        function renderMaterialsTable(details) {
+            const tbody = document.getElementById('materials-tbody');
+            
+            if (details.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">此工單無任何組件物料需求。</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = details.map(item => {
+                const isShortage = item['是否缺料'];
+                const rowClass = isShortage ? 'shortage-row' : '';
+                const statusText = isShortage ? '⚠️ 缺料' : '✅ 充足';
+                const statusColor = isShortage ? '#f44336' : '#4caf50';
+                
+                const unrestricted = item['未限制'] || 0;
+                const inspection = item['品檢中'] || 0;
+                const available = item['可用庫存'] || (unrestricted + inspection);
+                
+                return `
+                    <tr class="${rowClass}">
+                        <td>
+                            <span class="clickable-material" onclick="showMaterialDetails('${item['物料']}')">${item['物料']}</span>
+                        </td>
+                        <td title="${item['物料說明'] || ''}">${truncateText(item['物料說明'] || '', 30)}</td>
+                        <td style="text-align: right; font-weight: bold;">${item['需求數量'] || 0}</td>
+                        <td style="text-align: right; color: ${isShortage ? '#f44336' : '#4caf50'}; font-weight: bold;">${available}</td>
+                        <td style="text-align: right;">${unrestricted}</td>
+                        <td style="text-align: right;">${inspection}</td>
+                        <td style="text-align: center; color: ${statusColor}; font-weight: bold;">${statusText}</td>
+                        <td style="text-align: center;">${item['需求日期'] || '-'}</td>
+                        <td>${item['採購人員'] || '-'}</td>
+                        <td style="text-align: center; font-weight: bold;">${item['預計交貨日'] || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 輔助函式：文字截斷
+        function truncateText(text, maxLength) {
+            if (!text) return '';
+            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+        }
+
+        // 當儲存交期完成後，自動更新表格（覆寫 global callback）
+        window.showShortageDetails = function(orderId, orderType) {
+            if (orderType === 'finished') {
+                performQuery();
+            }
+        };
+
+        // 彈出物料詳情
+        function showMaterialDetails(materialId) {
+            if (window.openDetailsModal) {
+                window.openDetailsModal(materialId);
+            } else {
+                console.error('Material modal module not loaded');
+                alert('物料詳情模組尚未載入，請稍後再試');
+            }
+        }
+
+        // 匯出為 Excel 檔案
+        async function exportToExcel() {
+            const orderInput = document.getElementById('finished-order-input');
+            const orderId = orderInput.value.trim();
+            
+            if (!orderId || !currentMaterialsData.length) {
+                alert('無資料可匯出！');
+                return;
+            }
+            
+            const exportBtn = document.getElementById('export-btn');
+            const originalText = exportBtn.textContent;
+            exportBtn.disabled = true;
+            exportBtn.textContent = '⏳ 匯出中...';
+            
+            try {
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet('成品工單組件用料');
+                
+                // 設定工單基本資訊標題與欄位
+                worksheet.addRow(['成品工單組件用料查詢結果']);
+                worksheet.addRow([`工單號碼: ${orderId}`, `機型/說明: ${currentOrderData.machine_type || '-'}`]);
+                worksheet.addRow([`訂單號碼: ${currentOrderData.order_number || '-'}`, `客戶名稱: ${currentOrderData.customer || '-'}`]);
+                worksheet.addRow([`生產期間: ${(currentOrderData.production_start || '')} ~ ${(currentOrderData.shipment_date || '')}`, `廠別: ${currentOrderData.factory || '一廠'}`]);
+                worksheet.addRow([]); // 空行
+                
+                // 表格欄位設定
+                const headerRowIdx = 6;
+                worksheet.getRow(headerRowIdx).values = [
+                    '物料編號', '物料說明', '需求數量', '可用庫存', '未限制庫存', '品質檢驗中', '狀態', '需求日期', '採購人員', '預計交貨日'
+                ];
+                
+                // 設定表格欄寬
+                worksheet.columns = [
+                    { key: 'material_id', width: 15 },
+                    { key: 'description', width: 35 },
+                    { key: 'demand_qty', width: 12 },
+                    { key: 'available_stock', width: 12 },
+                    { key: 'unrestricted', width: 12 },
+                    { key: 'inspection', width: 12 },
+                    { key: 'status', width: 10 },
+                    { key: 'demand_date', width: 12 },
+                    { key: 'buyer', width: 12 },
+                    { key: 'delivery_date', width: 12 }
+                ];
+                
+                // 填入組件資料
+                currentMaterialsData.forEach(item => {
+                    const unrestricted = item['未限制'] || 0;
+                    const inspection = item['品檢中'] || 0;
+                    const available = item['可用庫存'] || (unrestricted + inspection);
+                    
+                    const row = worksheet.addRow({
+                        material_id: String(item['物料']),
+                        description: item['物料說明'] || '',
+                        demand_qty: item['需求數量'] || 0,
+                        available_stock: available,
+                        unrestricted: unrestricted,
+                        inspection: inspection,
+                        status: item['是否缺料'] ? '缺料' : '充足',
+                        demand_date: item['需求日期'] || '',
+                        buyer: item['採購人員'] || '',
+                        delivery_date: item['預計交貨日'] || ''
+                    });
+                    
+                    // 設定物料編號為文字格式，避免 Excel 自動轉換
+                    row.getCell(1).numFmt = '@';
+                    
+                    // 若缺料，設定該列的狀態單元格或整列顏色為粉紅
+                    if (item['是否缺料']) {
+                        row.getCell(7).font = { color: { argb: 'FFFF0000' }, bold: true };
+                        row.getCell(7).fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFFFEBEE' }
+                        };
+                    } else {
+                        row.getCell(7).font = { color: { argb: 'FF2E7D32' }, bold: true };
+                    }
+                });
+                
+                // 設定大標題樣式
+                worksheet.mergeCells('A1:J1');
+                const titleCell = worksheet.getCell('A1');
+                titleCell.font = { size: 16, bold: true, color: { argb: 'FF1A237E' } };
+                titleCell.alignment = { horizontal: 'center' };
+                
+                // 設定資料表頭樣式
+                const headerRow = worksheet.getRow(headerRowIdx);
+                headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                for (let colIdx = 1; colIdx <= 10; colIdx++) {
+                    const cell = headerRow.getCell(colIdx);
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF1976D2' }
+                    };
+                    cell.alignment = { horizontal: colIdx === 7 || colIdx === 8 || colIdx === 10 ? 'center' : (colIdx === 3 || colIdx === 4 || colIdx === 5 || colIdx === 6 ? 'right' : 'left') };
+                }
+                
+                // 產生檔案並下載
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                
+                const now = new Date();
+                const dateStr = now.toISOString().split('T')[0];
+                saveAs(blob, `成品工單用料_${orderId}_${dateStr}.xlsx`);
+                
+            } catch (error) {
+                console.error('匯出失敗:', error);
+                alert(`匯出 Excel 失敗: ${error.message}`);
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = originalText;
+            }
+        }
+    </script>
+</body>
+
+</html>

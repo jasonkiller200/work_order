@@ -1864,7 +1864,12 @@ def get_order_shortage_details(order_id):
         from app.services.work_order_stats_service import WorkOrderStatsService
         
         order_type = request.args.get('order_type', 'semi')  # 🆕 semi / finished
-        details = WorkOrderStatsService.get_order_shortage_details(order_id, order_type=order_type)
+        filter_components = request.args.get('filter_components', 'false').lower() == 'true'
+        details = WorkOrderStatsService.get_order_shortage_details(
+            order_id, 
+            order_type=order_type,
+            filter_components=filter_components
+        )
         
         return jsonify({
             'order_id': order_id,

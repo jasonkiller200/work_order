@@ -385,7 +385,7 @@ class WorkOrderStatsService:
         return result
     
     @classmethod
-    def get_order_shortage_details(cls, order_id, order_type='semi'):
+    def get_order_shortage_details(cls, order_id, order_type='semi', filter_components=False):
         """取得特定工單的缺料物料明細（使用跨工單 FIFO 計算）"""
         try:
             current_data = cache_manager.get_current_data()
@@ -469,6 +469,22 @@ class WorkOrderStatsService:
                                 order_material_info[mat_id]['需求日期'] = demand_date
                             if not order_material_info[mat_id]['物料說明'] and mat_desc:
                                 order_material_info[mat_id]['物料說明'] = mat_desc
+            
+            # 如果需要依資料庫中的成品組件需求過濾
+            if filter_components:
+                try:
+                    from app.models.database import ComponentRequirement
+                    db_base_ids = {r.base_material_id for r in ComponentRequirement.query.all() if r.base_material_id}
+                    
+                    filtered_info = {}
+                    for mat_id, mat_data in order_material_info.items():
+                        base_id = str(mat_id)[:10]
+                        if base_id in db_base_ids:
+                            filtered_info[mat_id] = mat_data
+                    order_material_info = filtered_info
+                    app_logger.info(f"成品工單 {order_id} 組件用料過濾完畢，保留 {len(order_material_info)} 筆符合資料庫定義的項目")
+                except Exception as e:
+                    app_logger.error(f"成品工單組件用料比對資料庫失敗: {e}")
             
             # FIFO 排序：依需求日期，再依工單號碼
             all_demands.sort(key=lambda x: (x['date'] or 'zzzz', x['order_id']))
