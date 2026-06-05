@@ -536,21 +536,20 @@ class WorkOrderStatsService:
                 except Exception as e:
                     app_logger.error(f"工單統計：查詢交期排程失敗: {e}")
             
-            # 🆕 從儀表板取得採購人員資料
-            if order_type == 'finished':
-                procurement_data = current_data.get('finished_dashboard', [])
-            else:
-                procurement_data = current_data.get('materials_dashboard', [])
-            
+            # 🔧 修正：合併 finished_dashboard 和 materials_dashboard 兩個來源建立採購人員對照表
+            # 原因：成品工單物料需求被分流到兩個 map：
+            #   - 符合 valid_base_ids 的 → demand_details_map → materials_dashboard
+            #   - 不符合的 → finished_demand_details_map → finished_dashboard
+            # 只查單一 dashboard 會導致另一批物料的採購人員查不到
             procurement_map = {}
-            for item in procurement_data:
-                material_id = str(item.get('物料', ''))
-                if material_id:
-                    procurement_map[material_id] = {
-                        '採購人員': item.get('採購人員', '')
-                    }
+            for dashboard_key in ('materials_dashboard', 'finished_dashboard'):
+                for item in current_data.get(dashboard_key, []):
+                    material_id = str(item.get('物料', ''))
+                    buyer = item.get('採購人員', '')
+                    if material_id and buyer and material_id not in procurement_map:
+                        procurement_map[material_id] = {'採購人員': buyer}
             
-            app_logger.info(f"工單統計：建立採購對照表，共 {len(procurement_map)} 筆")
+            app_logger.info(f"工單統計：建立採購對照表，共 {len(procurement_map)} 筆（合併兩個 dashboard）")
             
             for mat_id, mat_data in order_material_info.items():
                 available = inventory_map.get(mat_id, 0)
