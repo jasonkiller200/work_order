@@ -1968,6 +1968,7 @@ def sync_delivery_to_excel():
                 'success': True,
                 'message': f"成功同步 {result['synced_count']} 筆交期資料",
                 'synced_count': result['synced_count'],
+                'cleared_count': result['cleared_count'],
                 'skipped_count': result['skipped_count']
             })
         else:

@@ -16,9 +16,27 @@ EXCEL_CONFIG = {
     'file_path': r'Q:\G003\生產排程\8週生產排程紀錄\裝配進度&缺料情報\第一廠\組件課\未來半品缺料.xlsm',
     'sheet_name': '半品',
     'material_col': 'A',  # 料號欄位
+    'status_col': 'G',    # 狀態欄位
     'delivery_col': 'H',  # 交期欄位
     'header_row': 1       # 表頭列數
 }
+
+
+def _parse_excel_date(val):
+    """將 Excel 讀取出的多種交期格式安全地轉為 datetime.date"""
+    if isinstance(val, datetime):
+        return val.date()
+    if hasattr(val, 'date'):  # 已是 date 物件
+        return val
+    if isinstance(val, str):
+        val = val.strip()
+        # 嘗試解析常見格式
+        for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%Y-%m-%d %H:%M:%S'):
+            try:
+                return datetime.strptime(val, fmt).date()
+            except ValueError:
+                continue
+    return None
 
 
 def sync_delivery_to_excel():
@@ -29,12 +47,14 @@ def sync_delivery_to_excel():
         dict: 同步結果統計
             - success: bool
             - synced_count: int - 成功同步筆數
+            - cleared_count: int - 清空筆數（過期且狀態為 OK/缺料）
             - skipped_count: int - 跳過筆數（系統無交期）
             - error: str - 錯誤訊息（如果有）
     """
     result = {
         'success': False,
         'synced_count': 0,
+        'cleared_count': 0,
         'skipped_count': 0,
         'not_found_count': 0,
         'error': None
@@ -70,7 +90,11 @@ def sync_delivery_to_excel():
         # 5. 遍歷 Excel 每一列
         header_row = EXCEL_CONFIG['header_row']
         material_col = EXCEL_CONFIG['material_col']
+        status_col = EXCEL_CONFIG['status_col']
         delivery_col = EXCEL_CONFIG['delivery_col']
+        
+        from ..utils.helpers import get_taiwan_time
+        today = get_taiwan_time().date()
         
         for row_num in range(header_row + 1, ws.max_row + 1):
             # 取得料號
@@ -82,14 +106,32 @@ def sync_delivery_to_excel():
             # 轉為字串並去除空白
             material_id = str(material_id).strip()
             
-            # 6. 在系統中查找對應的交期
-            if material_id in delivery_map:
-                expected_date = delivery_map[material_id]
-                # 回填到交期欄位
-                ws[f'{delivery_col}{row_num}'] = expected_date.strftime('%Y-%m-%d')
+            # 取得 G 欄狀態與 H 欄原有交期
+            status_val = ws[f'{status_col}{row_num}'].value
+            status_str = str(status_val).strip() if status_val is not None else ""
+            
+            current_delivery_val = ws[f'{delivery_col}{row_num}'].value
+            
+            # 取得系統對應的交期
+            system_date = delivery_map.get(material_id)  # datetime.date 物件或 None
+            
+            # 決定要評估的日期：優先採用系統新交期，其次為 Excel 原有交期
+            eval_date = system_date if system_date else _parse_excel_date(current_delivery_val)
+            
+            # 檢查是否符合清理條件：交期已小於今天，且 G 欄為 "OK" 或 "缺料"
+            is_expired = eval_date is not None and eval_date < today
+            is_target_status = status_str in ("OK", "缺料")
+            
+            if is_expired and is_target_status:
+                # 符合清理條件，將 H 欄清空
+                ws[f'{delivery_col}{row_num}'] = None
+                result['cleared_count'] += 1
+            elif system_date:
+                # 不符合清理條件，且系統中有最新交期，回填新交期
+                ws[f'{delivery_col}{row_num}'] = system_date.strftime('%Y-%m-%d')
                 result['synced_count'] += 1
             else:
-                # 系統中沒有交期資料，跳過（不清空現有值）
+                # 系統無交期且不符合清理條件，保留 Excel 原有值
                 result['skipped_count'] += 1
         
         # 7. 儲存 Excel
@@ -98,7 +140,11 @@ def sync_delivery_to_excel():
         wb.close()
         
         result['success'] = True
-        app_logger.info(f'交期同步完成: 成功 {result["synced_count"]} 筆, 跳過 {result["skipped_count"]} 筆')
+        app_logger.info(
+            f'交期同步完成: 成功 {result["synced_count"]} 筆, '
+            f'清空 {result["cleared_count"]} 筆, '
+            f'跳過 {result["skipped_count"]} 筆'
+        )
         
     except PermissionError:
         result['error'] = 'Excel 檔案正在被其他程式使用中，請先關閉檔案後再試'
