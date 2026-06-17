@@ -79,6 +79,25 @@ class CacheManager:
             self.last_update_time = datetime.now(self.taiwan_tz)
         
         app_logger.info(f"快取更新完畢，線上服務已切換至緩衝區 {self.live_cache_pointer} (預序列化完成)")
+
+    def refresh_current_serialized_cache(self):
+        """重新序列化目前線上快取，供局部資料更新後使用。"""
+        import json
+        with self.cache_lock:
+            current_key = self.live_cache_pointer
+            current_data = self.data_cache[current_key] or {}
+            materials_list = current_data.get("materials_dashboard", [])
+            finished_list = current_data.get("finished_dashboard", [])
+
+            try:
+                self.serialized_cache[current_key] = {
+                    "materials": json.dumps(materials_list, ensure_ascii=False),
+                    "finished_materials": json.dumps(finished_list, ensure_ascii=False)
+                }
+                self.last_update_time = datetime.now(self.taiwan_tz)
+            except Exception as e:
+                app_logger.error(f"重新序列化目前快取失敗: {e}", exc_info=True)
+                raise
     
     def set_update_interval(self, interval):
         """設定快取更新間隔（秒）"""

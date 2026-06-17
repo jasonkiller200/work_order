@@ -18,8 +18,8 @@ window.loadProcurementDashboard = function () {
 
     // 同時載入半品儀表板、成品儀表板
     Promise.all([
-        fetch('/api/materials').then(r => r.json()),
-        fetch('/api/finished_materials').then(r => r.json())
+        fetch('/api/materials', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/finished_materials', { cache: 'no-store' }).then(r => r.json())
     ])
         .then(([materialsData, finishedData]) => {
             // 🆕 儲存資料，使用後端已預先計算下推的輕量物料資料

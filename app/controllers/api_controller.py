@@ -2,6 +2,7 @@
 # API 控制器
 
 import logging
+import time
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
@@ -21,6 +22,99 @@ from app.utils.helpers import format_date, get_taiwan_time
 app_logger = logging.getLogger(__name__)
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
+
+
+def _refresh_dashboard_cache_after_delivery_change(action_label='delivery_change'):
+    """交期異動後即時更新單一物料快取，避免前端需等待排程更新。"""
+    started_at = time.perf_counter()
+    app_logger.info(f"[單筆物料快取刷新] 開始: action={action_label}")
+    try:
+        material_id = action_label if action_label and action_label not in {
+            'save_delivery',
+            'update_delivery',
+            'delete_delivery',
+            'clear_overdue_delivery',
+            'batch_clear_overdue_deliveries'
+        } else None
+        if not material_id:
+            elapsed_ms = (time.perf_counter() - started_at) * 1000
+            app_logger.warning(
+                f"[單筆物料快取刷新] 略過: action={action_label}, reason=no_material_id, elapsed_ms={elapsed_ms:.1f}"
+            )
+            return
+
+        current_data = cache_manager.get_current_data()
+        if not current_data:
+            elapsed_ms = (time.perf_counter() - started_at) * 1000
+            app_logger.warning(
+                f"[單筆物料快取刷新] 略過: action={action_label}, material_id={material_id}, reason=no_cache, elapsed_ms={elapsed_ms:.1f}"
+            )
+            return
+
+        from app.services.data_service import DataService
+
+        schedules = DeliverySchedule.query.filter(
+            DeliverySchedule.material_id == material_id,
+            DeliverySchedule.status.notin_(['completed', 'cancelled'])
+        ).order_by(DeliverySchedule.expected_date).all()
+
+        schedule_map = {
+            material_id: [
+                {
+                    'id': s.id,
+                    'expected_date': s.expected_date,
+                    'quantity': float(s.quantity),
+                    'received_quantity': float(s.received_quantity or 0),
+                    'po_number': s.po_number or '',
+                    'supplier': s.supplier or '',
+                    'notes': s.notes or '',
+                    'status': s.status,
+                    'created_at': s.created_at.isoformat() if s.created_at else None
+                }
+                for s in schedules
+            ]
+        }
+
+        updated_count = 0
+        dashboard_targets = [
+            ('materials_dashboard', 'demand_details_map'),
+            ('finished_dashboard', 'finished_demand_details_map')
+        ]
+
+        for dashboard_key, demand_map_key in dashboard_targets:
+            materials = current_data.get(dashboard_key, [])
+            demand_map = current_data.get(demand_map_key, {})
+
+            for material in materials:
+                if material.get('物料') != material_id:
+                    continue
+
+                has_substitute_flag = bool(material.get('is_substitute_notified'))
+                notified_substitutes = {material_id: True} if has_substitute_flag else {}
+
+                DataService._compute_dashboard_flags(
+                    [material],
+                    demand_map,
+                    schedule_map,
+                    notified_substitutes
+                )
+
+                material['delivery_schedules'] = []
+                material['demand_details'] = []
+                updated_count += 1
+
+        cache_manager.refresh_current_serialized_cache()
+
+        elapsed_ms = (time.perf_counter() - started_at) * 1000
+        app_logger.info(
+            f"[單筆物料快取刷新] 成功: action={action_label}, material_id={material_id}, updated_count={updated_count}, elapsed_ms={elapsed_ms:.1f}"
+        )
+    except Exception as e:
+        elapsed_ms = (time.perf_counter() - started_at) * 1000
+        app_logger.error(
+            f"[單筆物料快取刷新] 異常: action={action_label}, elapsed_ms={elapsed_ms:.1f}, error={e}",
+            exc_info=True
+        )
 
 @api_bp.route('/materials')
 @cache_required
@@ -806,6 +900,7 @@ def save_delivery():
                 po.status = 'updated'
                 
         db.session.commit()
+        _refresh_dashboard_cache_after_delivery_change(material_id)
         app_logger.info(f"已儲存物料 {material_id} 的分批交期: {expected_date}")
         
         return jsonify({
@@ -845,6 +940,7 @@ def update_delivery(schedule_id):
             schedule.po_number = form_data['po_number']
             
         db.session.commit()
+        _refresh_dashboard_cache_after_delivery_change(schedule.material_id)
         app_logger.info(f"已更新交期分批 (ID: {schedule_id})")
         return jsonify({"success": True})
     except Exception as e:
@@ -863,6 +959,7 @@ def delete_delivery(schedule_id):
         material_id = schedule.material_id
         db.session.delete(schedule)
         db.session.commit()
+        _refresh_dashboard_cache_after_delivery_change(material_id)
         
         app_logger.info(f"已刪除物料 {material_id} 的交期分批 (ID: {schedule_id})")
         return jsonify({"success": True})
@@ -888,6 +985,7 @@ def clear_overdue_delivery(material_id):
             db.session.delete(s)
             
         db.session.commit()
+        _refresh_dashboard_cache_after_delivery_change(material_id)
         app_logger.info(f"已清除物料 {material_id} 的 {count} 筆過期交期")
         
         return jsonify({"success": True, "cleared_count": count})
@@ -908,12 +1006,16 @@ def batch_clear_overdue_deliveries():
             DeliverySchedule.expected_date <= yesterday,
             DeliverySchedule.status.notin_(['completed', 'cancelled'])
         ).all()
+
+        affected_material_ids = sorted({s.material_id for s in overdue_schedules if s.material_id})
         
         count = len(overdue_schedules)
         for s in overdue_schedules:
             db.session.delete(s)
             
         db.session.commit()
+        for affected_material_id in affected_material_ids:
+            _refresh_dashboard_cache_after_delivery_change(affected_material_id)
         app_logger.info(f"批量清理完成，共清除 {count} 筆過期交期")
         
         return jsonify({

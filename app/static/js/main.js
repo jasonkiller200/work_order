@@ -995,8 +995,16 @@ async function exportToExcel() {
                 projected_shortage: m.projected_shortage ? parseFloat(m.projected_shortage.toFixed(0)) : 0
             });
 
-            // 🆕 如果是 30 日內缺料項目,設定綠色背景
-            if (m.shortage_within_30_days) {
+            // 匯出樣式需與畫面一致：紅底（逾期欠料）優先於綠底（30 日內缺料）
+            if (m.is_overdue_demand) {
+                row.eachCell((cell) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFCDD2' } // 淡紅色背景
+                    };
+                });
+            } else if (m.shortage_within_30_days) {
                 row.eachCell((cell) => {
                     cell.fill = {
                         type: 'pattern',
