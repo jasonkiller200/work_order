@@ -664,7 +664,9 @@ def api_status():
         "live_cache": cache_manager.get_live_cache_pointer(),
         "data_loaded": current_data is not None,
         "last_update_time": cache_manager.get_last_update_time(),
-        "next_update_time": cache_manager.get_next_update_time()
+        "next_update_time": cache_manager.get_next_update_time(),
+        "update_issue": cache_manager.get_update_issue(),
+        "update_issue_time": cache_manager.get_update_issue_time()
     }
     return jsonify(status)
 

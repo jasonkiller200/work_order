@@ -42,9 +42,19 @@ function checkApiStatus() {
     fetch('/api/status')
         .then(response => response.json())
         .then(data => {
-            if (data.service_status === 'online' && data.data_loaded) {
+            if (data.update_issue) {
+                badge.className = 'status-indicator loading';
+                let statusText = '⚠️ 資料更新異常';
+                if (data.update_issue_time) {
+                    statusText += `(${data.update_issue_time})`;
+                }
+                statusText += '，請檢查 Excel';
+                badgeText.textContent = statusText;
+                badge.title = data.update_issue;
+            } else if (data.service_status === 'online' && data.data_loaded) {
                 // 正常狀態 - 綠色
                 badge.className = 'status-indicator';
+                badge.title = '';
                 // 顯示快取和下次更新時間
                 let statusText = `✅ 快取: ${data.live_cache}`;
                 if (data.next_update_time) {
@@ -54,10 +64,12 @@ function checkApiStatus() {
             } else if (data.service_status === 'online' && !data.data_loaded) {
                 // 服務正常但資料未載入 - 橙色
                 badge.className = 'status-indicator loading';
+                badge.title = '';
                 badgeText.textContent = '⚠️ 資料載入中';
             } else {
                 // 服務異常 - 紅色
                 badge.className = 'status-indicator error';
+                badge.title = '';
                 badgeText.textContent = '❌ 服務異常';
             }
         })

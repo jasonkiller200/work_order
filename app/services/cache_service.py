@@ -32,6 +32,8 @@ class CacheManager:
         self.taiwan_tz = pytz.timezone('Asia/Taipei')
         self.last_update_time = None
         self.update_interval = 1800  # 預設 30 分鐘
+        self.last_update_issue = None
+        self.last_update_issue_time = None
     
     def get_current_data(self):
         """取得當前快取資料"""
@@ -77,6 +79,8 @@ class CacheManager:
         with self.cache_lock:
             self.live_cache_pointer = target_buffer
             self.last_update_time = datetime.now(self.taiwan_tz)
+            self.last_update_issue = None
+            self.last_update_issue_time = None
         
         app_logger.info(f"快取更新完畢，線上服務已切換至緩衝區 {self.live_cache_pointer} (預序列化完成)")
 
@@ -102,6 +106,24 @@ class CacheManager:
     def set_update_interval(self, interval):
         """設定快取更新間隔（秒）"""
         self.update_interval = interval
+
+    def record_update_issue(self, message):
+        """記錄最近一次資料更新異常，供前端提示使用。"""
+        with self.cache_lock:
+            self.last_update_issue = message
+            self.last_update_issue_time = datetime.now(self.taiwan_tz)
+
+    def get_update_issue(self):
+        """取得最近一次資料更新異常訊息。"""
+        with self.cache_lock:
+            return self.last_update_issue
+
+    def get_update_issue_time(self):
+        """取得最近一次資料更新異常時間。"""
+        with self.cache_lock:
+            if self.last_update_issue_time is None:
+                return None
+            return self.last_update_issue_time.strftime('%H:%M')
     
     def get_next_update_time(self):
         """

@@ -137,6 +137,7 @@ def initialize_app_data(app):
             cache_manager.update_cache(initial_data)
             app_logger.info("主程式：首次資料載入成功。")
         else:
+            cache_manager.record_update_issue("首次資料更新失敗，請檢查 Excel 檔案是否缺失或格式異常。")
             app_logger.error("主程式：首次資料載入失敗！服務將在沒有資料的情況下啟動。")
         
         # 執行首次訂單備註與版本快取載入
@@ -161,6 +162,7 @@ def start_background_threads(app):
             if new_data:
                 cache_manager.update_cache(new_data)
             else:
+                cache_manager.record_update_issue("背景資料更新失敗，請檢查已訂未交、鑄件未交或其他 Excel 檔案格式。")
                 app_logger.error("背景執行緒：資料載入失敗，本次不更新快取。")
             
             # 🆕 執行入庫同步（採購單 + 鑄件訂單）
