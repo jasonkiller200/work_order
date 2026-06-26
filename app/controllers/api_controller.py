@@ -471,6 +471,19 @@ def update_buyer():
                     material_description = material.get('物料說明', '')
                     material_found = True
                     break
+
+        # 同步更新 inventory_dict 中的採購人員資訊（若存在）
+        if material_found:
+            inventory_dict = current_data.get("inventory_dict", {})
+            inventory_info = inventory_dict.get(material_id)
+            if inventory_info:
+                inventory_info['採購人員'] = new_buyer_name
+
+        # 立即刷新序列化快取，避免後續載入仍拿到舊值
+        try:
+            cache_manager.refresh_current_serialized_cache()
+        except Exception as refresh_error:
+            app_logger.warning(f"更新採購人員後刷新快取失敗: {refresh_error}")
         
         # 2. 寫入資料庫
         try:

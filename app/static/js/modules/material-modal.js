@@ -481,16 +481,15 @@ function bindBuyerSelectEvents() {
                         }, 1500);
 
                         // 更新快取資料
-                        if (dashboardType === 'finished') {
-                            const material = currentFinishedMaterialsData.find(m => m['物料'] === materialId);
-                            if (material) {
-                                material['採購人員'] = newBuyer;
-                            }
-                        } else {
-                            const material = currentMaterialsData.find(m => m['物料'] === materialId);
-                            if (material) {
-                                material['採購人員'] = newBuyer;
-                            }
+                        const targetData = dashboardType === 'finished' ? currentFinishedMaterialsData : currentMaterialsData;
+                        const material = targetData.find(m => m['物料'] === materialId);
+                        if (material) {
+                            material['採購人員'] = newBuyer;
+                        }
+
+                        // 讓採購人員篩選下拉同步更新
+                        if (typeof populateBuyerFilter === 'function') {
+                            populateBuyerFilter(targetData);
                         }
 
                         // 重新渲染表格以反映變更

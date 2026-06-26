@@ -410,7 +410,10 @@ window.renderMaterialsTable = function () {
         tableHTML += '<tr><td colspan="11" style="text-align: center;">🎉 太棒了！目前沒有任何符合條件的缺料項目。</td></tr>';
     } else {
         paginatedData.forEach(m => {
-            const buyer = m['採購人員'] || '-';
+            const rawBuyer = m['採購人員'];
+            const buyer = rawBuyer !== undefined && rawBuyer !== null && String(rawBuyer).trim() !== ''
+                ? String(rawBuyer).trim()
+                : '未指定';
             // 🆕 判斷行底色優先級：紅底（逾期欠料） > 綠底（30日內缺料）
             let rowClass = '';
             if (m.is_overdue_demand) {
