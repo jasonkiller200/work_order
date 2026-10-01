@@ -199,13 +199,11 @@ class ReceiptSyncService:
             po.status = 'completed'
             po.outstanding_quantity = Decimal('0')
             po.received_quantity = po.ordered_quantity
-            self._reconcile_delivery_schedules(po.material_id, po.po_number, receipt_qty)
+            self._reconcile_delivery_schedules(po.material_id)
             return 'completed'
         elif po.received_quantity > 0:
-            old_status = po.status
             po.status = 'partial'
-            if old_status != 'partial':
-                self._reconcile_delivery_schedules(po.material_id, po.po_number, receipt_qty)
+            self._reconcile_delivery_schedules(po.material_id)
             return 'partial'
         
         return 'updated'
@@ -226,51 +224,53 @@ class ReceiptSyncService:
             co.status = 'completed'
             co.outstanding_quantity = Decimal('0')
             co.received_quantity = co.ordered_quantity
-            self._reconcile_delivery_schedules(co.material_id, co.order_number, receipt_qty)
+            self._reconcile_delivery_schedules(co.material_id)
             return 'completed'
         elif co.received_quantity > 0:
-            old_status = co.status
             co.status = 'partial'
-            if old_status != 'partial':
-                self._reconcile_delivery_schedules(co.material_id, co.order_number, receipt_qty)
+            self._reconcile_delivery_schedules(co.material_id)
             return 'partial'
         
         return 'updated'
     
-    def _reconcile_delivery_schedules(self, material_id, order_number, receipt_qty):
+    def _reconcile_delivery_schedules(self, material_id):
         """
-        入庫時清除最近一筆待交期
+        入庫時清除該物料最早日期的所有待交期
         
         邏輯：
-        1. 找該物料尚未完成的交期排程
-        2. 優先找訂單號相符的
-        3. 刪除日期最近的那一筆
+        1. 找該物料尚未完成的交期排程中，最早的日期
+        2. 刪除該物料在該日期的所有交期（同日期多筆一併清除）
         """
         from app.models.database import DeliverySchedule
         
         try:
-            # 找該物料+訂單號相符的、最近的待交期
-            schedule = DeliverySchedule.query.filter(
+            # 找該物料最早的一筆待交期，取得其日期
+            earliest = DeliverySchedule.query.filter(
                 DeliverySchedule.material_id == material_id,
-                DeliverySchedule.po_number == order_number,
                 DeliverySchedule.status.notin_(['completed', 'cancelled'])
             ).order_by(
                 DeliverySchedule.expected_date
             ).first()
             
-            # 如果沒有訂單號相符的，找該物料最近的待交期
-            if not schedule:
-                schedule = DeliverySchedule.query.filter(
-                    DeliverySchedule.material_id == material_id,
-                    DeliverySchedule.status.notin_(['completed', 'cancelled'])
-                ).order_by(
-                    DeliverySchedule.expected_date
-                ).first()
+            if not earliest:
+                return
             
-            if schedule:
+            earliest_date = earliest.expected_date
+            
+            # 刪除該物料在該日期的所有交期
+            schedules_to_delete = DeliverySchedule.query.filter(
+                DeliverySchedule.material_id == material_id,
+                DeliverySchedule.expected_date == earliest_date,
+                DeliverySchedule.status.notin_(['completed', 'cancelled'])
+            ).all()
+            
+            for schedule in schedules_to_delete:
                 app_logger.info(f"🗑️ 刪除交期: 物料 {material_id}, 訂單 {schedule.po_number}, "
                                f"預計 {schedule.expected_date}, 數量 {schedule.quantity}")
                 self.db.session.delete(schedule)
+            
+            if schedules_to_delete:
+                app_logger.info(f"📋 物料 {material_id} 共刪除 {len(schedules_to_delete)} 筆交期 (日期: {earliest_date})")
             
         except Exception as e:
             app_logger.error(f"清除交期失敗: {e}")
