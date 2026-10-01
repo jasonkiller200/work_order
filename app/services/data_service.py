@@ -373,10 +373,11 @@ class DataService:
             # 5. 讀取分批交期排程
             delivery_schedules_map = {}
             try:
-                # 只讀取未完成且未取消的交期
+                # 只讀取未完成且未取消的交期，按預計日期升序排列
+                # 確保 delivery_schedules_map 中每個物料的列表第一筆是最早的交期
                 schedules = DeliverySchedule.query.filter(
                     DeliverySchedule.status.notin_(['completed', 'cancelled'])
-                ).all()
+                ).order_by(DeliverySchedule.expected_date.asc()).all()
                 for s in schedules:
                     if s.material_id not in delivery_schedules_map:
                         delivery_schedules_map[s.material_id] = []
