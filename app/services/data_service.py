@@ -390,12 +390,14 @@ class DataService:
             except Exception as e:
                 app_logger.error(f"讀取分批交期失敗: {e}")
 
-            # 5.1 備援機制 (Fallback)：若物料在 DeliverySchedule 無排程，自動由未結案採購單 (PO) 的 updated_delivery_date 補足
+            # 5.1 備援機制 (Fallback)：若物料在 DeliverySchedule 無排程，自動由未結案採購單 (PO) 的有效預計交期 (>=今天) 補足
             try:
+                today = get_taiwan_time().date()
                 pos_with_delivery = PurchaseOrder.query.filter(
                     PurchaseOrder.status.notin_(['completed', 'cancelled']),
                     PurchaseOrder.outstanding_quantity > 0,
-                    PurchaseOrder.updated_delivery_date.isnot(None)
+                    PurchaseOrder.updated_delivery_date.isnot(None),
+                    PurchaseOrder.updated_delivery_date >= today
                 ).order_by(PurchaseOrder.updated_delivery_date.asc()).all()
 
                 fallback_mat_set = set()
@@ -1608,7 +1610,8 @@ class DataService:
             ).subquery()
             
             missing_schedules = PurchaseOrder.query.filter(
-                PurchaseOrder.status.in_(['pending', 'partial']),
+                PurchaseOrder.status.in_(['pending', 'partial', 'updated']),
+                PurchaseOrder.outstanding_quantity > 0,
                 PurchaseOrder.updated_delivery_date.isnot(None),
                 PurchaseOrder.updated_delivery_date >= today,
                 ~PurchaseOrder.po_number.in_(db.session.query(subquery))

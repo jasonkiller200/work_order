@@ -317,10 +317,6 @@ class ReceiptSyncService:
                     # 訂單已完成，殘留交期也應清除
                     should_delete = True
                     delete_reason = '訂單已完成'
-                elif order_status == 'partial':
-                    # 訂單已部分入庫，殘留交期也應清除
-                    should_delete = True
-                    delete_reason = '訂單已部分入庫'
                 
                 if should_delete:
                     app_logger.info(f"🗑️ 刪除交期: 物料 {s.material_id}, 訂單 {po_number} ({delete_reason})")

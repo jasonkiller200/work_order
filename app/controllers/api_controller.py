@@ -863,12 +863,13 @@ def get_delivery(material_id):
                 manual_delivery = max(overdue, key=lambda x: x['expected_date'])
                 manual_delivery['status'] = 'overdue'
         else:
-            # 備援：若無分批排程，自動查未結案且有預計交期的採購單
+            # 備援：若無分批排程，自動查未結案且有有效預計交期 (>=今天) 的採購單
             pos = PurchaseOrder.query.filter(
                 PurchaseOrder.material_id == material_id,
                 PurchaseOrder.status.notin_(['completed', 'cancelled']),
                 PurchaseOrder.outstanding_quantity > 0,
-                PurchaseOrder.updated_delivery_date.isnot(None)
+                PurchaseOrder.updated_delivery_date.isnot(None),
+                PurchaseOrder.updated_delivery_date >= today
             ).order_by(PurchaseOrder.updated_delivery_date.asc()).all()
             if pos:
                 first_po = pos[0]
