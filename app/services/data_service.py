@@ -389,6 +389,36 @@ class DataService:
                 app_logger.info(f"已載入 {len(schedules)} 筆分批交期排程資料")
             except Exception as e:
                 app_logger.error(f"讀取分批交期失敗: {e}")
+
+            # 5.1 備援機制 (Fallback)：若物料在 DeliverySchedule 無排程，自動由未結案採購單 (PO) 的 updated_delivery_date 補足
+            try:
+                pos_with_delivery = PurchaseOrder.query.filter(
+                    PurchaseOrder.status.notin_(['completed', 'cancelled']),
+                    PurchaseOrder.outstanding_quantity > 0,
+                    PurchaseOrder.updated_delivery_date.isnot(None)
+                ).order_by(PurchaseOrder.updated_delivery_date.asc()).all()
+
+                fallback_mat_set = set()
+                fallback_po_count = 0
+                for po in pos_with_delivery:
+                    if po.material_id not in delivery_schedules_map:
+                        delivery_schedules_map[po.material_id] = []
+                        fallback_mat_set.add(po.material_id)
+
+                    if po.material_id in fallback_mat_set:
+                        delivery_schedules_map[po.material_id].append({
+                            'expected_date': po.updated_delivery_date,
+                            'quantity': float(po.outstanding_quantity or 0),
+                            'status': po.status,
+                            'is_po_fallback': True,
+                            'po_number': po.po_number
+                        })
+                        fallback_po_count += 1
+
+                if fallback_mat_set:
+                    app_logger.info(f"交期備援機制：已為 {len(fallback_mat_set)} 個物料（共 {fallback_po_count} 筆 PO）由未結案採購單補足交期排程")
+            except Exception as e:
+                app_logger.error(f"建立 PO 交期備援失敗: {e}")
             
             # --- 新增邏輯：成品撥料分流 ---
             # 1. 取得撥料.XLSX 的所有物料前10碼

@@ -862,6 +862,30 @@ def get_delivery(material_id):
             elif overdue:
                 manual_delivery = max(overdue, key=lambda x: x['expected_date'])
                 manual_delivery['status'] = 'overdue'
+        else:
+            # 備援：若無分批排程，自動查未結案且有預計交期的採購單
+            pos = PurchaseOrder.query.filter(
+                PurchaseOrder.material_id == material_id,
+                PurchaseOrder.status.notin_(['completed', 'cancelled']),
+                PurchaseOrder.outstanding_quantity > 0,
+                PurchaseOrder.updated_delivery_date.isnot(None)
+            ).order_by(PurchaseOrder.updated_delivery_date.asc()).all()
+            if pos:
+                first_po = pos[0]
+                po_exp_str = first_po.updated_delivery_date.strftime('%Y-%m-%d')
+                is_po_overdue = first_po.updated_delivery_date < today
+                po_item = {
+                    "id": None,
+                    "expected_date": po_exp_str,
+                    "quantity": float(first_po.outstanding_quantity or 0),
+                    "received_quantity": float(first_po.received_quantity or 0),
+                    "po_number": first_po.po_number,
+                    "supplier": first_po.supplier or '',
+                    "notes": '',
+                    "status": 'overdue' if is_po_overdue else 'pending',
+                    "is_fallback": True
+                }
+                manual_delivery = po_item
 
         # 🎯 傳統邏輯向下相容：如果是採購單相關，標註為 po_delivery
         if manual_delivery and manual_delivery.get('po_number'):
