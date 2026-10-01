@@ -1400,7 +1400,7 @@ class DataService:
         
         # 安全檢查：如果消失比例過高，可能是 Excel 格式錯誤
         SAFETY_THRESHOLD_RATIO = 0.3  # 30% 以上消失視為異常
-        SAFETY_THRESHOLD_COUNT = 100  # 或超過 100 筆視為異常
+        SAFETY_THRESHOLD_COUNT = 1000  # 或超過 1000 筆視為異常
         
         if total_pending > 0:
             missing_ratio = missing_count / total_pending
