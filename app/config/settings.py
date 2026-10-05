@@ -21,6 +21,8 @@ class Config:
     # 日誌設定
     LOG_FILE = 'app_errors.log'
     LOG_LEVEL = 'INFO'
+    LOG_MAX_BYTES = 50 * 1024 * 1024  # 單一日誌檔上限 50MB
+    LOG_BACKUP_COUNT = 5              # 保留最近 5 個備份（總量上限約 250MB）
     
     # 瀏覽次數記錄檔案
     VIEWS_FILE = 'page_views.json'

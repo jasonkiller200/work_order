@@ -29,26 +29,32 @@ class SpecService:
             return
         
         all_specs_data = []
+        processed_count = 0
         app_logger.info(f"開始掃描 '{source_folder}' 資料夾...")
-        
+
         # 遍歷、讀取、處理檔案
         for filename in os.listdir(source_folder):
+            # 跳過 Excel 暫存檔（~$ 前綴），避免權限/格式錯誤
+            if filename.startswith('~$'):
+                continue
             if filename.lower().endswith(('.xlsx', '.xls')):
                 file_path = os.path.join(source_folder, filename)
-                
+
                 try:
                     # 從檔名提取訂單號碼（去除副檔名，並只取前9個字元）
                     order_number = os.path.splitext(filename)[0][:9]
-                    
+
                     # 讀取 Excel 檔案
                     df = pd.read_excel(file_path)
-                    
+
                     # 在第一欄插入訂單號碼
                     df.insert(0, '訂單', order_number)
-                    
+
                     all_specs_data.append(df)
-                    app_logger.info(f"  - 已處理檔案: {filename} (訂單: {order_number})")
-                
+                    processed_count += 1
+                    if processed_count % 100 == 0:
+                        app_logger.info(f"  - 已處理 {processed_count} 個檔案...")
+
                 except Exception as e:
                     app_logger.error(f"  - 處理檔案 {filename} 時發生錯誤: {e}")
         

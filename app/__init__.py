@@ -48,13 +48,17 @@ def create_app():
     except Exception:
         pass  # 若失敗則使用預設編碼
     
+    from logging.handlers import RotatingFileHandler
+    file_handler = RotatingFileHandler(
+        Config.LOG_FILE,
+        maxBytes=Config.LOG_MAX_BYTES,
+        backupCount=Config.LOG_BACKUP_COUNT,
+        encoding='utf-8'
+    )
     logging.basicConfig(
         level=getattr(logging, Config.LOG_LEVEL),
         format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(Config.LOG_FILE, encoding='utf-8'),
-            console_handler
-        ]
+        handlers=[file_handler, console_handler]
     )
     
     app_logger = logging.getLogger(__name__)

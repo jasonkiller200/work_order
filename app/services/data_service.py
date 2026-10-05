@@ -1261,7 +1261,8 @@ class DataService:
         
         success_count = 0
         error_count = 0
-        
+        first_errors = []  # 只記錄前幾筆錯誤，避免萬筆逐列打日誌
+
         for index, row in df_on_order.iterrows():
             try:
                 # 建立唯一的採購單號
@@ -1301,9 +1302,16 @@ class DataService:
             
             except Exception as e:
                 error_count += 1
-                app_logger.error(f"處理採購單失敗: {e}")
+                if len(first_errors) < 5:
+                    po_hint = row.get('採購文件', '未知行') if isinstance(row, pd.Series) else '未知行'
+                    first_errors.append(f"{po_hint}: {e}")
                 continue
-        
+
+        # 匯總錯誤（取代逐筆 ERROR 日誌，避免日誌爆炸）
+        if error_count > 0:
+            extra = f"（另有 {error_count - len(first_errors)} 筆略）" if error_count > len(first_errors) else ""
+            app_logger.error(f"處理採購單失敗共 {error_count} 筆。前幾筆: {'; '.join(first_errors)}{extra}")
+
         # 最後提交
         db.session.commit()
         
