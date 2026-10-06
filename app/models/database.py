@@ -364,3 +364,22 @@ class CastingOrder(db.Model):
     def __repr__(self):
         return f'<CastingOrder {self.order_number}>'
 
+
+class ReceiptApplied(db.Model):
+    """入庫事件去重紀錄：每訂單每日已套用的入庫總量（今日入庫檔為當日累計匯出）"""
+    __tablename__ = 'receipt_applied'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_key = db.Column(db.String(50), nullable=False, index=True)  # 採購單號或鑄件訂單號
+    receipt_date = db.Column(db.Date, nullable=False, index=True)
+    applied_qty = db.Column(db.Float, nullable=False, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint('order_key', 'receipt_date', name='uq_receipt_applied_key_date'),
+    )
+
+    # 系統欄位
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
+
+    def __repr__(self):
+        return f'<ReceiptApplied {self.order_key} {self.receipt_date} {self.applied_qty}>'

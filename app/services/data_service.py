@@ -1405,6 +1405,10 @@ class DataService:
         
         po.status = new_status
         
+        # 🆕 全數入庫：PO 剛轉為 completed、且該料號已無其他未結案訂單時，清除剩餘排程
+        if new_status == 'completed' and old_status != 'completed':
+            DataService._clear_schedules_if_material_closed(material_id, 'SAP 全數交貨')
+        
         # 🆕 檢測部分交貨：狀態變成 partial 且有新的收貨數量
         if new_status == 'partial' and (old_status != 'partial' or po.received_quantity > old_received_qty):
             # 標記該物料的手動交期需要更新
@@ -1498,6 +1502,11 @@ class DataService:
         
         if updated_count > 0:
             db.session.commit()
+            
+            # 🆕 全數入庫：本次標記完成的 PO，若該料號已無其他未結案訂單，清除剩餘排程
+            for po in missing_pos:
+                if po.status == 'completed':
+                    DataService._clear_schedules_if_material_closed(po.material_id, '已訂未交清單移除')
         
         # 記錄處理結果
         app_logger.info(
@@ -1506,6 +1515,48 @@ class DataService:
             f"保護(有交期) {skipped_with_delivery} 筆, "
             f"保護(有排程) {skipped_with_schedule} 筆"
         )
+    
+    @staticmethod
+    def _clear_schedules_if_material_closed(material_id, reason):
+        """
+        料號全數入庫時清除剩餘交期排程
+        
+        觸發時機：PO 剛轉為 completed（已訂未交清單移除、或 SAP 全數交貨）。
+        條件：該料號已無任何未結案的採購單或鑄件訂單。
+        冪等：排程清完後再呼叫無動作。
+        """
+        from app.models.database import CastingOrder
+
+        try:
+            open_po = PurchaseOrder.query.filter(
+                PurchaseOrder.material_id == material_id,
+                PurchaseOrder.status.in_(['pending', 'partial', 'updated'])
+            ).first()
+            if open_po:
+                return
+            open_co = CastingOrder.query.filter(
+                CastingOrder.material_id == material_id,
+                CastingOrder.status.in_(['pending', 'partial'])
+            ).first()
+            if open_co:
+                return
+            
+            stale = DeliverySchedule.query.filter(
+                DeliverySchedule.material_id == material_id,
+                DeliverySchedule.status.in_(['pending', 'partial'])
+            ).all()
+            for s in stale:
+                app_logger.info(
+                    f"🗑️ 刪除交期: 物料 {material_id}, 訂單 {s.po_number or '(手動)'}, "
+                    f"預計 {s.expected_date}, 數量 {s.quantity} ({reason}、全數入庫)"
+                )
+                db.session.delete(s)
+            if stale:
+                db.session.commit()
+                app_logger.info(f"📋 物料 {material_id} 全數入庫，清除 {len(stale)} 筆剩餘交期 ({reason})")
+        except Exception as e:
+            db.session.rollback()
+            app_logger.error(f"清除 {material_id} 剩餘交期失敗: {e}")
     
     @staticmethod
     def _mark_delivery_for_partial_receipt(material_id, po_number, received_qty, outstanding_qty):
@@ -1598,19 +1649,38 @@ class DataService:
         """
         自動同步採購單交期到 delivery_schedules 表
         
-        當採購單有 updated_delivery_date（今天或之後）但沒有對應的 delivery_schedule 記錄時，
-        自動建立一筆 delivery_schedule 記錄，讓儀表板能正確顯示預計交貨日。
+        已入過貨的 PO（received > 0）：剩餘量在原檔案交期到貨的機率很低，
+        清除其現有排程且不再重建。
         
-        條件：
+        尚未入貨的 PO 自動建排程條件：
         1. 採購單狀態為 pending 或 partial
         2. updated_delivery_date 不為空且 >= 今天
-        3. 尚未有對應的 delivery_schedule 記錄
+        3. 尚未入過貨（received_quantity == 0）
+        4. 尚未有對應的 delivery_schedule 記錄
         """
         from sqlalchemy import and_, exists
         
         today = get_taiwan_time().date()
         
         try:
+            # 🆕 已入過貨的 PO：剩餘量在原檔案交期到貨的機率很低，
+            # 直接清除掛在该 PO 上的排程（含舊版自動建的），之後不再重建
+            stale_schedules = db.session.query(DeliverySchedule).join(
+                PurchaseOrder, DeliverySchedule.po_number == PurchaseOrder.po_number
+            ).filter(
+                PurchaseOrder.received_quantity > 0,
+                DeliverySchedule.status.in_(['pending', 'partial'])
+            ).all()
+            deleted_stale = 0
+            for s in stale_schedules:
+                app_logger.info(f"🗑️ 刪除交期: 物料 {s.material_id}, 訂單 {s.po_number}, "
+                               f"預計 {s.expected_date}, 數量 {s.quantity} (已入貨、不再信任檔案交期)")
+                db.session.delete(s)
+                deleted_stale += 1
+            if deleted_stale > 0:
+                db.session.commit()
+                app_logger.info(f"已清除 {deleted_stale} 筆已入貨 PO 的交期排程")
+
             # 找出符合條件的採購單（有交期但沒有排程）
             # 使用子查詢檢查是否已有 delivery_schedule
             subquery = db.session.query(DeliverySchedule.po_number).filter(
@@ -1620,6 +1690,7 @@ class DataService:
             missing_schedules = PurchaseOrder.query.filter(
                 PurchaseOrder.status.in_(['pending', 'partial', 'updated']),
                 PurchaseOrder.outstanding_quantity > 0,
+                PurchaseOrder.received_quantity == 0,
                 PurchaseOrder.updated_delivery_date.isnot(None),
                 PurchaseOrder.updated_delivery_date >= today,
                 ~PurchaseOrder.po_number.in_(db.session.query(subquery))

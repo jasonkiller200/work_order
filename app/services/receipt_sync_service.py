@@ -1,10 +1,18 @@
 # app/services/receipt_sync_service.py
 # 入庫記錄同步服務（支援採購單與鑄件訂單）
+#
+# 設計說明（2026-10-05 改版）：
+# - 數量（已收/未交）以「已訂未交 / 鑄件未交」檔案為唯一來源 —
+#   資料重載（每 15 分鐘）會從檔案覆蓋，入庫同步不再累加數量。
+# - 「今日入庫.xlsx」作為事件觸發器：
+#   1. 設定實際交貨日（若尚未設定）
+#   2. 以 receipt_applied 表去重（每訂單每日已套用總量），檔案總量變化才算新事件
+#   3. 真正有新入庫時執行一次交期排程對帳
+# - 避免「同一筆入庫每 15 分鐘被重複處理」造成的數量抖動與排程重複刪除。
 
 import pandas as pd
 import logging
 import os
-from decimal import Decimal
 
 app_logger = logging.getLogger(__name__)
 
@@ -20,14 +28,15 @@ class ReceiptSyncService:
     
     def sync_receipts(self):
         """
-        同步入庫記錄到資料庫（採購單 + 鑄件訂單）
+        同步入庫記錄（事件式，不累加數量）
         
-        只處理「過帳日期 = 今天」的記錄，避免重複處理舊資料
+        只處理「過帳日期 = 今天」的記錄；檔案為當日入庫的累計匯出，
+        以每訂單今日總量對照 receipt_applied 保證冪等（重開伺服器不會重觸發）。
         
         Returns:
             dict: 同步統計資訊
         """
-        from app.models.database import PurchaseOrder, CastingOrder, DeliverySchedule
+        from app.models.database import PurchaseOrder, CastingOrder, ReceiptApplied
         from datetime import date
         
         try:
@@ -37,7 +46,7 @@ class ReceiptSyncService:
                 app_logger.info("入庫同步：無入庫記錄")
                 return None
             
-            # 🆕 只處理今日的入庫記錄
+            # 只處理今日的入庫記錄
             today = date.today()
             df_receipt['過帳日期_parsed'] = pd.to_datetime(df_receipt['過帳日期']).dt.date
             df_today = df_receipt[df_receipt['過帳日期_parsed'] == today]
@@ -48,113 +57,119 @@ class ReceiptSyncService:
             
             app_logger.info(f"入庫同步：讀取到 {len(df_receipt)} 筆入庫記錄，其中今日 ({today}) 有 {len(df_today)} 筆")
             
-            # 統計變數
-            po_stats = {
-                'total': 0, 'success': 0, 'completed': 0, 
-                'partial': 0, 'not_found': 0, 'error': 0, 'skipped': 0
-            }
-            co_stats = {
-                'total': 0, 'success': 0, 'completed': 0, 
-                'partial': 0, 'not_found': 0, 'error': 0, 'skipped': 0
-            }
+            # 依訂單分組，累計「今日總入庫量」（檔案若經 SAP 更正，以目前總量為準）
+            po_totals = {}   # po_number -> {'material_id': str, 'total': float}
+            co_totals = {}   # order_number -> {'material_id': str, 'total': float}
             
             for i, row in df_today.iterrows():
                 try:
-                    receipt_qty = Decimal(str(float(row['以輸入單位表示的數量'])))
-                    receipt_date = pd.to_datetime(row['過帳日期']).date()
-                    
-                    # 判斷記錄類型
-                    material_value = row.get('物料')
-                    po_value = row.get('採購單')
-                    item_value = row.get('項目')
-                    order_value = row.get('訂單')
-                    
-                    has_material = pd.notna(material_value) and str(material_value).strip() != ''
-                    has_po = pd.notna(po_value) and pd.notna(item_value)
-                    is_casting_order = (
-                        has_material and
-                        not has_po and
-                        pd.notna(order_value) and
-                        str(order_value).startswith('4')
-                    )
-                    
-                    if has_material and has_po:
-                        # ========== 採購單邏輯 ==========
-                        po_stats['total'] += 1
-                        po_number = f"{int(row['採購單'])}-{int(row['項目'])}"
-                        material_id = str(material_value).strip()
-                        
-                        po = PurchaseOrder.query.filter_by(po_number=po_number).first()
-                        
-                        if po:
-                            # 🆕 跳過已完成的採購單
-                            if po.status == 'completed':
-                                po_stats['skipped'] += 1
-                                continue
-                            
-                            result = self._update_purchase_order(po, receipt_qty, receipt_date)
-                            po_stats['success'] += 1
-                            if result == 'completed':
-                                po_stats['completed'] += 1
-                            elif result == 'partial':
-                                po_stats['partial'] += 1
-                        else:
-                            po_stats['not_found'] += 1
-                    
-                    elif is_casting_order:
-                        # ========== 鑄件訂單邏輯 ==========
-                        co_stats['total'] += 1
-                        order_number = str(order_value).strip()
-                        
-                        co = CastingOrder.query.filter_by(order_number=order_number).first()
-                        
-                        if co:
-                            # 🆕 跳過已完成的鑄件訂單
-                            if co.status == 'completed':
-                                co_stats['skipped'] += 1
-                                continue
-                            
-                            result = self._update_casting_order(co, receipt_qty)
-                            co_stats['success'] += 1
-                            if result == 'completed':
-                                co_stats['completed'] += 1
-                            elif result == 'partial':
-                                co_stats['partial'] += 1
-                        else:
-                            co_stats['not_found'] += 1
-                    
-                    # 每 100 筆提交一次
-                    if (po_stats['success'] + co_stats['success']) % 100 == 0:
-                        self.db.session.commit()
-                
-                except Exception as e:
-                    if has_material and has_po:
-                        po_stats['error'] += 1
-                    elif is_casting_order:
-                        co_stats['error'] += 1
-                    app_logger.error(f"處理入庫記錄失敗 (行 {i}): {e}")
+                    qty = float(row['以輸入單位表示的數量'])
+                except (TypeError, ValueError):
                     continue
+                
+                material_value = row.get('物料')
+                po_value = row.get('採購單')
+                item_value = row.get('項目')
+                order_value = row.get('訂單')
+                
+                has_material = pd.notna(material_value) and str(material_value).strip() != ''
+                has_po = pd.notna(po_value) and pd.notna(item_value)
+                
+                if has_material and has_po:
+                    key = f"{int(row['採購單'])}-{int(row['項目'])}"
+                    entry = po_totals.setdefault(key, {'material_id': str(material_value).strip(), 'total': 0.0})
+                    entry['total'] += qty
+                elif (has_material and not has_po and pd.notna(order_value)
+                        and str(order_value).strip().startswith('4')):
+                    key = str(order_value).strip()
+                    entry = co_totals.setdefault(key, {'material_id': str(material_value).strip(), 'total': 0.0})
+                    entry['total'] += qty
             
-            # 最後提交
+            stats = {'baseline': 0, 'new_receipt': 0, 'corrected': 0, 'unchanged': 0, 'not_found': 0}
+            
+            # ========== 採購單 ==========
+            for key, info in po_totals.items():
+                po = PurchaseOrder.query.filter_by(po_number=key).first()
+                if not po:
+                    stats['not_found'] += 1
+                    continue
+                action = self._process_receipt_event(
+                    order_key=key, order=po,
+                    material_id=po.material_id or info['material_id'],
+                    file_total=info['total'], today=today, set_actual_date=True
+                )
+                stats[action] += 1
+            
+            # ========== 鑄件訂單 ==========
+            for key, info in co_totals.items():
+                co = CastingOrder.query.filter_by(order_number=key).first()
+                if not co:
+                    stats['not_found'] += 1
+                    continue
+                action = self._process_receipt_event(
+                    order_key=key, order=co,
+                    material_id=co.material_id or info['material_id'],
+                    file_total=info['total'], today=today, set_actual_date=False
+                )
+                stats[action] += 1
+            
             self.db.session.commit()
             
-            # 輸出統計
             app_logger.info("=" * 60)
-            app_logger.info("入庫同步統計：")
-            app_logger.info(f"[採購單] 處理: {po_stats['total']}, 成功: {po_stats['success']}, "
-                           f"結案: {po_stats['completed']}, 部分: {po_stats['partial']}, "
-                           f"跳過(已完成): {po_stats['skipped']}, 找不到: {po_stats['not_found']}")
-            app_logger.info(f"[鑄件訂單] 處理: {co_stats['total']}, 成功: {co_stats['success']}, "
-                           f"結案: {co_stats['completed']}, 部分: {co_stats['partial']}, "
-                           f"跳過(已完成): {co_stats['skipped']}, 找不到: {co_stats['not_found']}")
+            app_logger.info("入庫同步（事件式、不累加數量）：")
+            app_logger.info(f"新入庫 {stats['new_receipt']} 筆, 基線 {stats['baseline']} 筆, "
+                           f"SAP 更正 {stats['corrected']} 筆, 無變化 {stats['unchanged']} 筆, "
+                           f"找不到 {stats['not_found']} 筆")
             app_logger.info("=" * 60)
             
-            return {'po_stats': po_stats, 'co_stats': co_stats}
+            return stats
             
         except Exception as e:
             self.db.session.rollback()
             app_logger.error(f"入庫同步失敗: {e}", exc_info=True)
             return None
+    
+    def _process_receipt_event(self, order_key, order, material_id, file_total, today, set_actual_date):
+        """
+        處理單一訂單的入庫事件（以 receipt_applied 表去重、冪等）。
+        
+        - 今日首次看到（基線）：記錄總量；若訂單已含收貨量
+          （此入庫已反映在已訂未交/鑄件未交檔案），觸發一次交期對帳
+        - 檔案總量增加：真正新入庫 → 交期對帳
+        - 檔案總量減少：SAP 更正 → 只更新，不對帳
+        - 總量不變：不做任何事
+        
+        Returns:
+            'baseline' | 'new_receipt' | 'corrected' | 'unchanged'
+        """
+        from app.models.database import ReceiptApplied
+        
+        # 設定實際交貨日（僅採購單；冪等）
+        if set_actual_date and not order.actual_delivery_date:
+            order.actual_delivery_date = today
+        
+        applied_row = ReceiptApplied.query.filter_by(
+            order_key=order_key, receipt_date=today
+        ).first()
+        
+        if applied_row is None:
+            self.db.session.add(ReceiptApplied(
+                order_key=order_key, receipt_date=today, applied_qty=file_total
+            ))
+            if (order.received_quantity or 0) > 0:
+                self._reconcile_delivery_schedules(material_id)
+            return 'baseline'
+        
+        EPS = 1e-9
+        if file_total > applied_row.applied_qty + EPS:
+            applied_row.applied_qty = file_total
+            # 真正的新入庫：觸發交期排程對帳
+            self._reconcile_delivery_schedules(material_id)
+            return 'new_receipt'
+        elif file_total < applied_row.applied_qty - EPS:
+            applied_row.applied_qty = file_total
+            return 'corrected'
+        return 'unchanged'
     
     def _load_receipt_data(self):
         """載入入庫記錄"""
@@ -176,62 +191,6 @@ class ReceiptSyncService:
         except Exception as e:
             app_logger.error(f"讀取入庫檔案失敗: {e}")
             return None
-    
-    def _update_purchase_order(self, po, receipt_qty, receipt_date):
-        """更新採購單的入庫資訊"""
-        from app.models.database import DeliverySchedule
-        
-        # 累加收貨數量
-        old_received = po.received_quantity or Decimal('0')
-        po.received_quantity = old_received + receipt_qty
-        
-        # 更新未交數量
-        po.outstanding_quantity = po.ordered_quantity - po.received_quantity
-        
-        # 更新實際交期
-        if not po.actual_delivery_date:
-            po.actual_delivery_date = receipt_date
-        
-        # 判斷狀態
-        tolerance = Decimal('0.01')
-        
-        if po.outstanding_quantity <= tolerance:
-            po.status = 'completed'
-            po.outstanding_quantity = Decimal('0')
-            po.received_quantity = po.ordered_quantity
-            self._reconcile_delivery_schedules(po.material_id)
-            return 'completed'
-        elif po.received_quantity > 0:
-            po.status = 'partial'
-            self._reconcile_delivery_schedules(po.material_id)
-            return 'partial'
-        
-        return 'updated'
-    
-    def _update_casting_order(self, co, receipt_qty):
-        """更新鑄件訂單的入庫資訊"""
-        # 累加收貨數量
-        old_received = co.received_quantity or Decimal('0')
-        co.received_quantity = old_received + receipt_qty
-        
-        # 更新未交數量
-        co.outstanding_quantity = co.ordered_quantity - co.received_quantity
-        
-        # 判斷狀態
-        tolerance = Decimal('0.01')
-        
-        if co.outstanding_quantity <= tolerance:
-            co.status = 'completed'
-            co.outstanding_quantity = Decimal('0')
-            co.received_quantity = co.ordered_quantity
-            self._reconcile_delivery_schedules(co.material_id)
-            return 'completed'
-        elif co.received_quantity > 0:
-            co.status = 'partial'
-            self._reconcile_delivery_schedules(co.material_id)
-            return 'partial'
-        
-        return 'updated'
     
     def _reconcile_delivery_schedules(self, material_id):
         """
@@ -333,4 +292,3 @@ class ReceiptSyncService:
             self.db.session.rollback()
             app_logger.error(f"清除孤兒交期失敗: {e}", exc_info=True)
             return 0
-
