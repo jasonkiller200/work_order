@@ -197,26 +197,41 @@ class ReceiptSyncService:
         入庫時清除該物料最早日期的所有待交期
         
         邏輯：
-        1. 找該物料尚未完成的交期排程中，最早的日期
-        2. 刪除該物料在該日期的所有交期（同日期多筆一併清除）
+        1. 找該物料尚未完成的交期中最早的日期
+           （排程日期 ∪ 未結案 PO 殘留交期；排程若已被清掉，
+            殘留欄位也能被清到）
+        2. 刪除該物料在該日期的所有排程（同日期多筆一併清除）
+        3. 同時清除該物料未結案 PO 上同一日期的殘留交期
+           （避免儀表板 PO fallback 仍顯示舊日期）
         """
-        from app.models.database import DeliverySchedule
+        from app.models.database import DeliverySchedule, PurchaseOrder
         
         try:
-            # 找該物料最早的一筆待交期，取得其日期
-            earliest = DeliverySchedule.query.filter(
-                DeliverySchedule.material_id == material_id,
-                DeliverySchedule.status.notin_(['completed', 'cancelled'])
-            ).order_by(
-                DeliverySchedule.expected_date
-            ).first()
-            
-            if not earliest:
+            # 1. 候選日期：未結排程日期 + 未結案 PO 殘留交期
+            sched_dates = {
+                r[0] for r in DeliverySchedule.query
+                .filter(
+                    DeliverySchedule.material_id == material_id,
+                    DeliverySchedule.status.notin_(['completed', 'cancelled'])
+                )
+                .with_entities(DeliverySchedule.expected_date).distinct().all()
+            }
+            po_dates = {
+                r[0] for r in PurchaseOrder.query
+                .filter(
+                    PurchaseOrder.material_id == material_id,
+                    PurchaseOrder.status != 'completed',
+                    PurchaseOrder.updated_delivery_date.isnot(None)
+                )
+                .with_entities(PurchaseOrder.updated_delivery_date).distinct().all()
+            }
+            all_dates = sched_dates | po_dates
+            if not all_dates:
                 return
             
-            earliest_date = earliest.expected_date
+            earliest_date = min(all_dates)
             
-            # 刪除該物料在該日期的所有交期
+            # 2. 刪除該物料在該日期的所有排程
             schedules_to_delete = DeliverySchedule.query.filter(
                 DeliverySchedule.material_id == material_id,
                 DeliverySchedule.expected_date == earliest_date,
@@ -229,7 +244,17 @@ class ReceiptSyncService:
                 self.db.session.delete(schedule)
             
             if schedules_to_delete:
-                app_logger.info(f"📋 物料 {material_id} 共刪除 {len(schedules_to_delete)} 筆交期 (日期: {earliest_date})")
+                app_logger.info(f"📋 物料 {material_id} 共刪除 {len(schedules_to_delete)} 筆排程 (日期: {earliest_date})")
+            
+            # 3. 清除該物料未結案 PO 上同一日期的殘留交期
+            cleared = PurchaseOrder.query.filter(
+                PurchaseOrder.material_id == material_id,
+                PurchaseOrder.status != 'completed',
+                PurchaseOrder.updated_delivery_date == earliest_date
+            ).update({'updated_delivery_date': None}, synchronize_session=False)
+            
+            if cleared:
+                app_logger.info(f"🧹 物料 {material_id} 清除 {cleared} 筆 PO 殘留交期 (日期: {earliest_date})")
             
         except Exception as e:
             app_logger.error(f"清除交期失敗: {e}")
