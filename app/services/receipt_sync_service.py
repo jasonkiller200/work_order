@@ -81,7 +81,12 @@ class ReceiptSyncService:
                     entry['total'] += qty
                 elif (has_material and not has_po and pd.notna(order_value)
                         and str(order_value).strip().startswith('4')):
-                    key = str(order_value).strip()
+                    order_str = str(order_value).strip()
+                    # Excel 會把數字訂單號讀成 float（400005625.0）→ 正規化成整數字串
+                    try:
+                        key = str(int(float(order_str)))
+                    except ValueError:
+                        key = order_str
                     entry = co_totals.setdefault(key, {'material_id': str(material_value).strip(), 'total': 0.0})
                     entry['total'] += qty
             
