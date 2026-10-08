@@ -1,5 +1,6 @@
 # 實例資料庫
 instance/
+*.db
 
 # 備份目錄
 _*_backup_*/
