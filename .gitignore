@@ -20,7 +20,7 @@ page_views.json
 入庫記錄_*.csv
 成品工單組件需求明細.xlsx
 採購人員.xlsx
-
+*.csv
 # Python
 __pycache__/
 *.pyc
