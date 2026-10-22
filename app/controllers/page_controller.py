@@ -77,6 +77,13 @@ def finished_wo_materials():
     return render_template('finished_work_order_materials.html', is_admin=get_is_admin())
 
 
+@page_bp.route('/mes')
+def mes_board():
+    """MES 工單追蹤看板頁面（資料來源 machine_schedule :5009 /api/mes）"""
+    TrafficService.record_page_view('mes.html', request.remote_addr)
+    return render_template('mes.html', is_admin=get_is_admin())
+
+
 @page_bp.route('/user-management')
 @login_required
 def user_management():

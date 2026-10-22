@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MES 工單追蹤 - 生產資訊中心</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1236">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/modals.css') }}?v=1236">
+    <style>
+        /* MES 看板專用樣式 */
+        .mes-toolbar { display: flex; flex-wrap: wrap; gap: 1em; align-items: flex-end; margin-bottom: 1em; }
+        .mes-toolbar label { display: block; font-size: 0.8em; margin-bottom: 0.25em; opacity: 0.8; }
+        .mes-toolbar select, .mes-toolbar input[type="text"] { min-width: 140px; }
+        .mes-toolbar .search-input { min-width: 240px; }
+        .mes-tracked-row { display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; margin-bottom: 1em; }
+        .mes-tracked-row > span { font-size: 0.85em; opacity: 0.75; }
+        .mes-chips { display: flex; flex-wrap: wrap; gap: 0.5em; }
+        .mes-chip { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.2em 0.7em; border-radius: 999px;
+            font-size: 0.8em; background: #1e293b; border: 1px solid #334155; color: #cbd5e1; cursor: pointer; }
+        .mes-chip:hover { background: #450a0a; border-color: #7f1d1d; color: #fecaca; }
+        .mes-chip .chip-x { color: #f87171; font-weight: bold; }
+        .mes-chip-empty { font-size: 0.8em; opacity: 0.5; }
+        .mes-sync-info { font-size: 0.85em; opacity: 0.8; margin: 0.5em 0 1em; display: flex; flex-wrap: wrap; gap: 1.5em; }
+        .mes-sync-info .err { color: #f87171; font-weight: bold; }
+        .mes-count-warn { color: #f87171; font-weight: bold; }
+        #mes-table-wrap { overflow-x: auto; }
+    </style>
+</head>
+
+<body>
+    <!-- 系統狀態徽章（右上角） -->
+    <div class="system-status-badge">
+        <span class="status-indicator loading"></span>
+        <span id="status-badge-text">檢查中...</span>
+    </div>
+
+    <main class="container">
+        <header>
+            <h1>生產資訊中心</h1>
+            <p>一個整合工單料況、庫存與規格的查詢系統</p>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="/procurement">採購儀表板</a></li>
+                <li><a href="/allocated-shortage">已撥缺料</a></li>
+                <li><a href="/order_query">訂單查詢</a></li>
+                <li><a href="/open-purchase-orders">未結案採購單</a></li>
+                <li><a href="/admin_dashboard">後台管理</a></li>
+                {% if is_admin %}
+                <li><a href="/part-drawing-management">品號-圖號維護</a></li>
+                <li><a href="/component-requirements">成品組件需求</a></li>
+                {% endif %}
+                <li><a href="/work-order-statistics">工單詳情統計</a></li>
+                <li><a href="/finished-wo-materials">成品用料查詢</a></li>
+                <li><a href="/mes" class="active">MES 生產管理</a></li>
+            </ul>
+        </nav>
+
+        <hr>
+
+        <section id="mes-board">
+            <h2>MES 工單追蹤看板</h2>
+            <p style="opacity:.75;font-size:.9em">每 10 分鐘同步資料（來源：MPS GetExcel），來源消失時會自動自列表移除。</p>
+
+            <div class="mes-toolbar">
+                <div>
+                    <label for="filter-plant">廠區</label>
+                    <select id="filter-plant">
+                        <option value="all">全部</option>
+                        <option value="一廠">一廠</option>
+                        <option value="三廠">三廠</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="filter-tracking-mode">顯示模式</label>
+                    <select id="filter-tracking-mode">
+                        <option value="all">全部工單</option>
+                        <option value="tracked">只看追蹤工單</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="filter-search">搜尋 (工單 / 訂單 / 客戶 / 機型)</label>
+                    <input type="text" id="filter-search" class="search-input" placeholder="例如 100003481 或 Dynamic">
+                </div>
+                <div>
+                    <label for="track-input">追蹤工單新增</label>
+                    <input type="text" id="track-input" placeholder="輸入工單號碼">
+                </div>
+                <button id="btn-track-add" secondary>新增</button>
+                <button id="btn-sync" secondary>立即同步</button>
+            </div>
+
+            <div class="mes-tracked-row">
+                <span>目前追蹤清單：</span>
+                <div id="tracked-list" class="mes-chips"></div>
+            </div>
+
+            <div class="mes-sync-info">
+                <span id="last-sync">最後同步: -</span>
+                <span id="row-summary"></span>
+            </div>
+
+            <div id="mes-table-wrap" class="table-container">
+                <table id="mes-table">
+                    <thead>
+                        <tr>
+                            <th>追蹤</th>
+                            <th>客戶</th>
+                            <th>機型</th>
+                            <th>工單號碼</th>
+                            <th>訂單編號</th>
+                            <th>預出貨日</th>
+                            <th>標準製程</th>
+                            <th>目前製程</th>
+                            <th>製程進度</th>
+                            <th>異況</th>
+                            <th>缺料</th>
+                            <th>機台位置</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mes-table-body">
+                        <tr><td colspan="12" style="text-align:center;opacity:.6">載入中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/cache-refresh.js') }}?v=1236"></script>
+    <script src="{{ url_for('static', filename='js/mes-board.js') }}?v=1236"></script>
+</body>
+
+</html>
