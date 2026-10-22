@@ -1649,13 +1649,14 @@ class DataService:
         """
         自動同步採購單交期到 delivery_schedules 表
         
-        已入過貨的 PO（received > 0）：剩餘量在原檔案交期到貨的機率很低，
+        部分入貨（partial）但仍有未結量（outstanding > 0）的 PO 也會補排程。
+        只有已完全入貨的 PO（received > 0 且 outstanding == 0）：
         清除其現有排程且不再重建。
         
-        尚未入貨的 PO 自動建排程條件：
-        1. 採購單狀態為 pending 或 partial
-        2. updated_delivery_date 不為空且 >= 今天
-        3. 尚未入過貨（received_quantity == 0）
+        未結採購單自動建排程條件：
+        1. 採購單狀態為 pending, partial 或 updated
+        2. 未結數量 > 0（outstanding_quantity > 0）
+        3. updated_delivery_date 不為空且 >= 今天
         4. 尚未有對應的 delivery_schedule 記錄
         """
         from sqlalchemy import and_, exists
@@ -1663,23 +1664,24 @@ class DataService:
         today = get_taiwan_time().date()
         
         try:
-            # 🆕 已入過貨的 PO：剩餘量在原檔案交期到貨的機率很低，
-            # 直接清除掛在该 PO 上的排程（含舊版自動建的），之後不再重建
+            # 🆕 已完全入貨的 PO（received > 0 且 outstanding == 0）：
+            # 清除掛在该 PO 上的排程（含舊版自動建的），之後不再重建
             stale_schedules = db.session.query(DeliverySchedule).join(
                 PurchaseOrder, DeliverySchedule.po_number == PurchaseOrder.po_number
             ).filter(
                 PurchaseOrder.received_quantity > 0,
+                PurchaseOrder.outstanding_quantity == 0,
                 DeliverySchedule.status.in_(['pending', 'partial'])
             ).all()
             deleted_stale = 0
             for s in stale_schedules:
                 app_logger.info(f"🗑️ 刪除交期: 物料 {s.material_id}, 訂單 {s.po_number}, "
-                               f"預計 {s.expected_date}, 數量 {s.quantity} (已入貨、不再信任檔案交期)")
+                               f"預計 {s.expected_date}, 數量 {s.quantity} (已完全入貨)")
                 db.session.delete(s)
                 deleted_stale += 1
             if deleted_stale > 0:
                 db.session.commit()
-                app_logger.info(f"已清除 {deleted_stale} 筆已入貨 PO 的交期排程")
+                app_logger.info(f"已清除 {deleted_stale} 筆已完全入貨 PO 的交期排程")
 
             # 找出符合條件的採購單（有交期但沒有排程）
             # 使用子查詢檢查是否已有 delivery_schedule
@@ -1690,7 +1692,6 @@ class DataService:
             missing_schedules = PurchaseOrder.query.filter(
                 PurchaseOrder.status.in_(['pending', 'partial', 'updated']),
                 PurchaseOrder.outstanding_quantity > 0,
-                PurchaseOrder.received_quantity == 0,
                 PurchaseOrder.updated_delivery_date.isnot(None),
                 PurchaseOrder.updated_delivery_date >= today,
                 ~PurchaseOrder.po_number.in_(db.session.query(subquery))
