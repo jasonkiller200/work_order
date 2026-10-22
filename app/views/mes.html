@@ -7,26 +7,25 @@
     <title>MES 工單追蹤 - 生產資訊中心</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1236">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/modals.css') }}?v=1236">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1237">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/modals.css') }}?v=1237">
     <style>
         /* MES 看板專用樣式 */
         .mes-toolbar { display: flex; flex-wrap: wrap; gap: 1em; align-items: flex-end; margin-bottom: 1em; }
         .mes-toolbar label { display: block; font-size: 0.8em; margin-bottom: 0.25em; opacity: 0.8; }
         .mes-toolbar select, .mes-toolbar input[type="text"] { min-width: 140px; }
         .mes-toolbar .search-input { min-width: 240px; }
-        .mes-tracked-row { display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; margin-bottom: 1em; }
-        .mes-tracked-row > span { font-size: 0.85em; opacity: 0.75; }
-        .mes-chips { display: flex; flex-wrap: wrap; gap: 0.5em; }
-        .mes-chip { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.2em 0.7em; border-radius: 999px;
-            font-size: 0.8em; background: #1e293b; border: 1px solid #334155; color: #cbd5e1; cursor: pointer; }
-        .mes-chip:hover { background: #450a0a; border-color: #7f1d1d; color: #fecaca; }
-        .mes-chip .chip-x { color: #f87171; font-weight: bold; }
-        .mes-chip-empty { font-size: 0.8em; opacity: 0.5; }
         .mes-sync-info { font-size: 0.85em; opacity: 0.8; margin: 0.5em 0 1em; display: flex; flex-wrap: wrap; gap: 1.5em; }
         .mes-sync-info .err { color: #f87171; font-weight: bold; }
         .mes-count-warn { color: #f87171; font-weight: bold; }
         #mes-table-wrap { overflow-x: auto; }
+        /* 可排序標題欄 */
+        #mes-table thead th { cursor: pointer; user-select: none; white-space: nowrap; }
+        #mes-table thead th:hover { color: #93c5fd; }
+        .mes-sort-ind { margin-left: .3em; font-size: .75em; }
+        .mes-sort-ind::after { content: '↕'; color: #475569; }
+        .mes-sort-ind.asc::after { content: '▲'; color: #60a5fa; }
+        .mes-sort-ind.desc::after { content: '▼'; color: #60a5fa; }
     </style>
 </head>
 
@@ -64,7 +63,7 @@
 
         <section id="mes-board">
             <h2>MES 工單追蹤看板</h2>
-            <p style="opacity:.75;font-size:.9em">每 10 分鐘同步資料（來源：MPS GetExcel），來源消失時會自動自列表移除。</p>
+            <p style="opacity:.75;font-size:.9em">每 10 分鐘同步資料（來源：MPS GetExcel），來源消失時會自動自列表移除。點標題欄位可排序。</p>
 
             <div class="mes-toolbar">
                 <div>
@@ -76,27 +75,10 @@
                     </select>
                 </div>
                 <div>
-                    <label for="filter-tracking-mode">顯示模式</label>
-                    <select id="filter-tracking-mode">
-                        <option value="all">全部工單</option>
-                        <option value="tracked">只看追蹤工單</option>
-                    </select>
-                </div>
-                <div>
                     <label for="filter-search">搜尋 (工單 / 訂單 / 客戶 / 機型)</label>
                     <input type="text" id="filter-search" class="search-input" placeholder="例如 100003481 或 Dynamic">
                 </div>
-                <div>
-                    <label for="track-input">追蹤工單新增</label>
-                    <input type="text" id="track-input" placeholder="輸入工單號碼">
-                </div>
-                <button id="btn-track-add" secondary>新增</button>
                 <button id="btn-sync" secondary>立即同步</button>
-            </div>
-
-            <div class="mes-tracked-row">
-                <span>目前追蹤清單：</span>
-                <div id="tracked-list" class="mes-chips"></div>
             </div>
 
             <div class="mes-sync-info">
@@ -108,30 +90,29 @@
                 <table id="mes-table">
                     <thead>
                         <tr>
-                            <th>追蹤</th>
-                            <th>客戶</th>
-                            <th>機型</th>
-                            <th>工單號碼</th>
-                            <th>訂單編號</th>
-                            <th>預出貨日</th>
-                            <th>標準製程</th>
-                            <th>目前製程</th>
-                            <th>製程進度</th>
-                            <th>異況</th>
-                            <th>缺料</th>
-                            <th>機台位置</th>
+                            <th data-sort="work_order_no_display">工單號碼<span class="mes-sort-ind"></span></th>
+                            <th data-sort="machine_model">機型<span class="mes-sort-ind"></span></th>
+                            <th data-sort="customer_name">客戶<span class="mes-sort-ind"></span></th>
+                            <th data-sort="order_no">訂單編號<span class="mes-sort-ind"></span></th>
+                            <th data-sort="order_ship_date">預出貨日<span class="mes-sort-ind"></span></th>
+                            <th data-sort="standard_process">標準製程<span class="mes-sort-ind"></span></th>
+                            <th data-sort="current_process">目前製程<span class="mes-sort-ind"></span></th>
+                            <th data-sort="process_progress">製程進度<span class="mes-sort-ind"></span></th>
+                            <th data-sort="abnormal_count">異況<span class="mes-sort-ind"></span></th>
+                            <th data-sort="shortage_count">缺料<span class="mes-sort-ind"></span></th>
+                            <th data-sort="machine_location">機台位置<span class="mes-sort-ind"></span></th>
                         </tr>
                     </thead>
                     <tbody id="mes-table-body">
-                        <tr><td colspan="12" style="text-align:center;opacity:.6">載入中...</td></tr>
+                        <tr><td colspan="11" style="text-align:center;opacity:.6">載入中...</td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
     </main>
 
-    <script src="{{ url_for('static', filename='js/cache-refresh.js') }}?v=1236"></script>
-    <script src="{{ url_for('static', filename='js/mes-board.js') }}?v=1236"></script>
+    <script src="{{ url_for('static', filename='js/cache-refresh.js') }}?v=1237"></script>
+    <script src="{{ url_for('static', filename='js/mes-board.js') }}?v=1237"></script>
 </body>
 
 </html>
