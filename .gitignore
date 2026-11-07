@@ -13,6 +13,7 @@ tools/_archive/
 
 # 臨時檔案
 page_views.json
+page_views.json.bak
 
 # 資料檔案（從外部來源載入）
 工單總表*.xls

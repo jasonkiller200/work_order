@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, make_response, request
+from flask import Blueprint, jsonify, make_response, request, session
 from urllib.parse import quote
 from app.services.cache_service import cache_manager
 from app.services.spec_service import SpecService
@@ -14,9 +14,10 @@ from app.services.traffic_service import TrafficService
 from app.models.material import MaterialDAO
 from app.models.order import OrderDAO
 from app.models.traffic import TrafficDAO
+from app.analytics import store as analytics_store
 # 匯入資料庫模型
 from app.models.database import db, User, Material, PurchaseOrder, PartDrawingMapping, DeliverySchedule, SubstituteNotification, ComponentRequirement
-from app.utils.decorators import cache_required
+from app.utils.decorators import cache_required, login_required
 from app.utils.helpers import format_date, get_taiwan_time
 
 app_logger = logging.getLogger(__name__)
@@ -662,11 +663,61 @@ def download_specs(order_id):
         return jsonify({"error": "無法下載檔案"}), 500
 
 @api_bp.route('/admin/traffic')
+@login_required
 def get_traffic_data():
-    """取得流量統計資料"""
+    """取得流量統計資料（舊制 JSON，凍結；需管理者登入）"""
     views_data = TrafficService.read_views()
     traffic_dao = TrafficDAO(views_data)
     return jsonify(traffic_dao.get_all_stats())
+
+# ---------------------------------------------------------------------------
+# 流量統計（新分析系統 Phase 1）— 需登入，未登入回 401 JSON
+# ---------------------------------------------------------------------------
+
+def _analytics_auth_error():
+    if not session.get('logged_in'):
+        return jsonify({"error": "請先登入"}), 401
+    return None
+
+
+@api_bp.route('/admin/analytics/dashboard')
+def analytics_dashboard():
+    """KPI 總覽（總瀏覽/獨立訪客/獨立 IP/頁面數/活躍天數）；參數 from/to=YYYY-MM-DD，預設最近 30 天"""
+    err = _analytics_auth_error()
+    if err:
+        return err
+    try:
+        return jsonify(analytics_store.get_kpis(request.args.get('from'), request.args.get('to')))
+    except Exception as e:
+        app_logger.error(f"analytics/dashboard 錯誤: {e}", exc_info=True)
+        return jsonify({"error": "查詢流量統計失敗"}), 500
+
+
+@api_bp.route('/admin/analytics/trend')
+def analytics_trend():
+    """每日瀏覽次數/UV 趨勢（缺日補 0）"""
+    err = _analytics_auth_error()
+    if err:
+        return err
+    try:
+        return jsonify(analytics_store.get_daily_trend(request.args.get('from'), request.args.get('to')))
+    except Exception as e:
+        app_logger.error(f"analytics/trend 錯誤: {e}", exc_info=True)
+        return jsonify({"error": "查詢流量統計失敗"}), 500
+
+
+@api_bp.route('/admin/analytics/pages')
+def analytics_pages():
+    """熱門頁面排行；參數 limit 預設 10（上限 50）"""
+    err = _analytics_auth_error()
+    if err:
+        return err
+    try:
+        limit = request.args.get('limit', default=10, type=int)
+        return jsonify(analytics_store.get_top_pages(request.args.get('from'), request.args.get('to'), limit))
+    except Exception as e:
+        app_logger.error(f"analytics/pages 錯誤: {e}", exc_info=True)
+        return jsonify({"error": "查詢流量統計失敗"}), 500
 
 @api_bp.route('/status')
 def api_status():

@@ -1,6 +1,11 @@
 # app/config/settings.py
 # 應用程式設定
 
+import os
+
+# 專案根目錄（C:\app\order）：settings.py -> config -> app -> root
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 class Config:
     """Flask 應用程式設定"""
     
@@ -24,8 +29,17 @@ class Config:
     LOG_MAX_BYTES = 50 * 1024 * 1024  # 單一日誌檔上限 50MB
     LOG_BACKUP_COUNT = 5              # 保留最近 5 個備份（總量上限約 250MB）
     
-    # 瀏覽次數記錄檔案
+    # 瀏覽次數記錄檔案（舊制，已凍結：資料已遷移至 analytics.db，原檔保留供舊 API 唯讀）
     VIEWS_FILE = 'page_views.json'
+
+    # 流量統計（新分析系統）
+    ANALYTICS_DB = os.environ.get(
+        'ANALYTICS_DB',
+        os.path.join(_PROJECT_ROOT, 'instance', 'analytics.db')
+    )
+    # 排除 IP（服務主機 192.168.6.119＝使用者辦公室 PC、同機 localhost）：事件照存、excluded=1、新統計不計
+    EXCLUDED_IPS = ('192.168.6.119', '127.0.0.1', '::1')
+    PV_COOKIE_NAME = 'pv_vid'
     
     # 硬編碼用戶名和密碼 (僅用於示範)
     USERS = {

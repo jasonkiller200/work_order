@@ -46,9 +46,37 @@
 
         <section id="traffic-dashboard">
             <h2>網站流量分析</h2>
-            <div id="traffic-data-container">
-                <p>正在載入流量數據...</p>
+
+            <div style="display:flex; gap:0.75em; align-items:center; flex-wrap:wrap; margin-bottom:1em;">
+                <label>起 <input type="date" id="traffic-from"></label>
+                <label>迄 <input type="date" id="traffic-to"></label>
+                <button id="traffic-apply-btn" style="margin:0;">查詢</button>
+                <button id="traffic-30d-btn" style="margin:0;">最近 30 天</button>
+                <span id="traffic-range-label" style="color:var(--pico-muted-color);"></span>
             </div>
+
+            <div id="traffic-kpi" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:0.75em; margin-bottom:1em;"></div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1em; margin-bottom:1em;">
+                <article>
+                    <h3>每日趨勢（瀏覽次數 / 獨立訪客）</h3>
+                    <div style="position:relative; height:260px;"><canvas id="trend-chart"></canvas></div>
+                </article>
+                <article>
+                    <h3>熱門頁面</h3>
+                    <div style="position:relative; height:260px;"><canvas id="pages-chart"></canvas></div>
+                </article>
+            </div>
+
+            <details>
+                <summary style="cursor:pointer;">經典各頁 IP 明細（遷移前歷史資料）</summary>
+                <div id="traffic-data-container">
+                    <p>正在載入流量數據...</p>
+                </div>
+            </details>
+            <p style="color:var(--pico-muted-color); font-size:0.85em; margin-top:0.75em;">
+                統計已排除本機服務主機（192.168.6.119）與機器人流量；獨立訪客以瀏覽器 cookie 識別（無 cookie 時以 IP 估算）。
+            </p>
         </section>
 
         <hr>
@@ -72,6 +100,7 @@
 
     </main>
 
+    <script src="{{ url_for('static', filename='js/vendor/chart.umd.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

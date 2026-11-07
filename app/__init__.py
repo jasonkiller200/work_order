@@ -79,7 +79,35 @@ def create_app():
     app.register_blueprint(holidays_bp)
     
     app_logger.info("Blueprints 註冊完成")
-    
+
+    # 流量統計：初始化獨立 analytics.db（冪等；失敗只記 log，不擋啟動）
+    from app.analytics import store as analytics_store
+    try:
+        analytics_store.init_db()
+        app_logger.info(f"流量統計 DB 已初始化: {Config.ANALYTICS_DB}")
+    except Exception as e:
+        app_logger.error(f"流量統計 DB 初始化失敗（流量統計將不可用）: {e}", exc_info=True)
+
+    # 發放訪客識別 cookie pv_vid（UV 統計用；僅在缺時補發）
+    import uuid
+    from flask import request as _flask_request
+
+    @app.after_request
+    def ensure_visitor_cookie(response):
+        try:
+            if _flask_request.cookies.get(Config.PV_COOKIE_NAME) is None:
+                response.set_cookie(
+                    Config.PV_COOKIE_NAME,
+                    str(uuid.uuid4()),
+                    max_age=60 * 60 * 24 * 365,
+                    httponly=True,
+                    samesite='Lax',
+                    path='/',
+                )
+        except Exception:
+            pass
+        return response
+
     return app
 
 def _init_database_indexes(app):
