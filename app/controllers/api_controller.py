@@ -719,6 +719,50 @@ def analytics_pages():
         app_logger.error(f"analytics/pages 錯誤: {e}", exc_info=True)
         return jsonify({"error": "查詢流量統計失敗"}), 500
 
+
+# ---------------- Phase 2：熱圖 / 活躍裝置 / 即時紀錄 ----------------
+
+@api_bp.route('/admin/analytics/heatmap')
+def analytics_heatmap():
+    """7×24 使用熱圖（matrix[weekday 0=一..6=日][hour 0-23]）；from/to 同上"""
+    err = _analytics_auth_error()
+    if err:
+        return err
+    try:
+        return jsonify(analytics_store.get_heatmap(request.args.get('from'), request.args.get('to')))
+    except Exception as e:
+        app_logger.error(f"analytics/heatmap 錯誤: {e}", exc_info=True)
+        return jsonify({"error": "查詢流量統計失敗"}), 500
+
+
+@api_bp.route('/admin/analytics/users')
+def analytics_users():
+    """活躍裝置排行（visitor_id 粒度；附最近登入帳號名）；from/to 同上、limit 預設 20"""
+    err = _analytics_auth_error()
+    if err:
+        return err
+    try:
+        limit = request.args.get('limit', default=20, type=int)
+        return jsonify(analytics_store.get_top_visitors(request.args.get('from'), request.args.get('to'), limit))
+    except Exception as e:
+        app_logger.error(f"analytics/users 錯誤: {e}", exc_info=True)
+        return jsonify({"error": "查詢流量統計失敗"}), 500
+
+
+@api_bp.route('/admin/analytics/recent')
+def analytics_recent():
+    """即時紀錄（最近 N 筆，含 bot 旗標）；limit 預設 50、上限 200"""
+    err = _analytics_auth_error()
+    if err:
+        return err
+    try:
+        limit = request.args.get('limit', default=50, type=int)
+        return jsonify(analytics_store.get_recent(limit))
+    except Exception as e:
+        app_logger.error(f"analytics/recent 錯誤: {e}", exc_info=True)
+        return jsonify({"error": "查詢流量統計失敗"}), 500
+
+
 @api_bp.route('/status')
 def api_status():
     """系統狀態"""

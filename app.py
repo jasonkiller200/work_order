@@ -14,6 +14,7 @@ from consolidate_specifications import consolidate_spec_files
 from waitress import serve # 導入 waitress 的 serve 函式
 import xlrd # 導入 xlrd 函式庫 (用於 .xls 檔案)
 from app.config.settings import Config # 導入應用程式設定
+from app.analytics import store as analytics_store # Phase 2：共用流量事件庫（與正式服務同一個）
 
 # --- 配置日誌 ---
 logging.basicConfig(
@@ -119,26 +120,17 @@ def write_views(views_data):
 
 # --- 記錄頁面訪問次數和 IP ---
 def record_page_view(page_name, ip_address):
-    views_data = read_views()
-    
-    if page_name not in views_data:
-        views_data[page_name] = {
-            "total_views": 0,
-            "ip_access_times": {}
-        }
-    
-    views_data[page_name]["total_views"] += 1
-    
-    if ip_address not in views_data[page_name]["ip_access_times"]:
-        views_data[page_name]["ip_access_times"][ip_address] = []
-    
-    # 獲取台灣時間
-    taiwan_tz = pytz.timezone('Asia/Taipei')
-    current_time = datetime.now(taiwan_tz).isoformat()
-    
-    views_data[page_name]["ip_access_times"][ip_address].append(current_time)
-    
-    write_views(views_data)
+    """寫入與正式服務（run.py）相同的獨立流量事件庫（analytics.db）。
+    page_views.json 已凍結、不再寫入（防止舊入口繞過新統計）。fail-open：失敗只記 log、不影響頁面。"""
+    try:
+        analytics_store.record_event(
+            page=page_name,
+            ip=ip_address,
+            visitor_id=f'ip:{ip_address}',
+            excluded=ip_address in Config.EXCLUDED_IPS,
+        )
+    except Exception as e:
+        app_logger.warning(f"流量事件記錄失敗（不影響頁面）: {e}")
 
 # --- 資料處理核心邏輯 ---
 def load_and_process_data():
@@ -628,6 +620,8 @@ def admin_dashboard_page():
 
 @app.route('/api/admin/traffic')
 def get_traffic_data():
+    if not session.get('logged_in'):
+        return jsonify({"error": "請先登入"}), 401
     views_data = read_views()
     traffic_summary = {}
     

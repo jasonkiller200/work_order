@@ -40,6 +40,8 @@ class Config:
     # 排除 IP（服務主機 192.168.6.119＝使用者辦公室 PC、同機 localhost）：事件照存、excluded=1、新統計不計
     EXCLUDED_IPS = ('192.168.6.119', '127.0.0.1', '::1')
     PV_COOKIE_NAME = 'pv_vid'
+    # Phase 2：raw 事件保留天數（超過自動分批清除；daily rollups 永久保留）
+    PV_RETENTION_DAYS = int(os.environ.get('PV_RETENTION_DAYS', '365'))
     
     # 硬編碼用戶名和密碼 (僅用於示範)
     USERS = {

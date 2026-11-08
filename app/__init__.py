@@ -85,6 +85,9 @@ def create_app():
     try:
         analytics_store.init_db()
         app_logger.info(f"流量統計 DB 已初始化: {Config.ANALYTICS_DB}")
+        # Phase 2：補齊日彙總（昨日以前）＋清除過期 raw 事件（365 天）— 冪等、fail-open
+        analytics_store.ensure_rollups_through()
+        analytics_store.purge_old_events()
     except Exception as e:
         app_logger.error(f"流量統計 DB 初始化失敗（流量統計將不可用）: {e}", exc_info=True)
 

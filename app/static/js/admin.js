@@ -181,6 +181,20 @@ async function loadTrafficDashboard() {
         }
         renderTrendChart(trend);
         renderPagesChart(pages);
+        // Phase 2：熱圖 / 裝置排行 / 即時紀錄（獨立載入；失敗只缺該區段，不影響主儀表板）
+        Promise.allSettled([
+            fetch(`/api/admin/analytics/heatmap?${qs}`).then(r => r.ok ? r.json() : null),
+            fetch(`/api/admin/analytics/users?${qs}`).then(r => r.ok ? r.json() : null),
+            fetch('/api/admin/analytics/recent?limit=50').then(r => r.ok ? r.json() : null)
+        ]).then(results => {
+            const ok = x => (x && x.status === 'fulfilled') ? x.value : null;
+            const hm = ok(results[0]);
+            if (hm && Array.isArray(hm.matrix)) renderHeatmap(hm);
+            const us = ok(results[1]);
+            if (us) renderUsers(us);
+            const rc = ok(results[2]);
+            if (rc) renderRecent(rc);
+        });
     } catch (error) {
         console.error('載入流量統計失敗:', error);
         if (kpiEl) {
@@ -198,9 +212,11 @@ function renderTrendChart(trend) {
         data: {
             labels: trend.map(t => t.date.slice(5)),
             datasets: [
-                { label: '瀏覽次數', data: trend.map(t => t.views), tension: 0.25 },
-                { label: '獨立訪客', data: trend.map(t => t.uv), tension: 0.25 }
-            ]
+                            { label: '瀏覽次數', data: trend.map(t => t.views), tension: 0.25,
+                              borderColor: 'rgba(26,155,196,1)', backgroundColor: 'rgba(26,155,196,0.15)' },
+                            { label: '獨立訪客', data: trend.map(t => t.uv), tension: 0.25,
+                              borderColor: 'rgba(255,193,7,1)', backgroundColor: 'rgba(255,193,7,0.15)' }
+                        ]
         },
         options: {
             responsive: true,
@@ -218,7 +234,8 @@ function renderPagesChart(pages) {
         type: 'bar',
         data: {
             labels: pages.map(p => (p.page || '').replace('.html', '')),
-            datasets: [{ label: '瀏覽次數', data: pages.map(p => p.views) }]
+                        datasets: [{ label: '瀏覽次數', data: pages.map(p => p.views),
+                            backgroundColor: 'rgba(26,155,196,0.9)', hoverBackgroundColor: 'rgba(26,155,196,1)' }]
         },
         options: {
             indexAxis: 'y',
@@ -228,6 +245,74 @@ function renderPagesChart(pages) {
             scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
         }
     });
+}
+
+function _esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderHeatmap(data) {
+    const el = document.getElementById('traffic-heatmap');
+    if (!el || !data || !Array.isArray(data.matrix)) return;
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+    const max = Math.max(1, data.max || 0);
+    let html = '<div></div>';
+    for (let h = 0; h < 24; h++) {
+        html += `<div style="font-size:0.7rem; color:var(--pico-muted-color); text-align:center;">${h}</div>`;
+    }
+    data.matrix.forEach((row, wd) => {
+        html += `<div style="font-size:0.75rem; color:var(--pico-muted-color);">${weekdays[wd]}</div>`;
+        row.forEach((c, h) => {
+            const alpha = c === 0 ? 0 : 0.25 + 0.75 * (c / max);
+            html += `<div title="${weekdays[wd]} ${String(h).padStart(2, '0')}:00 — ${c} 次浏览" style="height:18px; border-radius:3px; background:rgba(26,155,196,${alpha.toFixed(3)});"></div>`;
+        });
+    });
+    el.innerHTML = html;
+}
+
+function renderUsers(data) {
+    const el = document.getElementById('traffic-users-container');
+    if (!el) return;
+    if (!Array.isArray(data) || data.length === 0) {
+        el.innerHTML = '<p>沒有紀錄。</p>';
+        return;
+    }
+    let html = '<figure><table><thead><tr><th>裝置 (visitor_id)</th><th>帳號</th><th>瀏覽</th><th>頁面</th><th>最後活躍</th></tr></thead><tbody>';
+    data.forEach(u => {
+        html += `<tr>
+            <td style="font-size:0.8em;">${_esc(u.visitor_id || '—')}</td>
+            <td>${_esc(u.user_id || '—')}</td>
+            <td>${u.views ?? 0}</td>
+            <td>${u.pages ?? 0}</td>
+            <td>${_esc(u.last_seen || '')}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></figure>';
+    el.innerHTML = html;
+}
+
+function renderRecent(data) {
+    const el = document.getElementById('traffic-recent-container');
+    if (!el) return;
+    if (!Array.isArray(data) || data.length === 0) {
+        el.innerHTML = '<p>沒有紀錄。</p>';
+        return;
+    }
+    let html = '<figure><table><thead><tr><th>時間（台北）</th><th>頁面</th><th>IP</th><th>帳號</th><th>裝置</th><th>瀏覽器</th></tr></thead><tbody>';
+    data.forEach(r => {
+        const bot = r.is_bot ? ' ⚠️' : '';
+        const ua = (r.user_agent || '').slice(0, 40);
+        html += `<tr>
+            <td>${_esc(r.local_date || '')} ${String(r.local_hour ?? 0).padStart(2, '0')}:00</td>
+            <td>${_esc(r.page || '')}</td>
+            <td>${_esc(r.ip || '—')}</td>
+            <td>${_esc(r.user_id || '—')}</td>
+            <td style="font-size:0.8em;">${_esc(String(r.visitor_id || '—').slice(0, 14))}</td>
+            <td style="font-size:0.8em;">${_esc(ua)}${bot}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></figure>';
+    el.innerHTML = html;
 }
 
 function initTrafficDashboard() {
