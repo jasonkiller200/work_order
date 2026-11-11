@@ -49,3 +49,10 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# 快照產物（17:30 採購快照 job 每日產生、diff 基線，勿進版）
+snapshots/
+
+# 臨時工作檔（只保留最終版規劃）
+scratch/*
+!scratch/traffic_plan_final.md
