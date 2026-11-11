@@ -1,0 +1,49 @@
+/* Hartford AI 動態 icon（2026-11-11）
+   狀態 class（加在注入容器上）：is-idle / is-thinking / is-answering
+   用法：HartfordAI.inject(el, size)＋HartfordAI.setState(el, state)（ai-avatar.js）
+   動畫全部作用在 inline SVG 內層 → 容器 CSS 無法控制 <img> 版本，務必用 inject 的 inline SVG */
+
+.hartford-ai { display: inline-block; line-height: 0; vertical-align: middle; }
+.hartford-ai svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* ===== idle：浮動＋眨眼＋天線燈呼吸 ===== */
+.hartford-ai .hf-root { animation: hf-float 3.2s ease-in-out infinite; }
+@keyframes hf-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.hartford-ai .hf-eye {
+  transform-box: fill-box; transform-origin: center;
+  animation: hf-blink 4.6s infinite;
+}
+@keyframes hf-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  93%, 95%      { transform: scaleY(0.08); }
+}
+.hartford-ai .hf-light { animation: hf-glow 3.2s ease-in-out infinite; }
+@keyframes hf-glow {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* ===== thinking：光環脈動＋天線燈快閃 ===== */
+.hartford-ai .hf-halo { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.hartford-ai.is-thinking .hf-halo { animation: hf-halo 1.1s ease-out infinite; }
+@keyframes hf-halo {
+  0%   { transform: scale(0.72); opacity: 0.9; }
+  100% { transform: scale(1.12); opacity: 0; }
+}
+.hartford-ai.is-thinking .hf-light { animation: hf-flash 0.5s linear infinite; }
+@keyframes hf-flash {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.2; }
+  100% { opacity: 1; }
+}
+
+/* ===== answering：一次性提亮（flashAnswer() 觸發，動畫結束自動移除 class） ===== */
+.hartford-ai.is-answering svg { animation: hf-answer 0.7s ease-out 1; }
+@keyframes hf-answer {
+  0%   { filter: brightness(1); }
+  30%  { filter: brightness(1.5) saturate(1.25); }
+  100% { filter: brightness(1); }
+}
