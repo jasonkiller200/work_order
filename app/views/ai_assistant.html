@@ -8,8 +8,8 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1234">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ai-avatar.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ai-chat.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ai-avatar.css') }}?v=20261112b">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ai-chat.css') }}?v=20261112b">
 </head>
 
 <body>
@@ -76,17 +76,17 @@
                 <div class="hf-ai-messages" id="hf-ai-page-messages"></div>
                 <div class="hf-ai-chips" id="hf-ai-page-chips"></div>
                 <div class="hf-ai-input-area">
-                    <textarea class="hf-ai-textarea" id="hf-ai-page-input" rows="2"
+                    <textarea class="hf-ai-textarea" id="hf-ai-page-input" rows="2" style="flex:1 1 auto;width:auto;"
                         placeholder="請輸入問題，例如：「目前 30 日內缺料總覽」、「100003884 規格」、「哪些單沒有 CTS」… (Enter 發送，Shift+Enter 換行)"></textarea>
-                    <button type="button" class="hf-ai-send-btn" id="hf-ai-page-send">發送提問</button>
+                    <button type="button" class="hf-ai-send-btn" id="hf-ai-page-send" style="flex:0 0 auto;width:auto;">發送提問</button>
                 </div>
             </section>
         </div>
     </main>
 
     <script src="{{ url_for('static', filename='js/main.js') }}?v=1239"></script>
-    <script src="{{ url_for('static', filename='js/ai-avatar.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ai-chat.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ai-avatar.js') }}?v=20261112b"></script>
+    <script src="{{ url_for('static', filename='js/ai-chat.js') }}?v=20261112b"></script>
 </body>
 
 </html>

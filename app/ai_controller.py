@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
-from flask import Blueprint, current_app, jsonify, render_template, request, session
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from app.config import Config
 from app.models.database import (
@@ -434,11 +434,52 @@ def tool_get_two_week_list(buyer: str = None) -> dict:
     }
 
 
+# 中英雙語常用工業/規格詞彙自動擴展對照（方便外籍同仁以英文關鍵字搜尋中文 SAP 資料）
+BILINGUAL_SYNONYMS = {
+    'SPINDLE': ['SPINDLE', '主軸'],
+    'CONTROLLER': ['CONTROLLER', '控制器', '電控'],
+    'CTS': ['CTS', '中心出水', '高壓冷卻'],
+    'COOLANT': ['COOLANT', '冷卻', '出水', '水箱'],
+    'MAGAZINE': ['MAGAZINE', '刀庫', 'ATC'],
+    'ATC': ['ATC', '刀庫', '換刀'],
+    'BEARING': ['BEARING', '軸承', '培林'],
+    'MOTOR': ['MOTOR', '馬達', '電機'],
+    'SCREW': ['SCREW', 'BALLSCREW', '螺桿', '導螺桿'],
+    'BALLSCREW': ['BALLSCREW', '螺桿', '滾珠螺桿'],
+    'GUIDEWAY': ['GUIDEWAY', 'LINEAR', '滑軌', '線軌', '軌道'],
+    'LINEAR': ['LINEAR', '線軌', '滑軌'],
+    'CHIP': ['CHIP', 'CONVEYOR', '排屑', '捲屑'],
+    'CONVEYOR': ['CONVEYOR', '排屑機', '排屑'],
+    'ROTARY': ['ROTARY', '分度盤', '第四軸', '五軸'],
+    'CHUCK': ['CHUCK', '夾頭', '筒夾'],
+    'CASTING': ['CASTING', '鑄件', '底座', '立柱', '鞍座', '工作台'],
+    'COVER': ['COVER', '鈑金', '護罩', '伸縮護罩'],
+    'GEARBOX': ['GEARBOX', '齒輪箱', '減速機'],
+    'TRANSFORMER': ['TRANSFORMER', '變壓器'],
+    'PUMP': ['PUMP', '幫浦', '泵浦', '油泵', '水泵'],
+}
+
+
+def _expand_bilingual_keywords(kw: str) -> list[str]:
+    """將輸入的英/中關鍵字擴展為同義詞陣列（大寫）"""
+    u = (kw or '').strip().upper()
+    if not u:
+        return []
+    result = [u]
+    for eng_key, syns in BILINGUAL_SYNONYMS.items():
+        if eng_key in u or any(s.upper() in u for s in syns):
+            for s in syns:
+                su = s.upper()
+                if su not in result:
+                    result.append(su)
+    return result
+
+
 def tool_search_procurement(keyword: str) -> dict:
     """
-    4. 跨物料/品名/圖號/工單/客戶/採購員關鍵字搜尋
+    4. 跨物料/品名/圖號/工單/客戶/採購員關鍵字搜尋（支援中英雙語同義詞匹配）
     Args:
-        keyword: 搜尋關鍵字（如品號、品名如 '軸承'、工單號、客戶名、採購員姓名）
+        keyword: 搜尋關鍵字（如品號、品名如 '軸承'/'bearing'、工單號、客戶名、採購員姓名）
     """
     kw = (keyword or '').strip()
     if not kw:
@@ -448,7 +489,7 @@ def tool_search_procurement(keyword: str) -> dict:
     if not data:
         return {'error': '系統快取尚未載入'}
 
-    kw_upper = kw.upper()
+    kw_candidates = _expand_bilingual_keywords(kw)
     matched_materials = []
     seen_mat = set()
 
@@ -464,7 +505,7 @@ def tool_search_procurement(keyword: str) -> dict:
             str(m.get('first_shortage_order', '')),
             str(m.get('finished_order_id', '')),
         ]).upper()
-        if kw_upper in haystack:
+        if any(k in haystack for k in kw_candidates):
             seen_mat.add(mat_id)
             matched_materials.append({
                 '物料': mat_id,
@@ -491,7 +532,7 @@ def tool_search_procurement(keyword: str) -> dict:
             str(info.get('物料說明', '')),
             str(info.get('廠別', '')),
         ]).upper()
-        if kw_upper in haystack:
+        if any(k in haystack for k in kw_candidates):
             order_mats = order_details_map.get(str(order_no), [])
             shortage_mats = [
                 {
@@ -624,6 +665,9 @@ def tool_search_orders_by_spec(spec_keyword: str, value_keyword: str = None, exc
     if not s_kw and not v_kw:
         return {'error': '請至少提供 spec_keyword（特性關鍵字）或 value_keyword（規格值關鍵字）'}
 
+    s_kw_candidates = _expand_bilingual_keywords(s_kw) if s_kw else []
+    v_kw_candidates = _expand_bilingual_keywords(v_kw) if v_kw else []
+
     data = _get_cache_or_snapshot()
     if not data:
         return {'error': '系統快取尚未載入'}
@@ -640,7 +684,7 @@ def tool_search_orders_by_spec(spec_keyword: str, value_keyword: str = None, exc
         for row in specs:
             desc_text = f"{row.get('特性說明', '')} {row.get('內部特性號碼', '')}".upper()
             val_text = f"{row.get('特性值', '')} {row.get('值說明', '')}".upper()
-            if not s_kw or s_kw in desc_text or s_kw in val_text:
+            if not s_kw_candidates or any(k in desc_text or k in val_text for k in s_kw_candidates):
                 candidate_rows.append((row, val_text))
 
         has_positive_match = False
@@ -656,8 +700,8 @@ def tool_search_orders_by_spec(spec_keyword: str, value_keyword: str = None, exc
                 or v_desc.startswith('不附')
                 or v_desc.startswith('不帶')
             )
-            if v_kw:
-                if v_kw in val_text:
+            if v_kw_candidates:
+                if any(vk in val_text for vk in v_kw_candidates):
                     has_positive_match = True
                     matched_row_summary.append(f"{row.get('特性說明', '')}: {v_code} ({v_desc})")
             else:
@@ -835,9 +879,9 @@ TOOL_DISPATCH = {
 
 
 # ---------------------------------------------------------------------------
-# System Prompt 與 CLI Stateless 快照建構器
+# System Prompt 與 CLI Stateless 快照建構器（支援中/英雙語切換）
 # ---------------------------------------------------------------------------
-BASE_SYSTEM_PROMPT = """你是哈特佛（Hartford / 協鴻工業）「生產資訊中心 - 採購與工單規格儀表板」內建的 AI 助手（Hartford AI）。
+BASE_SYSTEM_PROMPT_ZH = """你是哈特佛（Hartford / 協鴻工業）「生產資訊中心 - 採購與工單規格儀表板」內建的 AI 助手（Hartford AI）。
 請遵守以下原則：
 1. 一律使用**繁體中文**回答，語氣專業、清晰、精準，善用 Markdown 表格或條列呈現數據。
 2. 回答採購缺料、交期、兩週清單、物料明細或訂單規格問題時，**必須優先呼叫工具查詢最新即時數據**，嚴禁自行編造品號、工單號、交期或數量。
@@ -846,8 +890,23 @@ BASE_SYSTEM_PROMPT = """你是哈特佛（Hartford / 協鴻工業）「生產資
 5. 若使用者詢問「哪些工單有/沒有某規格」（如「哪些單沒有 CTS」、「列出 7.5KW 主軸工單」），請呼叫 `search_orders_by_spec`（若問「沒有」請設 `exclude=true`）。
 """
 
+BASE_SYSTEM_PROMPT_EN = """You are **Hartford AI**, the built-in AI Assistant for the Hartford (She Hong Industrial) "Production Information Center - Procurement & Work Order Spec Dashboard".
+Please follow these strict rules:
+1. **Always respond in clear, professional English.** Even if the raw database/SAP data returned by tools contains Traditional Chinese (such as material descriptions, characteristic names, customer names, or buyer names), **translate the meanings, table headers, and explanations into natural English** while keeping part numbers, PO numbers, and 9-digit work order numbers intact (you may keep original buyer/customer Chinese names in parentheses for clarity).
+2. Always call the read-only tools first to retrieve real-time data before answering questions about shortages, delivery schedules, 2-week lists, material details, or work order specifications. Never fabricate part numbers, work order numbers, dates, or quantities.
+3. Delivery delay definition: `Expected Delivery Date − Earliest Shortage Demand Date`. If a shortage item has no expected delivery date, label it as "No Delivery Date".
+4. When asked about a specific 9-digit work order (e.g., 100003884), call `get_order_specs`.
+5. When asked which work orders have or do NOT have a certain specification (e.g., "Which orders don't have CTS?", "List all 7.5KW spindle orders"), call `search_orders_by_spec` (set `exclude=true` for negative queries like "without / no").
+"""
 
-def _build_cli_stateless_prompt(user_message: str, history_messages: list) -> tuple[str, list]:
+BASE_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT_ZH
+
+
+def get_system_prompt(lang: str = 'zh') -> str:
+    return BASE_SYSTEM_PROMPT_EN if str(lang or '').lower().startswith('en') else BASE_SYSTEM_PROMPT_ZH
+
+
+def _build_cli_stateless_prompt(user_message: str, history_messages: list, lang: str = 'zh') -> tuple[str, list]:
     """
     為無原生 Function Calling 的 agy CLI 模式組裝最新快照與自動觸發的工單/物料明細。
     回傳 (full_prompt, auto_tool_calls_list)
@@ -878,8 +937,11 @@ def _build_cli_stateless_prompt(user_message: str, history_messages: list) -> tu
             auto_tools.append({'name': 'get_material_detail', 'args': {'material_id': mat_tok}})
             injected_blocks.append(f"【物料 {mat_tok} 明細】\n```json\n{json.dumps(mat_res, ensure_ascii=False)}\n```")
 
-    # 4. 若訊息詢問兩週/延期/到期
-    if any(k in user_message for k in ('兩週', '兩周', '延期', '逾期', '到期', '到貨')):
+    # 4. 若訊息詢問兩週/延期/到期 (含英文關鍵字)
+    msg_lower = user_message.lower()
+    if any(k in user_message for k in ('兩週', '兩周', '延期', '逾期', '到期', '到貨')) or any(
+        ek in msg_lower for ek in ('two week', '2 week', '2-week', 'delay', 'overdue', 'arrival', 'delivery')
+    ):
         tw_res = tool_get_two_week_list()
         auto_tools.append({'name': 'get_two_week_list', 'args': {}})
         injected_blocks.append(f"【兩週內到貨與延期清單】\n```json\n{json.dumps(tw_res, ensure_ascii=False)}\n```")
@@ -887,16 +949,23 @@ def _build_cli_stateless_prompt(user_message: str, history_messages: list) -> tu
     # 5. 組裝最近 10 則對話歷史
     history_lines = []
     for msg in history_messages[-10:]:
-        role_label = '使用者' if msg['role'] == 'user' else 'Hartford AI'
-        history_lines.append(f"{role_label}：{msg['content']}")
+        role_label = 'User' if (lang == 'en' and msg['role'] == 'user') else ('使用者' if msg['role'] == 'user' else 'Hartford AI')
+        history_lines.append(f"{role_label}: {msg['content']}")
     history_text = '\n\n'.join(history_lines)
 
+    sys_prompt = get_system_prompt(lang)
+    cli_notice = (
+        "Note: Running in read-only CLI snapshot mode. Do not run any shell commands or file tools; answer directly in English using the injected JSON data below."
+        if str(lang or '').lower().startswith('en')
+        else "注意：目前運行於 CLI 唯讀快照模式，請勿執行任何系統指令或讀寫檔案，直接根據下方伺服器注入的即時數據回答問題。"
+    )
+
     full_prompt = (
-        f"{BASE_SYSTEM_PROMPT}\n"
-        f"注意：目前運行於 CLI 唯讀快照模式，請勿執行任何系統指令或讀寫檔案，直接根據下方伺服器注入的即時數據回答問題。\n\n"
+        f"{sys_prompt}\n"
+        f"{cli_notice}\n\n"
         + '\n\n'.join(injected_blocks)
-        + (f"\n\n【近期對話歷史】\n{history_text}" if history_text else '')
-        + f"\n\n【使用者最新提問】\n{user_message}"
+        + (f"\n\n【近期對話歷史 / Recent History】\n{history_text}" if history_text else '')
+        + f"\n\n【使用者最新提問 / User Question】\n{user_message}"
     )
     return full_prompt, auto_tools
 
@@ -1056,7 +1125,9 @@ class AiController:
         return True
 
     # ---- 三引擎執行實作 ----
-    def _run_vllm_local_agent(self, user_message: str, history_messages: list, cfg: dict, model_override: str = None) -> tuple[str, list, str]:
+    def _run_vllm_local_agent(
+        self, user_message: str, history_messages: list, cfg: dict, model_override: str = None, lang: str = 'zh'
+    ) -> tuple[str, list, str]:
         """
         執行本地 Qwen3.8-27B (OpenAI-compatible API + 原生 Function Calling)
         必帶 chat_template_kwargs: {"enable_thinking": False} 避免思考文字漏入回答
@@ -1065,10 +1136,14 @@ class AiController:
         model_name = model_override or cfg.get('vllm_model') or DEFAULT_VLLM_MODEL
         url = f'{base_url}/chat/completions'
 
-        messages = [{'role': 'system', 'content': BASE_SYSTEM_PROMPT}]
+        sys_prompt = get_system_prompt(lang)
+        messages = [{'role': 'system', 'content': sys_prompt}]
         for hm in history_messages[-10:]:
             messages.append({'role': hm['role'], 'content': hm['content']})
-        messages.append({'role': 'user', 'content': user_message})
+        if str(lang or '').lower().startswith('en'):
+            messages.append({'role': 'user', 'content': f"{user_message}\n\n(Please respond in English.)"})
+        else:
+            messages.append({'role': 'user', 'content': user_message})
 
         recorded_tool_calls = []
 
@@ -1141,14 +1216,16 @@ class AiController:
         short_model = model_name.split('/')[-1]
         return content or '（無回應內容）', recorded_tool_calls, f'vLLM ({short_model})'
 
-    def _run_cli_fallback(self, user_message: str, history_messages: list, cfg: dict, model_override: str = None) -> tuple[str, list, str]:
+    def _run_cli_fallback(
+        self, user_message: str, history_messages: list, cfg: dict, model_override: str = None, lang: str = 'zh'
+    ) -> tuple[str, list, str]:
         """
         執行本機 agy CLI 免金鑰模式（stateless 重注入 + 全域單實例鎖 + 空工作目錄）
         不加 --dangerously-skip-permissions，確保安全
         """
         agy_bin = _resolve_agy_bin()
         cli_model = model_override or cfg.get('cli_model') or DEFAULT_CLI_MODEL
-        full_prompt, auto_tools = _build_cli_stateless_prompt(user_message, history_messages)
+        full_prompt, auto_tools = _build_cli_stateless_prompt(user_message, history_messages, lang=lang)
 
         args = [
             agy_bin,
@@ -1193,7 +1270,9 @@ class AiController:
 
         return out, auto_tools, f'agy CLI ({cli_model})'
 
-    def _run_sdk_agent(self, user_message: str, history_messages: list, cfg: dict, model_override: str = None) -> tuple[str, list, str]:
+    def _run_sdk_agent(
+        self, user_message: str, history_messages: list, cfg: dict, model_override: str = None, lang: str = 'zh'
+    ) -> tuple[str, list, str]:
         """
         使用 Google GenAI SDK（需設定 gemini_api_key），若無金鑰自動退回 vllm_local / cli
         """
@@ -1252,7 +1331,7 @@ class AiController:
             model=sdk_model,
             contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=BASE_SYSTEM_PROMPT,
+                system_instruction=get_system_prompt(lang),
                 temperature=0.2,
                 tools=[
                     get_shortage_summary,
@@ -1282,8 +1361,11 @@ class AiController:
         session_id: str = None,
         engine_override: str = None,
         model_override: str = None,
+        lang: str = 'zh',
     ) -> dict:
         self._cleanup_old_jobs()
+        is_en = str(lang or '').lower().startswith('en')
+        default_title = 'New Chat' if is_en else '新對話'
 
         # 確保或建立對話串
         s = None
@@ -1293,13 +1375,13 @@ class AiController:
             s = AiSession(
                 id=str(uuid.uuid4()),
                 visitor_id=visitor_id,
-                title=self._derive_session_title(user_message),
+                title=self._derive_session_title(user_message) or default_title,
                 created_at=get_taiwan_time(),
                 updated_at=get_taiwan_time(),
             )
             db.session.add(s)
             db.session.commit()
-        elif s.title in ('新對話', '', None) and len(s.messages) == 0:
+        elif s.title in ('新對話', 'New Chat', '', None) and len(s.messages) == 0:
             s.title = self._derive_session_title(user_message)
             db.session.commit()
 
@@ -1348,28 +1430,28 @@ class AiController:
                     if chosen_engine == 'vllm_local':
                         try:
                             reply_text, tool_calls, engine_label = self._run_vllm_local_agent(
-                                user_message, history_messages, cfg, model_override=model_override
+                                user_message, history_messages, cfg, model_override=model_override, lang=lang
                             )
                         except Exception as vllm_err:
                             app_logger.warning(f'vllm_local 呼叫失敗 ({vllm_err})，自動備援切換至 agy CLI')
                             reply_text, tool_calls, engine_label = self._run_cli_fallback(
-                                user_message, history_messages, cfg
+                                user_message, history_messages, cfg, lang=lang
                             )
                             engine_label += ' [vLLM備援]'
                     elif chosen_engine == 'sdk':
                         try:
                             reply_text, tool_calls, engine_label = self._run_sdk_agent(
-                                user_message, history_messages, cfg, model_override=model_override
+                                user_message, history_messages, cfg, model_override=model_override, lang=lang
                             )
                         except Exception as sdk_err:
                             app_logger.warning(f'SDK 呼叫失敗 ({sdk_err})，自動備援切換至 vllm_local')
                             reply_text, tool_calls, engine_label = self._run_vllm_local_agent(
-                                user_message, history_messages, cfg
+                                user_message, history_messages, cfg, lang=lang
                             )
                             engine_label += ' [SDK備援]'
                     else:
                         reply_text, tool_calls, engine_label = self._run_cli_fallback(
-                            user_message, history_messages, cfg, model_override=model_override
+                            user_message, history_messages, cfg, model_override=model_override, lang=lang
                         )
 
                     # 儲存 AI 回覆至資料庫
@@ -1398,7 +1480,11 @@ class AiController:
                 except Exception as e:
                     app_logger.error(f'AI 背景任務 {job_id} 失敗: {e}', exc_info=True)
                     db.session.rollback()
-                    err_msg = f'抱歉，處理您的問題時發生異常：{e}'
+                    err_msg = (
+                        f'Sorry, an error occurred while processing your request: {e}'
+                        if is_en
+                        else f'抱歉，處理您的問題時發生異常：{e}'
+                    )
                     try:
                         ai_err_row = AiMessage(
                             session_id=target_session_id,
@@ -1448,10 +1534,8 @@ ai_bp = Blueprint('ai', __name__)
 
 @ai_bp.route('/ai')
 def ai_page():
-    """Hartford AI 獨立頁面（免登入開放廠內使用）"""
-    TrafficService.record_page_view('ai_assistant.html', request.remote_addr)
-    is_admin = session.get('logged_in', False)
-    return render_template('ai_assistant.html', is_admin=is_admin)
+    """獨立頁已依需求隱藏，直接導向首頁（統一使用右下角浮動視窗）"""
+    return redirect(url_for('page.root'))
 
 
 @ai_bp.route('/api/ai/sessions', methods=['GET'])
@@ -1492,7 +1576,7 @@ def api_start_chat():
     body = request.get_json(silent=True) or {}
     message = (body.get('message') or '').strip()
     if not message:
-        return jsonify({'success': False, 'error': '提問內容不能為空'}), 400
+        return jsonify({'success': False, 'error': '提問內容不能為空 / Message cannot be empty'}), 400
 
     app_obj = current_app._get_current_object()
     result = ai_controller.start_async_chat(
@@ -1502,6 +1586,7 @@ def api_start_chat():
         session_id=body.get('session_id'),
         engine_override=body.get('engine_mode'),
         model_override=body.get('model'),
+        lang=body.get('lang') or 'zh',
     )
     return jsonify({'success': True, **result})
 

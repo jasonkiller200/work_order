@@ -1,6 +1,6 @@
 # AI 助手功能規劃（order 專案前端）
 
-> 狀態：**已完工並通過端到端實測**（2026-11-12 完成 DB 表、`app/ai_controller.py`、6 支唯讀 tools、前端浮動窗＋`/ai` 獨立頁；待使用者指示重啟 5002 上線）。
+> 狀態：**已完工並通過端到端實測**（2026-11-12 完成 DB 表、`app/ai_controller.py`、6 支唯讀 tools、中/英雙語切換、8 方向縮放浮動窗；`/ai` 獨立頁與導覽列已隱藏，以浮動視窗為主；待使用者指示重啟 5002 上線）。
 > 模式定案：**`vllm_local`（本地 Qwen3.8-27B，預設）＋`agy CLI` 免金鑰備援／進階切換＋`sdk` 備用**；**不做 RAG**（資料每 15 分鐘動態變動，全面採用 `cache_manager` 記憶體快取＋結構化唯讀 Tools 即時查詢）。
 
 ## 1. 背景與結論（全部實測驗證過，2026-11-05）
@@ -151,6 +151,7 @@ cwd = 空工作目錄、timeout=120s、CREATE_NO_WINDOW
 ## 9. 待拍板項目——**已定案（2026-11-11 使用者拍板＋架構優化）**
 1. **範圍（不做 RAG）**：採購數據問答（缺料/延遲/兩週清單/到貨/物料明細）＋**訂單規格正反向查詢**（直接從 `cache_manager` 記憶體中的 `specs_map` 與 `specs_data` 查詢單筆工單規格或按條件篩選工單，不做向量 RAG，確保動態資料 100% 即時精確）。
 2. **多使用者與權限**：per 瀏覽器各自對話串（直接綁現有 365 天效期的 `pv_vid` cookie，fallback Flask session）；問答 API 免登入開放廠內使用，`POST /api/ai/config` 全域設定掛 `@login_required`。
-3. **前端形態**：浮動按鈕（主入口）＋ `/ai` 獨立頁，兩者都上。
-4. **Hartford AI 形象**：**只手繪 SVG**（不用 AI 生成）——主軸夾頭頭小機器人、Hartford 藍 #1e88e5、三態動畫（idle/thinking/answering），已就位於 `app/static/js/ai-avatar.js` 與 `app/static/css/ai-avatar.css`。
-5. **模型引擎**：**本地 Qwen3.8-27B（`vllm_local`，7.22:8001，預設）**＋agy CLI（Gemini，免金鑰切換/備援）＋Gemini SDK（備用）；每瀏覽器可在 ⚙️ 自選（`localStorage`）。
+3. **前端形態**：以右下角浮動視窗為主入口（支援 8 方向自由縮放與標題拖曳）；`/ai` 獨立頁與導覽列連結先隱藏（導向首頁）。
+4. **中/英雙語切換（國際同仁支援）**：浮動視窗標題列提供 `🌐 EN` / `🌐 中文` 一鍵切換（記憶於 `localStorage`），自動切換介面語系、快速範例按鈕、AI 回覆語言，並內建中英專業術語同義詞擴展（如 `spindle`↔`主軸`、`CTS`↔`中心出水`）以跨語系檢索中文 SAP 資料。
+5. **Hartford AI 形象**：**只手繪 SVG**（不用 AI 生成）——主軸夾頭頭小機器人、Hartford 藍 #1e88e5、三態動畫（idle/thinking/answering），已就位於 `app/static/js/ai-avatar.js` 與 `app/static/css/ai-avatar.css`。
+6. **模型引擎**：**本地 Qwen3.8-27B（`vllm_local`，7.22:8001，預設）**＋agy CLI（Gemini，免金鑰切換/備援）＋Gemini SDK（備用）；每瀏覽器可在 ⚙️ 自選（`localStorage`）。

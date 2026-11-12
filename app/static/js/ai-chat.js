@@ -1,25 +1,119 @@
 /* ==========================================================================
    Hartford AI 採購與規格助手前端控制器 (app/static/js/ai-chat.js)
-   - 自動掛載右下角浮動按鈕與可拖曳/可縮放聊天窗
-   - 支援 /ai 獨立頁面雙欄模式
+   - 自動掛載右下角浮動按鈕與可拖曳/8方向自由縮放聊天窗
+   - 支援中/英語系 (zh / en) 介面與 AI 回覆雙語切換（供外籍同仁使用）
    - 背景 Job 輪詢、localStorage 引擎記憶與視窗位置記憶
    ========================================================================== */
 (function () {
   'use strict';
 
-  var STORAGE_RECT_KEY = 'hartford_ai_window_rect_v1';
+  var ASSET_VER = '20261112c';
+  var STORAGE_RECT_KEY = 'hartford_ai_window_rect_v2';
   var STORAGE_ENGINE_KEY = 'hartford_ai_engine_v1';
   var STORAGE_SESSION_KEY = 'hartford_ai_active_session_v1';
+  var STORAGE_LANG_KEY = 'hartford_ai_lang_v1';
 
-  var QUICK_PROMPTS = [
-    { label: '📊 缺料與延遲總覽', text: '請給我目前的採購缺料與延遲總覽，並列出最緊急的前10項。' },
-    { label: '📅 兩週內到貨與延期', text: '列出未來兩週內預計到貨清單，以及目前交貨延期的項目。' },
-    { label: '🔍 查工單規格', text: '請幫我查詢工單 100003884 的規格與缺料狀況。' },
-    { label: '🚫 哪些單沒有 CTS', text: '請問目前線上哪些工單沒有 CTS（中心出水）？' },
-    { label: '⚡ 7.5KW 主軸工單', text: '列出所有規格包含 7.5KW 主軸的工單。' }
-  ];
+  var I18N = {
+    zh: {
+      fabTooltip: 'Hartford AI 助手',
+      fabTitle: '開啟 Hartford AI 採購與規格助手',
+      title: 'Hartford AI 助手',
+      langToggleBtn: '🌐 EN',
+      langToggleTitle: 'Switch to English (切換為英文介面與英文回覆)',
+      resetPosTitle: '重置視窗位置與預設大小',
+      settingsTitle: '引擎設定',
+      closeTitle: '縮小視窗',
+      resizeTitle: '拖曳縮放視窗大小',
+      engineLabel: '本機瀏覽器引擎：',
+      engineOpts: {
+        vllm_local: '本地 Qwen3.8-27B (vLLM 預設・極速併發)',
+        cli: 'Antigravity CLI (Gemini 3.8 Flash 免金鑰)',
+        sdk: 'Gemini SDK (API Key)'
+      },
+      engineBadges: {
+        vllm_local: '引擎：本地 Qwen3.8-27B (vLLM)',
+        cli: '引擎：Antigravity CLI (Gemini 3.8 Flash)',
+        sdk: '引擎：Gemini SDK'
+      },
+      saveGlobalBtn: '💾 設為全廠預設引擎 (管理員)',
+      saveGlobalOk: '已將「{eng}」設為全廠預設引擎！',
+      saveGlobalErr: '儲存失敗：',
+      sessionSelectTitle: '切換對話串',
+      emptySessionOpt: '（尚無對話，直接輸入即可開始）',
+      newSessionBtn: '＋ 新對話',
+      newSessionTitle: '開新對話',
+      newSessionDefaultName: '新對話',
+      delSessionTitle: '刪除此對話',
+      inputPlaceholder: '輸入問題（如：30日內缺料、100003884規格、哪些單沒有CTS）…',
+      sendBtn: '發送',
+      welcomeHtml:
+        '👋 您好！我是 <strong>Hartford AI 採購與工單規格助手</strong>。<br>' +
+        '我可以即時查詢記憶體快取中的<strong>缺料總覽、兩週內到貨/延期清單、單一物料 PO/交期明細、以及工單規格正反向篩選</strong>。<br>' +
+        '<span style="color:#90a4ae;font-size:12px;">請點選下方快速範例或直接輸入問題！（右上角可切換 🌐 EN 英文模式）</span>',
+      thinkingHtml: '⏳ <em>Hartford AI 正在查詢即時採購/規格數據並思考中…</em>',
+      sendErrorPrefix: '⚠️ 發送失敗：',
+      pollErrorPrefix: '⚠️ 輪詢結果時發生錯誤：',
+      noReply: '（無回應）',
+      quickPrompts: [
+        { label: '📊 缺料與延遲總覽', text: '請給我目前的採購缺料與延遲總覽，並列出最緊急的前10項。' },
+        { label: '📅 兩週內到貨與延期', text: '列出未來兩週內預計到貨清單，以及目前交貨延期的項目。' },
+        { label: '🔍 查工單規格', text: '請幫我查詢工單 100003884 的規格與缺料狀況。' },
+        { label: '🚫 哪些單沒有 CTS', text: '請問目前線上哪些工單沒有 CTS（中心出水）？' },
+        { label: '⚡ 7.5KW 主軸工單', text: '列出所有規格包含 7.5KW 主軸的工單。' }
+      ]
+    },
+    en: {
+      fabTooltip: 'Hartford AI Assistant',
+      fabTitle: 'Open Hartford AI Procurement & Spec Assistant',
+      title: 'Hartford AI Assistant',
+      langToggleBtn: '🌐 中文',
+      langToggleTitle: '切換為繁體中文 (Switch to Traditional Chinese)',
+      resetPosTitle: 'Reset window position & size',
+      settingsTitle: 'Engine Settings',
+      closeTitle: 'Minimize window',
+      resizeTitle: 'Drag to resize window',
+      engineLabel: 'Browser Engine:',
+      engineOpts: {
+        vllm_local: 'Local Qwen3.8-27B (vLLM Default · Fast)',
+        cli: 'Antigravity CLI (Gemini 3.8 Flash Keyless)',
+        sdk: 'Gemini SDK (API Key)'
+      },
+      engineBadges: {
+        vllm_local: 'Engine: Local Qwen3.8-27B (vLLM)',
+        cli: 'Engine: Antigravity CLI (Gemini 3.8 Flash)',
+        sdk: 'Engine: Gemini SDK'
+      },
+      saveGlobalBtn: '💾 Set as Plant Default Engine (Admin)',
+      saveGlobalOk: 'Set "{eng}" as the plant-wide default engine!',
+      saveGlobalErr: 'Save failed: ',
+      sessionSelectTitle: 'Switch conversation',
+      emptySessionOpt: '(No chats yet — type below to start)',
+      newSessionBtn: '＋ New Chat',
+      newSessionTitle: 'Start a new conversation',
+      newSessionDefaultName: 'New Chat',
+      delSessionTitle: 'Delete this conversation',
+      inputPlaceholder: 'Ask a question (e.g., 30-day shortages, order 100003884 specs, orders without CTS)…',
+      sendBtn: 'Send',
+      welcomeHtml:
+        '👋 Hello! I am the <strong>Hartford AI Procurement & Work Order Spec Assistant</strong>.<br>' +
+        'I can query real-time <strong>shortage summaries, 2-week arrival/delayed lists, material PO/delivery details, and work order specifications</strong>.<br>' +
+        '<span style="color:#90a4ae;font-size:12px;">Click a quick prompt below or type your question in English! (Click 🌐 中文 on top-right to switch language)</span>',
+      thinkingHtml: '⏳ <em>Hartford AI is querying real-time procurement/spec data and thinking…</em>',
+      sendErrorPrefix: '⚠️ Failed to send: ',
+      pollErrorPrefix: '⚠️ Error polling status: ',
+      noReply: '(No response)',
+      quickPrompts: [
+        { label: '📊 Shortage & Delay Summary', text: 'Please give me the current procurement shortage and delivery delay summary, and list the top 10 most urgent shortage items in English.' },
+        { label: '📅 2-Week Arrivals & Delays', text: 'Please list the expected arrivals within the next 2 weeks and currently delayed items in English.' },
+        { label: '🔍 Order 100003884 Specs', text: 'Please check the specifications and shortage status for work order 100003884 in English.' },
+        { label: '🚫 Orders without CTS', text: 'Which active work orders do NOT have CTS (Coolant Through Spindle)? Please reply in English.' },
+        { label: '⚡ 7.5KW Spindle Orders', text: 'List all work orders equipped with a 7.5KW spindle in English.' }
+      ]
+    }
+  };
 
   var state = {
+    lang: localStorage.getItem(STORAGE_LANG_KEY) === 'en' ? 'en' : 'zh',
     config: null,
     sessions: [],
     currentSessionId: localStorage.getItem(STORAGE_SESSION_KEY) || null,
@@ -29,14 +123,22 @@
     avatars: []
   };
 
+  function t(key) {
+    var dict = I18N[state.lang] || I18N.zh;
+    return dict[key] !== undefined ? dict[key] : I18N.zh[key];
+  }
+
   // ---- 1. 自動載入必要 CSS 與 ai-avatar.js ----
   function ensureAssetsLoaded(callback) {
-    function ensureCss(href) {
-      if (!document.querySelector('link[href*="' + href + '"]')) {
+    function ensureCss(baseHref) {
+      var existing = document.querySelector('link[href*="' + baseHref + '"]');
+      if (!existing) {
         var link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = href;
+        link.href = baseHref + '?v=' + ASSET_VER;
         document.head.appendChild(link);
+      } else if (existing.href.indexOf('v=' + ASSET_VER) === -1) {
+        existing.href = baseHref + '?v=' + ASSET_VER;
       }
     }
     ensureCss('/static/css/ai-avatar.css');
@@ -52,7 +154,7 @@
       return;
     }
     var s = document.createElement('script');
-    s.src = '/static/js/ai-avatar.js';
+    s.src = '/static/js/ai-avatar.js?v=' + ASSET_VER;
     s.onload = callback;
     document.head.appendChild(s);
   }
@@ -89,7 +191,6 @@
     if (!md) return '';
     var text = escapeHtml(md);
 
-    // Code blocks ```...```
     var codeBlocks = [];
     text = text.replace(/```([\w-]*)\n([\s\S]*?)```/g, function (_, lang, code) {
       var idx = codeBlocks.length;
@@ -97,7 +198,6 @@
       return '@@CODEBLOCK_' + idx + '@@';
     });
 
-    // Markdown Tables
     var lines = text.split('\n');
     var outLines = [];
     var inTable = false;
@@ -110,7 +210,6 @@
       headers.forEach(function (h) { html += '<th>' + h.trim() + '</th>'; });
       html += '</tr></thead><tbody>';
       for (var i = 1; i < tableRows.length; i++) {
-        // 跳過分隔列 |---|---|
         if (tableRows[i].every(function (c) { return /^[:\-\s]+$/.test(c); })) continue;
         html += '<tr>';
         tableRows[i].forEach(function (c) { html += '<td>' + c.trim() + '</td>'; });
@@ -137,7 +236,6 @@
 
     text = outLines.join('\n');
 
-    // Headings, bold, inline code, lists
     text = text
       .replace(/^### (.*)$/gm, '<strong style="font-size:1.05em;color:#90caf9;">$1</strong>')
       .replace(/^## (.*)$/gm, '<strong style="font-size:1.12em;color:#64b5f6;">$1</strong>')
@@ -145,7 +243,6 @@
       .replace(/`([^`\n]+)`/g, '<code>$1</code>')
       .replace(/\n/g, '<br>');
 
-    // Restore code blocks
     codeBlocks.forEach(function (block, idx) {
       text = text.replace('@@CODEBLOCK_' + idx + '@@', block);
     });
@@ -160,69 +257,143 @@
     var fab = document.createElement('div');
     fab.id = 'hf-ai-fab';
     fab.className = 'hf-ai-fab';
-    fab.title = '開啟 Hartford AI 採購與規格助手';
-    fab.innerHTML = '<div id="hf-ai-fab-avatar"></div><span class="hf-ai-fab-tooltip">Hartford AI 助手</span>';
+    fab.innerHTML = '<div id="hf-ai-fab-avatar"></div><span class="hf-ai-fab-tooltip" id="hf-ai-fab-tooltip"></span>';
     document.body.appendChild(fab);
     registerAvatar(document.getElementById('hf-ai-fab-avatar'), 50);
 
-    // 浮動聊天窗
+    // 浮動聊天窗（含 8 個邊角縮放控制區 + 中英切換鈕）
     var drawer = document.createElement('div');
     drawer.id = 'hf-ai-drawer';
     drawer.className = 'hf-ai-drawer';
     drawer.innerHTML =
+      '<div class="hf-ai-resizer hf-ai-resizer-n" data-dir="n"></div>' +
+      '<div class="hf-ai-resizer hf-ai-resizer-s" data-dir="s"></div>' +
+      '<div class="hf-ai-resizer hf-ai-resizer-e" data-dir="e"></div>' +
+      '<div class="hf-ai-resizer hf-ai-resizer-w" data-dir="w"></div>' +
+      '<div class="hf-ai-resizer hf-ai-resizer-nw" data-dir="nw"></div>' +
+      '<div class="hf-ai-resizer hf-ai-resizer-ne" data-dir="ne"></div>' +
+      '<div class="hf-ai-resizer hf-ai-resizer-sw" data-dir="sw"></div>' +
+      '<div class="hf-ai-resizer hf-ai-resizer-se" id="hf-ai-resizer-se" data-dir="se"></div>' +
       '<div class="hf-ai-drawer-header" id="hf-ai-drag-header">' +
-      '<div class="hf-ai-header-left">' +
-      '<div id="hf-ai-header-avatar"></div>' +
-      '<div class="hf-ai-title-wrap">' +
-      '<span class="hf-ai-title">Hartford AI 助手</span>' +
-      '<span class="hf-ai-subtitle" id="hf-ai-engine-badge">載入引擎中…</span>' +
-      '</div>' +
-      '</div>' +
-      '<div class="hf-ai-header-actions">' +
-      '<button type="button" class="hf-ai-icon-btn hf-ai-reset-pos-btn" id="hf-ai-reset-pos" title="重置視窗位置與大小">⟲</button>' +
-      '<button type="button" class="hf-ai-icon-btn" id="hf-ai-open-page" title="於獨立大頁面開啟 (/ai)">⛶</button>' +
-      '<button type="button" class="hf-ai-icon-btn" id="hf-ai-toggle-settings" title="引擎設定">⚙️</button>' +
-      '<button type="button" class="hf-ai-icon-btn" id="hf-ai-close-drawer" title="縮小視窗">✕</button>' +
-      '</div>' +
+        '<div class="hf-ai-header-left">' +
+          '<div id="hf-ai-header-avatar"></div>' +
+          '<div class="hf-ai-title-wrap">' +
+            '<span class="hf-ai-title" id="hf-ai-title-text">Hartford AI 助手</span>' +
+            '<span class="hf-ai-subtitle" id="hf-ai-engine-badge"></span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="hf-ai-header-actions">' +
+          '<button type="button" class="hf-ai-lang-btn" id="hf-ai-lang-toggle"></button>' +
+          '<button type="button" class="hf-ai-icon-btn hf-ai-reset-pos-btn" id="hf-ai-reset-pos" style="width:30px;flex:0 0 30px;">⟲</button>' +
+          '<button type="button" class="hf-ai-icon-btn" id="hf-ai-toggle-settings" style="width:30px;flex:0 0 30px;">⚙️</button>' +
+          '<button type="button" class="hf-ai-icon-btn" id="hf-ai-close-drawer" style="width:30px;flex:0 0 30px;">✕</button>' +
+        '</div>' +
       '</div>' +
       '<div class="hf-ai-settings-panel" id="hf-ai-settings-panel">' +
-      '<div class="hf-ai-settings-row">' +
-      '<label for="hf-ai-engine-select">本機瀏覽器引擎：</label>' +
-      '<select id="hf-ai-engine-select">' +
-      '<option value="vllm_local">本地 Qwen3.8-27B (vLLM 預設・極速併發)</option>' +
-      '<option value="cli">Antigravity CLI (Gemini 3.8 Flash 免金鑰)</option>' +
-      '<option value="sdk">Gemini SDK (API Key)</option>' +
-      '</select>' +
-      '</div>' +
-      '<div class="hf-ai-settings-row" id="hf-ai-admin-row" style="display:none;">' +
-      '<button type="button" class="hf-ai-sm-btn" id="hf-ai-save-global-btn" style="width:100%;justify-content:center;">💾 設為全廠預設引擎 (管理員)</button>' +
-      '</div>' +
+        '<div class="hf-ai-settings-row">' +
+          '<label for="hf-ai-engine-select" id="hf-ai-engine-label"></label>' +
+          '<select id="hf-ai-engine-select" style="flex:1 1 auto;width:auto;">' +
+            '<option value="vllm_local"></option>' +
+            '<option value="cli"></option>' +
+            '<option value="sdk"></option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="hf-ai-settings-row" id="hf-ai-admin-row" style="display:none;">' +
+          '<button type="button" class="hf-ai-sm-btn" id="hf-ai-save-global-btn" style="width:100% !important;justify-content:center;"></button>' +
+        '</div>' +
       '</div>' +
       '<div class="hf-ai-toolbar">' +
-      '<select class="hf-ai-session-select" id="hf-ai-session-select" title="切換對話串"></select>' +
-      '<button type="button" class="hf-ai-sm-btn" id="hf-ai-new-session" title="開新對話">＋ 新對話</button>' +
-      '<button type="button" class="hf-ai-sm-btn" id="hf-ai-del-session" title="刪除此對話">🗑️</button>' +
+        '<select class="hf-ai-session-select" id="hf-ai-session-select" style="flex:1 1 auto;width:auto;"></select>' +
+        '<button type="button" class="hf-ai-sm-btn" id="hf-ai-new-session" style="flex:0 0 auto;width:auto;"></button>' +
+        '<button type="button" class="hf-ai-sm-btn" id="hf-ai-del-session" style="flex:0 0 auto;width:auto;">🗑️</button>' +
       '</div>' +
       '<div class="hf-ai-messages" id="hf-ai-messages"></div>' +
       '<div class="hf-ai-chips" id="hf-ai-chips"></div>' +
       '<div class="hf-ai-input-area">' +
-      '<textarea class="hf-ai-textarea" id="hf-ai-input" rows="1" placeholder="詢問缺料、兩週清單、工單規格 (如 100003884 或 哪些單沒有CTS)…"></textarea>' +
-      '<button type="button" class="hf-ai-send-btn" id="hf-ai-send">發送</button>' +
-      '</div>' +
-      '<div class="hf-ai-resize-handle" id="hf-ai-resize-handle" title="拖曳調整大小"></div>';
+        '<textarea class="hf-ai-textarea" id="hf-ai-input" rows="1" style="flex:1 1 auto;width:auto;"></textarea>' +
+        '<button type="button" class="hf-ai-send-btn" id="hf-ai-send" style="flex:0 0 auto;width:auto;"></button>' +
+      '</div>';
 
     document.body.appendChild(drawer);
     registerAvatar(document.getElementById('hf-ai-header-avatar'), 36);
 
-    setupQuickChips(document.getElementById('hf-ai-chips'));
     setupDrawerEvents(fab, drawer);
     restoreWindowRect(drawer);
+    applyLanguageToUI();
+  }
+
+  function applyLanguageToUI() {
+    var fab = document.getElementById('hf-ai-fab');
+    if (fab) fab.title = t('fabTitle');
+    var fabTip = document.getElementById('hf-ai-fab-tooltip');
+    if (fabTip) fabTip.textContent = t('fabTooltip');
+
+    var titleEl = document.getElementById('hf-ai-title-text');
+    if (titleEl) titleEl.textContent = t('title');
+
+    var langBtn = document.getElementById('hf-ai-lang-toggle');
+    if (langBtn) {
+      langBtn.textContent = t('langToggleBtn');
+      langBtn.title = t('langToggleTitle');
+    }
+
+    var resetBtn = document.getElementById('hf-ai-reset-pos');
+    if (resetBtn) resetBtn.title = t('resetPosTitle');
+    var settingsBtn = document.getElementById('hf-ai-toggle-settings');
+    if (settingsBtn) settingsBtn.title = t('settingsTitle');
+    var closeBtn = document.getElementById('hf-ai-close-drawer');
+    if (closeBtn) closeBtn.title = t('closeTitle');
+    var seResizer = document.getElementById('hf-ai-resizer-se');
+    if (seResizer) seResizer.title = t('resizeTitle');
+
+    var engLabel = document.getElementById('hf-ai-engine-label');
+    if (engLabel) engLabel.textContent = t('engineLabel');
+
+    var engSel = document.getElementById('hf-ai-engine-select');
+    if (engSel) {
+      var opts = t('engineOpts');
+      Array.prototype.forEach.call(engSel.options, function (opt) {
+        if (opts[opt.value]) opt.textContent = opts[opt.value];
+      });
+    }
+
+    var saveGlobalBtn = document.getElementById('hf-ai-save-global-btn');
+    if (saveGlobalBtn) saveGlobalBtn.textContent = t('saveGlobalBtn');
+
+    var sessSel = document.getElementById('hf-ai-session-select');
+    if (sessSel) sessSel.title = t('sessionSelectTitle');
+
+    var newBtn = document.getElementById('hf-ai-new-session');
+    if (newBtn) {
+      newBtn.textContent = t('newSessionBtn');
+      newBtn.title = t('newSessionTitle');
+    }
+    var delBtn = document.getElementById('hf-ai-del-session');
+    if (delBtn) delBtn.title = t('delSessionTitle');
+
+    var inp = document.getElementById('hf-ai-input');
+    if (inp) inp.placeholder = t('inputPlaceholder');
+
+    var sendBtn = document.getElementById('hf-ai-send');
+    if (sendBtn) sendBtn.textContent = t('sendBtn');
+
+    updateEngineBadges();
+    setupQuickChips(document.getElementById('hf-ai-chips'));
+    renderSessionSelectors();
+    renderMessages();
+  }
+
+  function toggleLanguage() {
+    state.lang = state.lang === 'en' ? 'zh' : 'en';
+    localStorage.setItem(STORAGE_LANG_KEY, state.lang);
+    applyLanguageToUI();
   }
 
   function setupQuickChips(container) {
     if (!container) return;
     container.innerHTML = '';
-    QUICK_PROMPTS.forEach(function (item) {
+    var prompts = t('quickPrompts') || [];
+    prompts.forEach(function (item) {
       var chip = document.createElement('span');
       chip.className = 'hf-ai-chip';
       chip.textContent = item.label;
@@ -233,7 +404,7 @@
     });
   }
 
-  // ---- 5. 浮動視窗拖曳、縮放與 localStorage 位置記憶 ----
+  // ---- 5. 浮動視窗拖曳、8方向自由縮放與 localStorage 位置記憶 ----
   function isMobileViewport() {
     return window.innerWidth <= 640;
   }
@@ -249,7 +420,7 @@
     };
     try {
       localStorage.setItem(STORAGE_RECT_KEY, JSON.stringify(data));
-    } catch (e) { }
+    } catch (e) {}
   }
 
   function restoreWindowRect(drawer) {
@@ -259,10 +430,10 @@
       if (!raw) return;
       var data = JSON.parse(raw);
       if (typeof data.width === 'number' && typeof data.height === 'number') {
-        var w = Math.max(320, Math.min(window.innerWidth * 0.9, data.width));
-        var h = Math.max(400, Math.min(window.innerHeight * 0.9, data.height));
-        var l = Math.max(8, Math.min(window.innerWidth - w - 8, data.left));
-        var t = Math.max(8, Math.min(window.innerHeight - h - 8, data.top));
+        var w = Math.max(340, Math.min(window.innerWidth * 0.96, data.width));
+        var h = Math.max(420, Math.min(window.innerHeight * 0.94, data.height));
+        var l = Math.max(4, Math.min(window.innerWidth - w - 4, data.left));
+        var t = Math.max(4, Math.min(window.innerHeight - h - 4, data.top));
         drawer.style.width = w + 'px';
         drawer.style.height = h + 'px';
         drawer.style.left = l + 'px';
@@ -270,13 +441,13 @@
         drawer.style.right = 'auto';
         drawer.style.bottom = 'auto';
       }
-    } catch (e) { }
+    } catch (e) {}
   }
 
   function resetWindowRect(drawer) {
     localStorage.removeItem(STORAGE_RECT_KEY);
-    drawer.style.width = '430px';
-    drawer.style.height = '600px';
+    drawer.style.width = '460px';
+    drawer.style.height = '620px';
     drawer.style.left = 'auto';
     drawer.style.top = 'auto';
     drawer.style.right = '24px';
@@ -285,14 +456,8 @@
 
   function setupDrawerEvents(fab, drawer) {
     var header = document.getElementById('hf-ai-drag-header');
-    var resizeHandle = document.getElementById('hf-ai-resize-handle');
 
     fab.addEventListener('click', function () {
-      if (window.location.pathname === '/ai') {
-        var pageInput = document.getElementById('hf-ai-page-input');
-        if (pageInput) pageInput.focus();
-        return;
-      }
       var opening = !drawer.classList.contains('is-open');
       drawer.classList.toggle('is-open', opening);
       if (opening) {
@@ -300,6 +465,11 @@
         var inp = document.getElementById('hf-ai-input');
         if (inp) inp.focus();
       }
+    });
+
+    document.getElementById('hf-ai-lang-toggle').addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleLanguage();
     });
 
     document.getElementById('hf-ai-close-drawer').addEventListener('click', function () {
@@ -311,17 +481,12 @@
       resetWindowRect(drawer);
     });
 
-    document.getElementById('hf-ai-open-page').addEventListener('click', function (e) {
-      e.stopPropagation();
-      window.location.href = '/ai';
-    });
-
     document.getElementById('hf-ai-toggle-settings').addEventListener('click', function (e) {
       e.stopPropagation();
       document.getElementById('hf-ai-settings-panel').classList.toggle('is-open');
     });
 
-    // 拖曳移動 (Drag)
+    // 標題欄拖曳移動 (Drag)
     var dragState = null;
     header.addEventListener('mousedown', function (e) {
       if (isMobileViewport()) return;
@@ -339,26 +504,35 @@
       e.preventDefault();
     });
 
-    // 拖曳縮放 (Resize)
+    // 8 方向自由縮放 (Resize: n, s, e, w, nw, ne, sw, se)
     var resizeState = null;
-    resizeHandle.addEventListener('mousedown', function (e) {
-      if (isMobileViewport()) return;
-      var rect = drawer.getBoundingClientRect();
-      resizeState = {
-        startX: e.clientX,
-        startY: e.clientY,
-        origLeft: rect.left,
-        origTop: rect.top,
-        origW: rect.width,
-        origH: rect.height
-      };
-      drawer.style.left = rect.left + 'px';
-      drawer.style.top = rect.top + 'px';
-      drawer.style.right = 'auto';
-      drawer.style.bottom = 'auto';
-      drawer.classList.add('is-resizing');
-      e.preventDefault();
-      e.stopPropagation();
+    var resizers = drawer.querySelectorAll('.hf-ai-resizer');
+    resizers.forEach(function (handle) {
+      handle.addEventListener('mousedown', function (e) {
+        if (isMobileViewport()) return;
+        var dir = handle.getAttribute('data-dir') || 'se';
+        var rect = drawer.getBoundingClientRect();
+        resizeState = {
+          dir: dir,
+          startX: e.clientX,
+          startY: e.clientY,
+          origLeft: rect.left,
+          origTop: rect.top,
+          origRight: rect.right,
+          origBottom: rect.bottom,
+          origW: rect.width,
+          origH: rect.height
+        };
+        drawer.style.left = rect.left + 'px';
+        drawer.style.top = rect.top + 'px';
+        drawer.style.width = rect.width + 'px';
+        drawer.style.height = rect.height + 'px';
+        drawer.style.right = 'auto';
+        drawer.style.bottom = 'auto';
+        drawer.classList.add('is-resizing');
+        e.preventDefault();
+        e.stopPropagation();
+      });
     });
 
     window.addEventListener('mousemove', function (e) {
@@ -372,12 +546,56 @@
         drawer.style.right = 'auto';
         drawer.style.bottom = 'auto';
       } else if (resizeState) {
-        var dw = e.clientX - resizeState.startX;
-        var dh = e.clientY - resizeState.startY;
-        var maxW = Math.min(window.innerWidth * 0.9, window.innerWidth - resizeState.origLeft - 8);
-        var maxH = Math.min(window.innerHeight * 0.9, window.innerHeight - resizeState.origTop - 8);
-        var newW = Math.max(320, Math.min(maxW, resizeState.origW + dw));
-        var newH = Math.max(400, Math.min(maxH, resizeState.origH + dh));
+        var minW = 340;
+        var minH = 420;
+        var dxR = e.clientX - resizeState.startX;
+        var dyR = e.clientY - resizeState.startY;
+        var dir = resizeState.dir;
+
+        var newL = resizeState.origLeft;
+        var newT = resizeState.origTop;
+        var newW = resizeState.origW;
+        var newH = resizeState.origH;
+
+        if (dir.indexOf('e') !== -1) {
+          newW = Math.min(window.innerWidth - resizeState.origLeft - 4, Math.max(minW, resizeState.origW + dxR));
+        }
+        if (dir.indexOf('s') !== -1) {
+          newH = Math.min(window.innerHeight - resizeState.origTop - 4, Math.max(minH, resizeState.origH + dyR));
+        }
+        if (dir.indexOf('w') !== -1) {
+          var candW = resizeState.origW - dxR;
+          var candL = resizeState.origLeft + dxR;
+          if (candL < 4) {
+            candL = 4;
+            candW = resizeState.origRight - 4;
+          }
+          if (candW >= minW) {
+            newW = candW;
+            newL = candL;
+          } else {
+            newW = minW;
+            newL = resizeState.origRight - minW;
+          }
+        }
+        if (dir.indexOf('n') !== -1) {
+          var candH = resizeState.origH - dyR;
+          var candT = resizeState.origTop + dyR;
+          if (candT < 4) {
+            candT = 4;
+            candH = resizeState.origBottom - 4;
+          }
+          if (candH >= minH) {
+            newH = candH;
+            newT = candT;
+          } else {
+            newH = minH;
+            newT = resizeState.origBottom - minH;
+          }
+        }
+
+        drawer.style.left = newL + 'px';
+        drawer.style.top = newT + 'px';
         drawer.style.width = newW + 'px';
         drawer.style.height = newH + 'px';
       }
@@ -401,7 +619,6 @@
     engineSel.addEventListener('change', function () {
       localStorage.setItem(STORAGE_ENGINE_KEY, engineSel.value);
       updateEngineBadges();
-      syncEngineSelectors(engineSel.value);
     });
 
     // 管理員存為全廠預設
@@ -441,52 +658,7 @@
     });
   }
 
-  // ---- 6. 綁定 /ai 獨立頁面事件（若當前在 /ai 頁） ----
-  function setupStandalonePageIfPresent() {
-    var pageContainer = document.getElementById('hf-ai-page-container');
-    if (!pageContainer) return;
-
-    var pageAvatar = document.getElementById('hf-ai-page-avatar');
-    if (pageAvatar) registerAvatar(pageAvatar, 64);
-
-    setupQuickChips(document.getElementById('hf-ai-page-chips'));
-
-    var pageEngineSel = document.getElementById('hf-ai-page-engine-select');
-    if (pageEngineSel) {
-      pageEngineSel.addEventListener('change', function () {
-        localStorage.setItem(STORAGE_ENGINE_KEY, pageEngineSel.value);
-        updateEngineBadges();
-        syncEngineSelectors(pageEngineSel.value);
-      });
-    }
-
-    var pageNewBtn = document.getElementById('hf-ai-page-new-session');
-    if (pageNewBtn) {
-      pageNewBtn.addEventListener('click', function () {
-        createNewSession();
-      });
-    }
-
-    var pageSendBtn = document.getElementById('hf-ai-page-send');
-    var pageInput = document.getElementById('hf-ai-page-input');
-    if (pageSendBtn && pageInput) {
-      pageSendBtn.addEventListener('click', function () {
-        var val = pageInput.value.trim();
-        if (val) {
-          pageInput.value = '';
-          sendChatMessage(val);
-        }
-      });
-      pageInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          pageSendBtn.click();
-        }
-      });
-    }
-  }
-
-  // ---- 7. API 互動與畫面渲染 ----
+  // ---- 6. API 互動與畫面渲染 ----
   function getActiveEngine() {
     var local = localStorage.getItem(STORAGE_ENGINE_KEY);
     if (local) return local;
@@ -494,25 +666,12 @@
     return 'vllm_local';
   }
 
-  function syncEngineSelectors(val) {
-    ['hf-ai-engine-select', 'hf-ai-page-engine-select'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el && el.value !== val) el.value = val;
-    });
-  }
-
   function updateEngineBadges() {
     var eng = getActiveEngine();
-    var labelMap = {
-      vllm_local: '引擎：本地 Qwen3.8-27B (vLLM)',
-      cli: '引擎：Antigravity CLI (Gemini 3.8 Flash)',
-      sdk: '引擎：Gemini SDK'
-    };
-    var txt = labelMap[eng] || ('引擎：' + eng);
-    ['hf-ai-engine-badge', 'hf-ai-page-engine-badge'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.textContent = txt;
-    });
+    var badges = t('engineBadges') || {};
+    var txt = badges[eng] || ('Engine: ' + eng);
+    var el = document.getElementById('hf-ai-engine-badge');
+    if (el) el.textContent = txt;
   }
 
   function saveGlobalConfig(engineMode) {
@@ -525,13 +684,13 @@
       .then(function (res) {
         if (res.success) {
           state.config = res.config;
-          alert('已將「' + engineMode + '」設為全廠預設引擎！');
+          alert(t('saveGlobalOk').replace('{eng}', engineMode));
         } else {
-          alert('儲存失敗：' + (res.error || '需要管理員登入'));
+          alert(t('saveGlobalErr') + (res.error || 'Admin required'));
         }
       })
       .catch(function (err) {
-        alert('儲存設定發生錯誤：' + err);
+        alert(t('saveGlobalErr') + err);
       });
   }
 
@@ -542,7 +701,8 @@
         if (res.success && res.config) {
           state.config = res.config;
           var activeEng = getActiveEngine();
-          syncEngineSelectors(activeEng);
+          var engSel = document.getElementById('hf-ai-engine-select');
+          if (engSel) engSel.value = activeEng;
           updateEngineBadges();
           if (res.config.is_admin) {
             var adminRow = document.getElementById('hf-ai-admin-row');
@@ -550,7 +710,7 @@
           }
         }
       })
-      .catch(function () { });
+      .catch(function () {});
 
     refreshSessionsList(true);
   }
@@ -576,54 +736,26 @@
           }
         }
       })
-      .catch(function () { });
+      .catch(function () {});
   }
 
   function renderSessionSelectors() {
-    // 1. 浮動窗下拉選單
     var sel = document.getElementById('hf-ai-session-select');
-    if (sel) {
-      sel.innerHTML = '';
-      if (state.sessions.length === 0) {
-        var optEmpty = document.createElement('option');
-        optEmpty.value = '';
-        optEmpty.textContent = '（尚無對話，直接輸入即可開始）';
-        sel.appendChild(optEmpty);
-      } else {
-        state.sessions.forEach(function (s) {
-          var opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = s.title + ' (' + (s.updated_at || '').slice(5) + ')';
-          if (s.id === state.currentSessionId) opt.selected = true;
-          sel.appendChild(opt);
-        });
-      }
-    }
-
-    // 2. /ai 獨立頁左側清單
-    var listEl = document.getElementById('hf-ai-page-session-list');
-    if (listEl) {
-      listEl.innerHTML = '';
-      if (state.sessions.length === 0) {
-        listEl.innerHTML = '<div style="padding:12px;color:#90a4ae;font-size:12.5px;">尚無歷史對話，請直接在右側提問。</div>';
-      } else {
-        state.sessions.forEach(function (s) {
-          var item = document.createElement('div');
-          item.className = 'hf-ai-session-item' + (s.id === state.currentSessionId ? ' active' : '');
-          item.innerHTML =
-            '<span class="hf-ai-session-item-title">' + escapeHtml(s.title) + '</span>' +
-            '<button type="button" class="hf-ai-session-del" title="刪除">✕</button>';
-          item.addEventListener('click', function (e) {
-            if (e.target.classList.contains('hf-ai-session-del')) {
-              e.stopPropagation();
-              deleteSession(s.id);
-              return;
-            }
-            loadSessionMessages(s.id);
-          });
-          listEl.appendChild(item);
-        });
-      }
+    if (!sel) return;
+    sel.innerHTML = '';
+    if (state.sessions.length === 0) {
+      var optEmpty = document.createElement('option');
+      optEmpty.value = '';
+      optEmpty.textContent = t('emptySessionOpt');
+      sel.appendChild(optEmpty);
+    } else {
+      state.sessions.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.title + ' (' + (s.updated_at || '').slice(5) + ')';
+        if (s.id === state.currentSessionId) opt.selected = true;
+        sel.appendChild(opt);
+      });
     }
   }
 
@@ -641,14 +773,14 @@
           renderMessages();
         }
       })
-      .catch(function () { });
+      .catch(function () {});
   }
 
   function createNewSession() {
     fetch('/api/ai/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: '新對話' })
+      body: JSON.stringify({ title: t('newSessionDefaultName') })
     })
       .then(function (r) { return r.json(); })
       .then(function (res) {
@@ -677,60 +809,53 @@
   }
 
   function renderMessages() {
-    var containers = [
-      document.getElementById('hf-ai-messages'),
-      document.getElementById('hf-ai-page-messages')
-    ].filter(Boolean);
+    var box = document.getElementById('hf-ai-messages');
+    if (!box) return;
 
-    containers.forEach(function (box) {
-      box.innerHTML = '';
-      if (state.messages.length === 0) {
-        var welcome = document.createElement('div');
-        welcome.className = 'hf-ai-msg hf-ai-msg-assistant';
-        welcome.innerHTML =
-          '👋 您好！我是 <strong>Hartford AI 採購與工單規格助手</strong>。<br>' +
-          '我可以即時查詢記憶體快取中的<strong>缺料總覽、兩週內到貨/延期清單、單一物料 PO/交期明細、以及工單規格正反向篩選</strong>。<br>' +
-          '<span style="color:#90a4ae;font-size:12px;">請點選下方快速範例或直接輸入問題！</span>';
-        box.appendChild(welcome);
-      } else {
-        state.messages.forEach(function (m) {
-          var div = document.createElement('div');
-          div.className = 'hf-ai-msg ' + (m.role === 'user' ? 'hf-ai-msg-user' : 'hf-ai-msg-assistant');
-          if (m.role === 'user') {
-            div.textContent = m.content;
-          } else {
-            var html = renderMarkdown(m.content);
-            var metaParts = [];
-            if (m.tool_calls && m.tool_calls.length > 0) {
-              m.tool_calls.forEach(function (tc) {
-                metaParts.push('<span class="hf-ai-tool-badge">🔧 ' + escapeHtml(tc.name) + '</span>');
-              });
-            }
-            if (m.engine_label) {
-              metaParts.push('<span>⚡ ' + escapeHtml(m.engine_label) + '</span>');
-            }
-            if (metaParts.length > 0) {
-              html += '<div class="hf-ai-msg-meta">' + metaParts.join('') + '</div>';
-            }
-            div.innerHTML = html;
+    box.innerHTML = '';
+    if (state.messages.length === 0) {
+      var welcome = document.createElement('div');
+      welcome.className = 'hf-ai-msg hf-ai-msg-assistant';
+      welcome.innerHTML = t('welcomeHtml');
+      box.appendChild(welcome);
+    } else {
+      state.messages.forEach(function (m) {
+        var div = document.createElement('div');
+        div.className = 'hf-ai-msg ' + (m.role === 'user' ? 'hf-ai-msg-user' : 'hf-ai-msg-assistant');
+        if (m.role === 'user') {
+          div.textContent = m.content;
+        } else {
+          var html = renderMarkdown(m.content);
+          var metaParts = [];
+          if (m.tool_calls && m.tool_calls.length > 0) {
+            m.tool_calls.forEach(function (tc) {
+              metaParts.push('<span class="hf-ai-tool-badge">🔧 ' + escapeHtml(tc.name) + '</span>');
+            });
           }
-          box.appendChild(div);
-        });
-      }
+          if (m.engine_label) {
+            metaParts.push('<span>⚡ ' + escapeHtml(m.engine_label) + '</span>');
+          }
+          if (metaParts.length > 0) {
+            html += '<div class="hf-ai-msg-meta">' + metaParts.join('') + '</div>';
+          }
+          div.innerHTML = html;
+        }
+        box.appendChild(div);
+      });
+    }
 
-      if (state.isPolling) {
-        var thinkingDiv = document.createElement('div');
-        thinkingDiv.className = 'hf-ai-msg hf-ai-msg-assistant';
-        thinkingDiv.innerHTML = '⏳ <em>Hartford AI 正在查詢即時採購/規格數據並思考中…</em>';
-        box.appendChild(thinkingDiv);
-      }
+    if (state.isPolling) {
+      var thinkingDiv = document.createElement('div');
+      thinkingDiv.className = 'hf-ai-msg hf-ai-msg-assistant';
+      thinkingDiv.innerHTML = t('thinkingHtml');
+      box.appendChild(thinkingDiv);
+    }
 
-      box.scrollTop = box.scrollHeight;
-    });
+    box.scrollTop = box.scrollHeight;
   }
 
   function setInputsDisabled(disabled) {
-    ['hf-ai-send', 'hf-ai-page-send', 'hf-ai-input', 'hf-ai-page-input'].forEach(function (id) {
+    ['hf-ai-send', 'hf-ai-input'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.disabled = disabled;
     });
@@ -739,7 +864,6 @@
   function sendChatMessage(text) {
     if (state.isPolling || !text) return;
 
-    // 樂觀更新使用者訊息
     state.messages.push({ role: 'user', content: text });
     state.isPolling = true;
     setInputsDisabled(true);
@@ -749,7 +873,8 @@
     var payload = {
       message: text,
       session_id: state.currentSessionId,
-      engine_mode: getActiveEngine()
+      engine_mode: getActiveEngine(),
+      lang: state.lang
     };
 
     fetch('/api/ai/chat', {
@@ -760,7 +885,7 @@
       .then(function (r) { return r.json(); })
       .then(function (res) {
         if (!res.success || !res.job_id) {
-          throw new Error(res.error || '啟動 AI 任務失敗');
+          throw new Error(res.error || 'Failed to start AI job');
         }
         state.currentSessionId = res.session_id;
         localStorage.setItem(STORAGE_SESSION_KEY, res.session_id);
@@ -773,7 +898,7 @@
         setAllAvatarsState('idle');
         state.messages.push({
           role: 'assistant',
-          content: '⚠️ 發送失敗：' + err.message,
+          content: t('sendErrorPrefix') + err.message,
           engine_label: 'error'
         });
         renderMessages();
@@ -787,7 +912,7 @@
       .then(function (r) { return r.json(); })
       .then(function (res) {
         if (!res.success) {
-          throw new Error(res.error || '查詢任務狀態失敗');
+          throw new Error(res.error || 'Failed to query job status');
         }
         if (res.status === 'running') {
           state.pollTimer = setTimeout(function () {
@@ -795,13 +920,12 @@
           }, 1100);
           return;
         }
-        // 完成或失敗
         state.isPolling = false;
         setInputsDisabled(false);
         setAllAvatarsState('answering');
         state.messages.push({
           role: 'assistant',
-          content: res.reply || '（無回應）',
+          content: res.reply || t('noReply'),
           tool_calls: res.tool_calls || [],
           engine_label: res.engine_label || ''
         });
@@ -814,18 +938,17 @@
         setAllAvatarsState('idle');
         state.messages.push({
           role: 'assistant',
-          content: '⚠️ 輪詢結果時發生錯誤：' + err.message,
+          content: t('pollErrorPrefix') + err.message,
           engine_label: 'error'
         });
         renderMessages();
       });
   }
 
-  // ---- 8. 啟動初始化 ----
+  // ---- 7. 啟動初始化 ----
   function initHartfordAIChat() {
     ensureAssetsLoaded(function () {
       buildFloatingUI();
-      setupStandalonePageIfPresent();
       fetchConfigAndSessions();
     });
   }
@@ -836,4 +959,3 @@
     initHartfordAIChat();
   }
 })();
-
