@@ -32,9 +32,12 @@ def create_app():
     app.secret_key = Config.SECRET_KEY
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     
-    # 設定資料庫
+    # 設定資料庫（啟用 timeout=30 與 WAL 模式避免背景大量寫入鎖定讀取）
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///order_management.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {'timeout': 30},
+    }
     
     # 設定日誌
     import sys
@@ -67,10 +70,22 @@ def create_app():
     app_logger.info("正在初始化 Flask 應用程式...")
     
     # 初始化資料庫
+    from sqlalchemy import event
     from app.models.database import db
     db.init_app(app)
-    # 建立缺少的表格（冪等：不改動既有表格結構）
+    # 建立缺少的表格並為每個 SQLite 連線啟用 WAL 與 busy_timeout
     with app.app_context():
+        @event.listens_for(db.engine, 'connect')
+        def _set_sqlite_pragma(dbapi_connection, connection_record):
+            try:
+                cursor = dbapi_connection.cursor()
+                cursor.execute('PRAGMA journal_mode=WAL')
+                cursor.execute('PRAGMA synchronous=NORMAL')
+                cursor.execute('PRAGMA busy_timeout=30000')
+                cursor.close()
+            except Exception:
+                pass
+
         db.create_all()
 
     # 註冊 Blueprints
