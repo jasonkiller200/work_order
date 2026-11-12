@@ -87,6 +87,17 @@ def create_app():
                 pass
 
         db.create_all()
+        # 冪等補齊 ai_sessions / ai_messages 的 ip_address 欄位（供後台 AI 調用統計使用）
+        from sqlalchemy import text
+        for _tbl in ('ai_sessions', 'ai_messages'):
+            try:
+                cols = [r[1] for r in db.session.execute(text(f"PRAGMA table_info({_tbl})")).fetchall()]
+                if 'ip_address' not in cols:
+                    db.session.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN ip_address VARCHAR(64)"))
+                    db.session.commit()
+            except Exception as _e:
+                db.session.rollback()
+                app_logger.warning(f"檢查/新增 {_tbl}.ip_address 欄位略過: {_e}")
 
     # 註冊 Blueprints
     app.register_blueprint(auth_bp)

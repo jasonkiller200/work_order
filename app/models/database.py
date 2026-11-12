@@ -391,6 +391,7 @@ class AiSession(db.Model):
 
     id = db.Column(db.String(36), primary_key=True)
     visitor_id = db.Column(db.String(64), nullable=False, index=True)
+    ip_address = db.Column(db.String(64), nullable=True, index=True)
     title = db.Column(db.String(200), default='新對話')
     sdk_conversation_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=get_taiwan_time)
@@ -413,6 +414,7 @@ class AiMessage(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.String(36), db.ForeignKey('ai_sessions.id'), nullable=False, index=True)
+    ip_address = db.Column(db.String(64), nullable=True, index=True)
     role = db.Column(db.String(20), nullable=False)  # user, assistant
     content = db.Column(db.Text, nullable=False)
     tool_calls = db.Column(db.Text, nullable=True)   # JSON string

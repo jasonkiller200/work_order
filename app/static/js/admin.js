@@ -181,7 +181,8 @@ async function loadTrafficDashboard() {
         }
         renderTrendChart(trend);
         renderPagesChart(pages);
-        // Phase 2：熱圖 / 裝置排行 / 即時紀錄（獨立載入；失敗只缺該區段，不影響主儀表板）
+        // Phase 2：熱圖 / 裝置排行 / 即時紀錄 / AI 助手調用統計（獨立載入；失敗只缺該區段，不影響主儀表板）
+        loadAiUsageDashboard(qs);
         Promise.allSettled([
             fetch(`/api/admin/analytics/heatmap?${qs}`).then(r => r.ok ? r.json() : null),
             fetch(`/api/admin/analytics/users?${qs}`).then(r => r.ok ? r.json() : null),
@@ -326,6 +327,13 @@ function initTrafficDashboard() {
     fromEl.value = _localDateStr(d30);
     const applyBtn = document.getElementById('traffic-apply-btn');
     if (applyBtn) applyBtn.addEventListener('click', loadTrafficDashboard);
+    const aiRefreshBtn = document.getElementById('ai-usage-refresh-btn');
+    if (aiRefreshBtn) {
+        aiRefreshBtn.addEventListener('click', () => {
+            const qs = `from=${encodeURIComponent(fromEl.value)}&to=${encodeURIComponent(toEl.value)}`;
+            loadAiUsageDashboard(qs);
+        });
+    }
     const btn30 = document.getElementById('traffic-30d-btn');
     if (btn30) {
         btn30.addEventListener('click', () => {
@@ -338,4 +346,93 @@ function initTrafficDashboard() {
         });
     }
     loadTrafficDashboard();
+}
+
+async function loadAiUsageDashboard(qs) {
+    const kpiEl = document.getElementById('ai-usage-kpi');
+    const ipEl = document.getElementById('ai-ip-stats-container');
+    const logsEl = document.getElementById('ai-recent-logs-container');
+    if (!kpiEl && !ipEl && !logsEl) return;
+
+    try {
+        const res = await fetch(`/api/admin/ai-usage?${qs || ''}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const kpi = data.kpi || {};
+
+        if (kpiEl) {
+            kpiEl.innerHTML = [
+                _kpiCard('AI 總提問次數', kpi.total_questions ?? 0),
+                _kpiCard('調用 AI 獨立 IP 數', kpi.unique_ips ?? 0),
+                _kpiCard('AI 對話串總數', kpi.total_sessions ?? 0),
+                _kpiCard('觸發資料查詢工具次數', kpi.total_tool_calls ?? 0)
+            ].join('');
+        }
+
+        if (ipEl) {
+            const ipStats = data.ip_stats || [];
+            if (ipStats.length === 0) {
+                ipEl.innerHTML = '<p style="color:var(--pico-muted-color);">此區間尚無 AI 助手調用紀錄。</p>';
+            } else {
+                let html = '<figure><table><thead><tr>' +
+                    '<th>IP 位址</th>' +
+                    '<th>提問次數</th>' +
+                    '<th>對話串數</th>' +
+                    '<th>工具查詢次數</th>' +
+                    '<th>使用引擎</th>' +
+                    '<th>最後調用時間</th>' +
+                    '<th>最近一則提問內容</th>' +
+                    '</tr></thead><tbody>';
+                ipStats.forEach(row => {
+                    html += `<tr>
+                        <td><strong>${_esc(row.ip || '—')}</strong></td>
+                        <td>${row.question_count ?? 0}</td>
+                        <td>${row.session_count ?? 0}</td>
+                        <td>${row.tool_call_count ?? 0}</td>
+                        <td style="font-size:0.82em;">${_esc(row.engines || '—')}</td>
+                        <td style="font-size:0.85em; white-space:nowrap;">${_esc(row.last_used_at || '—')}</td>
+                        <td style="font-size:0.85em; max-width:340px; word-break:break-word;">${_esc(row.last_question || '—')}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table></figure>';
+                ipEl.innerHTML = html;
+            }
+        }
+
+        if (logsEl) {
+            const logs = data.recent_logs || [];
+            if (logs.length === 0) {
+                logsEl.innerHTML = '<p style="color:var(--pico-muted-color);">尚無近期問答明細。</p>';
+            } else {
+                let html = '<figure><table><thead><tr>' +
+                    '<th>時間</th>' +
+                    '<th>IP 位址</th>' +
+                    '<th>使用者提問內容</th>' +
+                    '<th>觸發工具 (Tools)</th>' +
+                    '<th>引擎</th>' +
+                    '<th>AI 回覆摘要</th>' +
+                    '</tr></thead><tbody>';
+                logs.forEach(item => {
+                    const toolsStr = Array.isArray(item.tool_calls) && item.tool_calls.length > 0
+                        ? item.tool_calls.join(', ')
+                        : '—';
+                    html += `<tr>
+                        <td style="font-size:0.82em; white-space:nowrap;">${_esc(item.created_at || '')}</td>
+                        <td style="font-size:0.85em; white-space:nowrap;"><strong>${_esc(item.ip || '—')}</strong></td>
+                        <td style="font-size:0.88em; max-width:260px; word-break:break-word;">${_esc(item.question || '')}</td>
+                        <td style="font-size:0.8em; color:#64b5f6;">${_esc(toolsStr)}</td>
+                        <td style="font-size:0.8em; white-space:nowrap;">${_esc(item.engine_label || '—')}</td>
+                        <td style="font-size:0.82em; max-width:320px; word-break:break-word; color:var(--pico-muted-color);">${_esc(item.reply_preview || '')}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table></figure>';
+                logsEl.innerHTML = html;
+            }
+        }
+    } catch (err) {
+        console.error('載入 AI 調用統計失敗:', err);
+        if (ipEl) {
+            ipEl.innerHTML = '<p style="color:var(--pico-color-danger, #d32f2f);">載入 AI 調用統計失敗（若剛更新程式碼請先重啟 5002 服務）。</p>';
+        }
+    }
 }

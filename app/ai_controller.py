@@ -100,6 +100,16 @@ def get_visitor_id() -> str:
     return new_vid
 
 
+def get_client_ip() -> str:
+    """取得呼叫端的真實 IP 位址（優先讀取反向代理 X-Forwarded-For）"""
+    fwd = request.headers.get('X-Forwarded-For', '')
+    if fwd:
+        first_ip = fwd.split(',')[0].strip()
+        if first_ip:
+            return first_ip[:64]
+    return (request.remote_addr or 'unknown')[:64]
+
+
 # ---------------------------------------------------------------------------
 # 6 支唯讀採購與訂單規格 Tools（直連 cache_manager 記憶體快取與唯讀 DB）
 # ---------------------------------------------------------------------------
@@ -1319,10 +1329,11 @@ class AiController:
             for s in sessions
         ]
 
-    def create_session(self, visitor_id: str, title: str = '新對話') -> dict:
+    def create_session(self, visitor_id: str, title: str = '新對話', ip_address: str = None) -> dict:
         s = AiSession(
             id=str(uuid.uuid4()),
             visitor_id=visitor_id,
+            ip_address=ip_address,
             title=title or '新對話',
             created_at=get_taiwan_time(),
             updated_at=get_taiwan_time(),
@@ -1711,6 +1722,7 @@ class AiController:
         engine_override: str = None,
         model_override: str = None,
         lang: str = 'zh',
+        ip_address: str = None,
     ) -> dict:
         self._cleanup_old_jobs()
         is_en = str(lang or '').lower().startswith('en')
@@ -1724,15 +1736,23 @@ class AiController:
             s = AiSession(
                 id=str(uuid.uuid4()),
                 visitor_id=visitor_id,
+                ip_address=ip_address,
                 title=self._derive_session_title(user_message) or default_title,
                 created_at=get_taiwan_time(),
                 updated_at=get_taiwan_time(),
             )
             db.session.add(s)
             db.session.commit()
-        elif s.title in ('新對話', 'New Chat', '', None) and len(s.messages) == 0:
-            s.title = self._derive_session_title(user_message)
-            db.session.commit()
+        else:
+            changed = False
+            if s.title in ('新對話', 'New Chat', '', None) and len(s.messages) == 0:
+                s.title = self._derive_session_title(user_message)
+                changed = True
+            if ip_address and not s.ip_address:
+                s.ip_address = ip_address
+                changed = True
+            if changed:
+                db.session.commit()
 
         # 讀取歷史訊息（不含本輪）
         history_messages = [{'role': m.role, 'content': m.content} for m in s.messages[-12:]]
@@ -1740,6 +1760,7 @@ class AiController:
         # 寫入使用者訊息
         user_msg_row = AiMessage(
             session_id=s.id,
+            ip_address=ip_address or s.ip_address,
             role='user',
             content=user_message,
             created_at=get_taiwan_time(),
@@ -1872,6 +1893,166 @@ class AiController:
                 return None
             return dict(job)
 
+    def get_usage_analytics(self, date_from: str = None, date_to: str = None) -> dict:
+        """
+        後台管理專用：統計各 IP 調用 AI 助手紀錄與近期問答明細
+        支援以 visitor_id 對照 analytics.db 自動回補早期未填 ip_address 的對話紀錄
+        """
+        import sqlite3
+
+        # 1. 從 analytics.db 建立 visitor_id -> ip 對照表（回補歷史對話 IP）
+        vid_to_ip = {}
+        try:
+            if hasattr(Config, 'ANALYTICS_DB') and os.path.exists(Config.ANALYTICS_DB):
+                aconn = sqlite3.connect(Config.ANALYTICS_DB)
+                cur = aconn.cursor()
+                cur.execute(
+                    "SELECT visitor_id, ip FROM page_view_events WHERE visitor_id IS NOT NULL AND ip IS NOT NULL GROUP BY visitor_id HAVING MAX(id)"
+                )
+                for r_vid, r_ip in cur.fetchall():
+                    if r_vid and r_ip:
+                        vid_to_ip[str(r_vid)] = str(r_ip)
+                aconn.close()
+        except Exception as e:
+            app_logger.debug(f'從 analytics.db 對照 visitor_id IP 略過: {e}')
+
+        # 2. 解析日期區間
+        dt_start = None
+        dt_end = None
+        if date_from:
+            try:
+                dt_start = datetime.strptime(date_from.strip()[:10], '%Y-%m-%d')
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                dt_end = datetime.strptime(date_to.strip()[:10], '%Y-%m-%d') + timedelta(days=1)
+            except ValueError:
+                pass
+
+        # 3. 讀取所有對話串與訊息
+        sessions_all = AiSession.query.all()
+        sess_map = {}
+        db_backfilled = False
+        for s in sessions_all:
+            resolved_ip = s.ip_address or vid_to_ip.get(s.visitor_id)
+            if not s.ip_address and resolved_ip:
+                s.ip_address = resolved_ip
+                db_backfilled = True
+            sess_map[s.id] = {
+                'visitor_id': s.visitor_id,
+                'ip': resolved_ip or f'未知 ({(s.visitor_id or "")[:8]})',
+                'title': s.title,
+            }
+        if db_backfilled:
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        q = AiMessage.query.order_by(AiMessage.id.asc())
+        if dt_start:
+            q = q.filter(AiMessage.created_at >= dt_start)
+        if dt_end:
+            q = q.filter(AiMessage.created_at < dt_end)
+        msgs = q.all()
+
+        # 將同 session 內的 user 訊息與緊隨其後的 assistant 回覆配對
+        ip_buckets = {}
+        paired_records = []
+        total_tool_calls = 0
+
+        for idx, m in enumerate(msgs):
+            s_info = sess_map.get(m.session_id, {})
+            ip_val = m.ip_address or s_info.get('ip') or '未知'
+
+            if m.role == 'user':
+                # 尋找同一 session 下一個 assistant 訊息作為配對回覆
+                reply_msg = None
+                for nxt in msgs[idx + 1 : idx + 4]:
+                    if nxt.session_id == m.session_id and nxt.role == 'assistant':
+                        reply_msg = nxt
+                        break
+
+                tc_list = []
+                eng_label = ''
+                reply_text = ''
+                if reply_msg:
+                    eng_label = reply_msg.engine_label or ''
+                    reply_text = reply_msg.content or ''
+                    if reply_msg.tool_calls:
+                        try:
+                            tc_list = json.loads(reply_msg.tool_calls) or []
+                        except Exception:
+                            tc_list = []
+
+                total_tool_calls += len(tc_list)
+                ts_str = m.created_at.strftime('%Y-%m-%d %H:%M:%S') if m.created_at else ''
+
+                b = ip_buckets.setdefault(
+                    ip_val,
+                    {
+                        'ip': ip_val,
+                        'question_count': 0,
+                        'sessions': set(),
+                        'engines': {},
+                        'tool_call_count': 0,
+                        'last_used_at': '',
+                        'last_question': '',
+                    },
+                )
+                b['question_count'] += 1
+                b['sessions'].add(m.session_id)
+                b['tool_call_count'] += len(tc_list)
+                if eng_label:
+                    short_eng = eng_label.split(' ')[0]
+                    b['engines'][short_eng] = b['engines'].get(short_eng, 0) + 1
+                if ts_str >= b['last_used_at']:
+                    b['last_used_at'] = ts_str
+                    b['last_question'] = m.content[:80]
+
+                paired_records.append({
+                    'id': m.id,
+                    'created_at': ts_str,
+                    'ip': ip_val,
+                    'visitor_id': (s_info.get('visitor_id') or '')[:12],
+                    'session_id': m.session_id,
+                    'question': m.content,
+                    'reply_preview': (reply_text[:200] + ('…' if len(reply_text) > 200 else '')) if reply_text else '（處理中或無回覆）',
+                    'tool_calls': [t.get('name', '') for t in tc_list if isinstance(t, dict)],
+                    'engine_label': eng_label or '-',
+                })
+
+        ip_stats = []
+        for ip_val, b in ip_buckets.items():
+            top_engines = ', '.join(
+                f"{k}({v})" for k, v in sorted(b['engines'].items(), key=lambda x: -x[1])
+            ) or '-'
+            ip_stats.append({
+                'ip': ip_val,
+                'question_count': b['question_count'],
+                'session_count': len(b['sessions']),
+                'tool_call_count': b['tool_call_count'],
+                'engines': top_engines,
+                'last_used_at': b['last_used_at'],
+                'last_question': b['last_question'],
+            })
+
+        ip_stats.sort(key=lambda x: (-x['question_count'], x['last_used_at']), reverse=False)
+        paired_records.reverse()  # 最新排最前
+
+        all_unique_sessions = {r['session_id'] for r in paired_records}
+        return {
+            'kpi': {
+                'total_questions': len(paired_records),
+                'unique_ips': len(ip_stats),
+                'total_sessions': len(all_unique_sessions),
+                'total_tool_calls': total_tool_calls,
+            },
+            'ip_stats': ip_stats,
+            'recent_logs': paired_records[:50],
+        }
+
 
 ai_controller = AiController()
 
@@ -1896,8 +2077,9 @@ def api_list_sessions():
 @ai_bp.route('/api/ai/sessions', methods=['POST'])
 def api_create_session():
     vid = get_visitor_id()
+    client_ip = get_client_ip()
     body = request.get_json(silent=True) or {}
-    created = ai_controller.create_session(vid, title=body.get('title') or '新對話')
+    created = ai_controller.create_session(vid, title=body.get('title') or '新對話', ip_address=client_ip)
     return jsonify({'success': True, 'session': created})
 
 
@@ -1922,6 +2104,7 @@ def api_delete_session(session_id):
 @ai_bp.route('/api/ai/chat', methods=['POST'])
 def api_start_chat():
     vid = get_visitor_id()
+    client_ip = get_client_ip()
     body = request.get_json(silent=True) or {}
     message = (body.get('message') or '').strip()
     if not message:
@@ -1936,6 +2119,7 @@ def api_start_chat():
         engine_override=body.get('engine_mode'),
         model_override=body.get('model'),
         lang=body.get('lang') or 'zh',
+        ip_address=client_ip,
     )
     return jsonify({'success': True, **result})
 
@@ -1963,3 +2147,13 @@ def api_update_config():
     body = request.get_json(silent=True) or {}
     updated = ai_controller.update_config(body)
     return jsonify({'success': True, 'config': updated})
+
+
+@ai_bp.route('/api/admin/ai-usage', methods=['GET'])
+@login_required
+def api_admin_ai_usage():
+    """後台管理：取得各 IP 調用 AI 助手統計與近期問答紀錄"""
+    date_from = request.args.get('from', '')
+    date_to = request.args.get('to', '')
+    data = ai_controller.get_usage_analytics(date_from=date_from, date_to=date_to)
+    return jsonify({'success': True, **data})
