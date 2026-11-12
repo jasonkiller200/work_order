@@ -30,6 +30,7 @@ def create_app():
     # 載入設定
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
     
     # 設定資料庫
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///order_management.db'

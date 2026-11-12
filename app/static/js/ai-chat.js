@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var ASSET_VER = '20261112e';
+  var ASSET_VER = '20261112f';
   var STORAGE_RECT_KEY = 'hartford_ai_window_rect_v2';
   var STORAGE_ENGINE_KEY = 'hartford_ai_engine_v1';
   var STORAGE_SESSION_KEY = 'hartford_ai_active_session_v1';
@@ -253,6 +253,15 @@
 
   // ---- 4. 建立浮動按鈕與浮動視窗 DOM ----
   function buildFloatingUI() {
+    // 自動移除功能列 (nav) 中殘留的 /ai 連結（兼容尚未重啟 5002 的記憶體模板快取）
+    document.querySelectorAll('nav a[href="/ai"]').forEach(function (a) {
+      if (a.parentElement && a.parentElement.tagName === 'LI') {
+        a.parentElement.remove();
+      } else {
+        a.remove();
+      }
+    });
+
     if (document.getElementById('hf-ai-fab')) return;
 
     // 浮動按鈕

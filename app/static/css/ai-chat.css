@@ -15,6 +15,12 @@
   --hf-ai-bot-bubble: #243447;
 }
 
+/* 強制隱藏功能列 (nav) 中的 /ai 連結（即使伺服器尚未重啟、Jinja 快取舊模板也能即時隱藏） */
+nav a[href="/ai"],
+nav li:has(> a[href="/ai"]) {
+  display: none !important;
+}
+
 /* ===== 1. 右下角全域浮動按鈕 (FAB) ===== */
 .hf-ai-fab {
   position: fixed;
