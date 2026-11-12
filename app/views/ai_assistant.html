@@ -32,8 +32,10 @@
                 </div>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <label for="hf-ai-page-engine-select" style="margin: 0; font-size: 0.85rem; white-space: nowrap;">⚙️ 運算引擎：</label>
-                <select id="hf-ai-page-engine-select" style="margin: 0; padding: 6px 10px; font-size: 0.85rem; width: auto;">
+                <label for="hf-ai-page-engine-select" style="margin: 0; font-size: 0.85rem; white-space: nowrap;">⚙️
+                    運算引擎：</label>
+                <select id="hf-ai-page-engine-select"
+                    style="margin: 0; padding: 6px 10px; font-size: 0.85rem; width: auto;">
                     <option value="vllm_local">本地 Qwen3.8-27B (vLLM 預設・極速併發)</option>
                     <option value="cli">Antigravity CLI (Gemini 3.8 Flash 免金鑰)</option>
                     <option value="sdk">Gemini SDK (API Key)</option>
@@ -77,7 +79,8 @@
                 <div class="hf-ai-input-area">
                     <textarea class="hf-ai-textarea" id="hf-ai-page-input" rows="2" style="flex:1 1 auto;width:auto;"
                         placeholder="請輸入問題，例如：「目前 30 日內缺料總覽」、「100003884 規格」、「哪些單沒有 CTS」… (Enter 發送，Shift+Enter 換行)"></textarea>
-                    <button type="button" class="hf-ai-send-btn" id="hf-ai-page-send" style="flex:0 0 auto;width:auto;">發送提問</button>
+                    <button type="button" class="hf-ai-send-btn" id="hf-ai-page-send"
+                        style="flex:0 0 auto;width:auto;">發送提問</button>
                 </div>
             </section>
         </div>
@@ -89,4 +92,3 @@
 </body>
 
 </html>
-

@@ -55,9 +55,12 @@
                 <span id="traffic-range-label" style="color:var(--pico-muted-color);"></span>
             </div>
 
-            <div id="traffic-kpi" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:0.75em; margin-bottom:1em;"></div>
+            <div id="traffic-kpi"
+                style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:0.75em; margin-bottom:1em;">
+            </div>
 
-            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1em; margin-bottom:1em;">
+            <div
+                style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1em; margin-bottom:1em;">
                 <article>
                     <h3>每日趨勢（瀏覽次數 / 獨立訪客）</h3>
                     <div style="position:relative; height:260px;"><canvas id="trend-chart"></canvas></div>
@@ -70,17 +73,23 @@
 
             <article>
                 <h3>使用熱圖（星期 × 時段）</h3>
-                <div id="traffic-heatmap" style="display:grid; grid-template-columns:auto repeat(24, minmax(0, 1fr)); gap:2px; align-items:center;"></div>
+                <div id="traffic-heatmap"
+                    style="display:grid; grid-template-columns:auto repeat(24, minmax(0, 1fr)); gap:2px; align-items:center;">
+                </div>
                 <p style="color:var(--pico-muted-color); font-size:0.8em; margin-top:0.5em;">顏色越深＝瀏覽越多；滑鼠移過格子可看明細。</p>
             </article>
 
             <details>
                 <summary style="cursor:pointer;">活躍裝置排行（未登入＝裝置粒度）</summary>
-                <div id="traffic-users-container"><p>正在載入...</p></div>
+                <div id="traffic-users-container">
+                    <p>正在載入...</p>
+                </div>
             </details>
             <details>
                 <summary style="cursor:pointer;">即時紀錄（最近 50 筆）</summary>
-                <div id="traffic-recent-container"><p>正在載入...</p></div>
+                <div id="traffic-recent-container">
+                    <p>正在載入...</p>
+                </div>
             </details>
             <details>
                 <summary style="cursor:pointer;">經典各頁 IP 明細（遷移前歷史資料）</summary>
@@ -96,24 +105,32 @@
         <hr>
 
         <section id="ai-usage-dashboard">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5em; margin-bottom:0.75em;">
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5em; margin-bottom:0.75em;">
                 <h2 style="margin:0;">🤖 AI 助手調用統計（依 IP 統計與問答紀錄）</h2>
-                <button id="ai-usage-refresh-btn" class="secondary" style="margin:0; width:auto; padding:0.35em 0.9em; font-size:0.85em;">🔄 重新整理 AI 統計</button>
+                <button id="ai-usage-refresh-btn" class="secondary"
+                    style="margin:0; width:auto; padding:0.35em 0.9em; font-size:0.85em;">🔄 重新整理 AI 統計</button>
             </div>
             <p style="color:var(--pico-muted-color); font-size:0.88em; margin-bottom:1em;">
                 與上方「網站流量分析」共用日期區間篩選（起 / 迄 / 最近 30 天），統計各廠內 IP 呼叫 Hartford AI 助手的次數與近期提問內容。
             </p>
 
-            <div id="ai-usage-kpi" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:0.75em; margin-bottom:1em;"></div>
+            <div id="ai-usage-kpi"
+                style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:0.75em; margin-bottom:1em;">
+            </div>
 
             <article style="margin-bottom:1em;">
                 <h3>📊 各 IP 調用 AI 助手排行</h3>
-                <div id="ai-ip-stats-container"><p>正在載入 AI 調用統計...</p></div>
+                <div id="ai-ip-stats-container">
+                    <p>正在載入 AI 調用統計...</p>
+                </div>
             </article>
 
             <details>
                 <summary style="cursor:pointer;">💬 最近 50 筆 AI 問答明細（含 IP、提問內容、觸發工具与回覆摘要）</summary>
-                <div id="ai-recent-logs-container" style="margin-top:0.75em;"><p>正在載入近期問答紀錄...</p></div>
+                <div id="ai-recent-logs-container" style="margin-top:0.75em;">
+                    <p>正在載入近期問答紀錄...</p>
+                </div>
             </details>
         </section>
 

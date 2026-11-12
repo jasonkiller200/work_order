@@ -213,11 +213,15 @@ function renderTrendChart(trend) {
         data: {
             labels: trend.map(t => t.date.slice(5)),
             datasets: [
-                            { label: '瀏覽次數', data: trend.map(t => t.views), tension: 0.25,
-                              borderColor: 'rgba(26,155,196,1)', backgroundColor: 'rgba(26,155,196,0.15)' },
-                            { label: '獨立訪客', data: trend.map(t => t.uv), tension: 0.25,
-                              borderColor: 'rgba(255,193,7,1)', backgroundColor: 'rgba(255,193,7,0.15)' }
-                        ]
+                {
+                    label: '瀏覽次數', data: trend.map(t => t.views), tension: 0.25,
+                    borderColor: 'rgba(26,155,196,1)', backgroundColor: 'rgba(26,155,196,0.15)'
+                },
+                {
+                    label: '獨立訪客', data: trend.map(t => t.uv), tension: 0.25,
+                    borderColor: 'rgba(255,193,7,1)', backgroundColor: 'rgba(255,193,7,0.15)'
+                }
+            ]
         },
         options: {
             responsive: true,
@@ -235,8 +239,10 @@ function renderPagesChart(pages) {
         type: 'bar',
         data: {
             labels: pages.map(p => (p.page || '').replace('.html', '')),
-                        datasets: [{ label: '瀏覽次數', data: pages.map(p => p.views),
-                            backgroundColor: 'rgba(26,155,196,0.9)', hoverBackgroundColor: 'rgba(26,155,196,1)' }]
+            datasets: [{
+                label: '瀏覽次數', data: pages.map(p => p.views),
+                backgroundColor: 'rgba(26,155,196,0.9)', hoverBackgroundColor: 'rgba(26,155,196,1)'
+            }]
         },
         options: {
             indexAxis: 'y',
