@@ -1,6 +1,12 @@
-# 實例資料庫
+# 實例資料庫與環境變數密鑰
 instance/
 *.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+*.key
+*.pem
 
 # 備份目錄
 _*_backup_*/
