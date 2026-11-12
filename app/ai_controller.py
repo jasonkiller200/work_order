@@ -579,16 +579,7 @@ def tool_search_procurement(keyword: str) -> dict:
         ]).upper()
         if any(k in haystack for k in kw_candidates):
             order_mats = order_details_map.get(str(order_no), [])
-            shortage_mats = [
-                {
-                    '物料': om.get('物料'),
-                    '物料說明': om.get('物料說明'),
-                    '未結數量': om.get('未結數量 (EINHEIT)'),
-                    '缺料數': om.get('order_shortage'),
-                }
-                for om in order_mats
-                if float(om.get('order_shortage', 0) or 0) > 0
-            ]
+            shortage_mats = _aggregate_shortage_by_material(order_mats)
             matched_orders.append({
                 '工單號碼': order_no,
                 '客戶名稱': info.get('下單客戶名稱', ''),
@@ -598,27 +589,18 @@ def tool_search_procurement(keyword: str) -> dict:
                 '生產結束_出貨日': info.get('生產結束', ''),
                 '廠別': info.get('廠別', ''),
                 '該工單缺料項數': len(shortage_mats),
-                '缺料前10項': shortage_mats[:10],
+                '缺料料號明細': shortage_mats,
             })
 
     # 若 keyword 本身是工單號但不在 order_summary_map，也檢查 order_details_map
     if kw in order_details_map and not any(o['工單號碼'] == kw for o in matched_orders):
         order_mats = order_details_map.get(kw, [])
-        shortage_mats = [
-            {
-                '物料': om.get('物料'),
-                '物料說明': om.get('物料說明'),
-                '未結數量': om.get('未結數量 (EINHEIT)'),
-                '缺料數': om.get('order_shortage'),
-            }
-            for om in order_mats
-            if float(om.get('order_shortage', 0) or 0) > 0
-        ]
+        shortage_mats = _aggregate_shortage_by_material(order_mats)
         matched_orders.append({
             '工單號碼': kw,
             '該工單總用料項數': len(order_mats),
             '該工單缺料項數': len(shortage_mats),
-            '缺料前15項': shortage_mats[:15],
+            '缺料料號明細': shortage_mats,
         })
 
     return {
@@ -628,6 +610,63 @@ def tool_search_procurement(keyword: str) -> dict:
         '符合條件工單筆數': len(matched_orders),
         '工單結果_前20筆': matched_orders[:20],
     }
+
+
+def _order_confusion_guard_error(user_message: str, fn_name: str, parsed_args: dict):
+    """防工單混淆守衛：目前問題若明確含 9 碼工單號，tool call 的工單號必須與之相符。
+
+    防止模型在連續兩題相似提問時誤抄上一輪工單號（例如先問 100003884、
+    再問 100003562，卻又呼叫 get_order_specs('100003884')），導致用錯工單資料作答。
+    偵測到不符時回傳錯誤訊息（讓模型以正確工單號重新呼叫）；無需攔截時回傳 None。
+    """
+    if not user_message:
+        return None
+    asked = set(re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str(user_message)))
+    if not asked:
+        return None
+    called = ''
+    if fn_name == 'get_order_specs':
+        called = re.sub(r'\D', '', str((parsed_args or {}).get('order_id') or ''))
+    elif fn_name in ('search_procurement', 'query_mes_orders'):
+        kw = str((parsed_args or {}).get('keyword') or '')
+        if re.fullmatch(r'\s*[126]\d{8}\s*', kw):
+            called = re.sub(r'\D', '', kw)
+    if not called or called in asked:
+        return None
+    target = '/'.join(sorted(asked))
+    return (
+        f'工單號不符：使用者本次詢問的是工單 {target}，但您呼叫了 {called}。'
+        f'您可能誤抄了上一輪的工單號，請勿以 {called} 的資料作答，'
+        f'請以正確工單號重新呼叫 {fn_name}。'
+    )
+
+
+def _aggregate_shortage_by_material(order_mats: list) -> list:
+    """缺料需求行按料號聚合（與工單總表「缺料筆數」口徑一致：同料號多行需求只算 1 筆）。
+    回傳依最早需求日排序的料號清單，每筆含缺料總量／需求行數／最早需求日。
+    """
+    by_mat = {}
+    for om in order_mats:
+        if float(om.get('order_shortage', 0) or 0) <= 0:
+            continue
+        mat = om.get('物料')
+        entry = by_mat.setdefault(mat, {
+            '物料': mat,
+            '物料說明': om.get('物料說明'),
+            '缺料總量': 0.0,
+            '需求行數': 0,
+            '最早需求日': None,
+        })
+        entry['缺料總量'] += float(om.get('order_shortage', 0) or 0)
+        entry['需求行數'] += 1
+        d = str(om.get('需求日期', ''))[:10]
+        if d and (entry['最早需求日'] is None or d < entry['最早需求日']):
+            entry['最早需求日'] = d
+    out = sorted(by_mat.values(), key=lambda e: (e['最早需求日'] or 'zzzz', str(e['物料'])))
+    for e in out:
+        q = e['缺料總量']
+        e['缺料總量'] = int(q) if float(q).is_integer() else q
+    return out
 
 
 def tool_get_order_specs(order_id: str) -> dict:
@@ -687,17 +726,8 @@ def tool_get_order_specs(order_id: str) -> dict:
         for s in raw_specs
     ]
 
-    shortage_mats = [
-        {
-            '物料': om.get('物料'),
-            '物料說明': om.get('物料說明'),
-            '需求日期': str(om.get('需求日期', ''))[:10],
-            '未結數量': om.get('未結數量 (EINHEIT)'),
-            '缺料數': om.get('order_shortage'),
-        }
-        for om in order_mats
-        if float(om.get('order_shortage', 0) or 0) > 0
-    ]
+    # 缺料需求行按料號聚合（與工單總表「缺料筆數」口徑一致：同料號多行需求只算 1 筆）
+    shortage_mats = _aggregate_shortage_by_material(order_mats)
 
     return {
         '工單號碼': oid,
@@ -716,7 +746,8 @@ def tool_get_order_specs(order_id: str) -> dict:
         '規格特性總數': len(formatted_specs),
         '規格明細': formatted_specs,
         '工單缺料項數': len(shortage_mats),
-        '工單缺料前10項': shortage_mats[:10],
+        '缺料統計口徑': '按料號去重（與工單總表「缺料筆數」一致；同料號多行需求只算 1 筆）',
+        '工單缺料料號明細': shortage_mats,
     }
 
 
@@ -1121,7 +1152,7 @@ BASE_SYSTEM_PROMPT_ZH = """你是哈特佛（Hartford / 協鴻工業）「生產
 3. **查無欄位或查無資料時必須直說，嚴禁腦補或編造**：
    - 若工具回傳「找不到」或空陣列，必須明確回答「目前系統快取／看板查無此工單或物料資料」。
    - 若使用者詢問的細項**不在工具回傳的 JSON 欄位中**（例如：詢問「前製程到哪 / 歷史製程紀錄 / 某站預計完工時間 / 異常原因細項」，但 MES 工具僅提供 `標準製程`、`目前製程`、`製程進度`、`異況數`、`MES缺料數`、`機台位置`），**必須老實回答：「系統目前僅記錄［現有欄位內容］，並無［所問細項］的詳細資料」**，絕對禁止自行推算、猜測或編造任何製程步驟與數據！
-4. **追問時自動銜接上下文單號**：若使用者前一句詢問某張工單（如 `100003884`），下一句追問「那目前生產進度？」或「前製程到哪？」，請針對該工單呼叫 `get_order_specs` 或 `query_mes_orders` 取得實際數據後再回答。
+4. **工單號必須以「本句問題」為準（防串單）**：若使用者當前的問題**明確寫出 9 碼工單號**，工具呼叫的工單號**一律使用本句的工單號**——即使上一題提問非常相似（例如剛問完 `100003884`，使用者接著問 `100003562`），也**絕對不得沿用上一輪的工單號或其回傳資料**，必須以新工單號重新查詢。只有當本句**沒有**工單號、屬於追問（如「那目前生產進度？」「前製程到哪？」）時，才銜接上下文最近討論的工單號查詢。
 5. 延遲定義：`預計到貨日 (expected_date) − 第一筆開始缺料的需求日 (demand_date)`；若無交期且有缺料則標示為「無交期」。
 6. 工具選用指引：
    - 詢問某張 9 碼工單（如 `100003884`）的規格、主軸、控制器、CTS 或該單狀態 → 呼叫 `get_order_specs`。
@@ -1136,7 +1167,7 @@ Please strictly follow this **Zero Hallucination & Strict Grounding Policy**:
 3. **Never Guess or Fabricate Missing Fields**:
    - If a tool returns "not found" or an empty list, state clearly: "No matching record was found in the current system cache / MES board."
    - If the user asks for information that **does not exist in the tool's JSON fields** (for example, asking for "previous process history" or "root cause details of abnormalities" when the MES tool only provides `standard_process`, `current_process`, `process_progress`, `abnormal_count`, `shortage_count`, and `machine_location`), **you MUST state clearly that the system only records the available fields and does not store that specific detail**. Never infer, guess, or invent process steps, percentages, dates, or numbers!
-4. **Follow-up Context**: If the user asks a follow-up question (e.g., "What is its current production progress?") without repeating the work order number, use the 9-digit work order number from the recent conversation history and call `get_order_specs` or `query_mes_orders`.
+4. **Order number must match the current question (anti cross-order confusion)**: If the current question explicitly contains a 9-digit work order number, the tool call MUST use THAT number from this question — even if the previous question was nearly identical (e.g., you just answered for `100003884` and the user now asks about `100003562`), you must NEVER reuse the previous turn's order number or its returned data; always re-query with the new number. Only when the current question has NO order number (a follow-up such as "What is its current production progress?"), carry the most recent order number from the conversation context.
 5. Delivery delay definition: `Expected Delivery Date − Earliest Shortage Demand Date`. If a shortage item has no expected delivery date, label it as "No Delivery Date".
 6. Tool Selection:
    - Specific 9-digit work order (e.g., `100003884`) specs or status → call `get_order_specs`.
@@ -1165,10 +1196,10 @@ def _build_cli_stateless_prompt(user_message: str, history_messages: list, lang:
     injected_blocks.append(f"【即時採購儀表板總覽】\n```json\n{json.dumps(summary_data, ensure_ascii=False)}\n```")
 
     # 2. 自動偵測 9 碼工單號碼 (1/2/6 開頭共 9 碼；若本輪未帶單號，從最近 4 則歷史訊息繼承最近討論的工單號)
-    order_ids = list(dict.fromkeys(re.findall(r'\b[126]\d{8}\b', user_message)))
+    order_ids = list(dict.fromkeys(re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', user_message)))
     if not order_ids and history_messages:
         for hm in reversed(history_messages[-4:]):
-            prev_ids = re.findall(r'\b[126]\d{8}\b', str(hm.get('content') or ''))
+            prev_ids = re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str(hm.get('content') or ''))
             if prev_ids:
                 order_ids = [prev_ids[0]]
                 break
@@ -1402,10 +1433,10 @@ class AiController:
         auto_calls = []
 
         # 1. 檢查本輪或最近 4 則歷史中的 9 碼工單號
-        order_ids = list(dict.fromkeys(re.findall(r'\b[126]\d{8}\b', msg_clean)))
+        order_ids = list(dict.fromkeys(re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', msg_clean)))
         if not order_ids and history_messages:
             for hm in reversed(history_messages[-4:]):
-                prev_ids = re.findall(r'\b[126]\d{8}\b', str(hm.get('content') or ''))
+                prev_ids = re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str(hm.get('content') or ''))
                 if prev_ids:
                     order_ids = [prev_ids[0]]
                     break
@@ -1534,6 +1565,18 @@ class AiController:
                     parsed_args = {}
 
                 recorded_tool_calls.append({'name': fn_name, 'args': parsed_args})
+
+                # 防工單混淆守衛：問題中明確的工單號必須與 tool call 相符，防止誤抄上一輪工單號
+                guard_error = _order_confusion_guard_error(user_message, fn_name, parsed_args)
+                if guard_error:
+                    app_logger.warning(f'防混淆守衛攔截: {fn_name} 被呼叫了錯誤工單號: {parsed_args} (user: {user_message[:80]})')
+                    messages.append({
+                        'role': 'tool',
+                        'tool_call_id': tc.get('id', f'call_{len(recorded_tool_calls)}'),
+                        'name': fn_name,
+                        'content': json.dumps({'error': guard_error}, ensure_ascii=False),
+                    })
+                    continue
 
                 handler = TOOL_DISPATCH.get(fn_name)
                 if handler:
