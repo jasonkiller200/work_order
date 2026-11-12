@@ -1102,26 +1102,36 @@ TOOL_DISPATCH = {
 
 
 # ---------------------------------------------------------------------------
-# System Prompt 與 CLI Stateless 快照建構器（支援中/英雙語切換）
+# System Prompt 與 CLI Stateless 快照建構器（支援中/英雙語切換＋嚴格防幻覺鐵律）
 # ---------------------------------------------------------------------------
 BASE_SYSTEM_PROMPT_ZH = """你是哈特佛（Hartford / 協鴻工業）「生產資訊中心 - 採購、工單規格與 MES 生產管理儀表板」內建的 AI 助手（Hartford AI）。
-請遵守以下原則：
+請嚴格遵守以下【零臆測／有憑有據鐵律（Zero Hallucination Policy）】：
 1. 一律使用**繁體中文**回答，語氣專業、清晰、精準，善用 Markdown 表格或條列呈現數據。
-2. 回答採購缺料、交期、兩週清單、物料明細、訂單規格或 MES 生產進度問題時，**必須優先呼叫工具查詢最新即時數據**，嚴禁自行編造品號、工單號、交期或數量。
-3. 延遲定義：`預計到貨日 (expected_date) − 第一筆開始缺料的需求日 (demand_date)`；若無交期且有缺料則標示為「無交期」。
-4. 若使用者詢問某張 9 碼工單（如 100003884）的規格、主軸、控制器、CTS 或該單 MES 狀態，請呼叫 `get_order_specs`。
-5. 若使用者詢問「哪些工單有/沒有某規格」（如「哪些單沒有 CTS」、「列出 7.5KW 主軸工單」），請呼叫 `search_orders_by_spec`（若問「沒有」請設 `exclude=true`）。
-6. 若使用者詢問 **MES 生產管理看板**（如一廠/三廠工單、目前製程、標準製程、製程進度 Delay/On Time、異況、機台位置），請呼叫 `query_mes_orders`。
+2. **強制先查工具、有數據才能回答**：回答任何採購缺料、交期、兩週清單、物料明細、訂單規格或 MES 生產進度問題時，**必須先呼叫工具查詢最新即時數據**。你輸出的每一個工單號、品號、數量、日期、客戶、製程名稱、機台位置與百分比，**必須 100% 逐字來自工具回傳的 JSON 數據**。
+3. **查無欄位或查無資料時必須直說，嚴禁腦補或編造**：
+   - 若工具回傳「找不到」或空陣列，必須明確回答「目前系統快取／看板查無此工單或物料資料」。
+   - 若使用者詢問的細項**不在工具回傳的 JSON 欄位中**（例如：詢問「前製程到哪 / 歷史製程紀錄 / 某站預計完工時間 / 異常原因細項」，但 MES 工具僅提供 `標準製程`、`目前製程`、`製程進度`、`異況數`、`MES缺料數`、`機台位置`），**必須老實回答：「系統目前僅記錄［現有欄位內容］，並無［所問細項］的詳細資料」**，絕對禁止自行推算、猜測或編造任何製程步驟與數據！
+4. **追問時自動銜接上下文單號**：若使用者前一句詢問某張工單（如 `100003884`），下一句追問「那目前生產進度？」或「前製程到哪？」，請針對該工單呼叫 `get_order_specs` 或 `query_mes_orders` 取得實際數據後再回答。
+5. 延遲定義：`預計到貨日 (expected_date) − 第一筆開始缺料的需求日 (demand_date)`；若無交期且有缺料則標示為「無交期」。
+6. 工具選用指引：
+   - 詢問某張 9 碼工單（如 `100003884`）的規格、主軸、控制器、CTS 或該單狀態 → 呼叫 `get_order_specs`。
+   - 詢問「哪些工單有/沒有某規格」（如「哪些單沒有 CTS」、「列出 7.5KW 主軸工單」）→ 呼叫 `search_orders_by_spec`（若問「沒有」請設 `exclude=true`）。
+   - 詢問 **MES 生產管理看板**（如一廠/三廠工單、目前製程、標準製程、製程進度 Delay/On Time、異況、機台位置）→ 呼叫 `query_mes_orders`。
 """
 
 BASE_SYSTEM_PROMPT_EN = """You are **Hartford AI**, the built-in AI Assistant for the Hartford (She Hong Industrial) "Production Information Center - Procurement, Work Order Spec & MES Dashboard".
-Please follow these strict rules:
+Please strictly follow this **Zero Hallucination & Strict Grounding Policy**:
 1. **Always respond in clear, professional English.** Even if the raw database/SAP/MES data returned by tools contains Traditional Chinese (such as material descriptions, characteristic names, process names, machine locations, customer names, or buyer names), **translate the meanings, table headers, and explanations into natural English** while keeping part numbers, PO numbers, and 9-digit work order numbers intact (you may keep original Chinese names/locations in parentheses for clarity).
-2. Always call the read-only tools first to retrieve real-time data before answering questions about shortages, delivery schedules, 2-week lists, material details, work order specifications, or MES production status. Never fabricate part numbers, work order numbers, dates, or quantities.
-3. Delivery delay definition: `Expected Delivery Date − Earliest Shortage Demand Date`. If a shortage item has no expected delivery date, label it as "No Delivery Date".
-4. When asked about a specific 9-digit work order (e.g., 100003884), call `get_order_specs`.
-5. When asked which work orders have or do NOT have a certain specification (e.g., "Which orders don't have CTS?", "List all 7.5KW spindle orders"), call `search_orders_by_spec` (set `exclude=true` for negative queries like "without / no").
-6. When asked about **MES Production Management** (Plant 1 / Plant 3 work orders, standard process, current process, process progress Delay/On Time, abnormal count, MES shortage, or machine location), call `query_mes_orders`.
+2. **Mandatory Tool Call & 100% Data Grounding**: Always call the read-only tools first to retrieve real-time data before answering any question about shortages, delivery schedules, 2-week lists, material details, work order specifications, or MES production status. Every work order number, part number, quantity, date, process name, and location you state **must come 100% verbatim from the JSON returned by the tools**.
+3. **Never Guess or Fabricate Missing Fields**:
+   - If a tool returns "not found" or an empty list, state clearly: "No matching record was found in the current system cache / MES board."
+   - If the user asks for information that **does not exist in the tool's JSON fields** (for example, asking for "previous process history" or "root cause details of abnormalities" when the MES tool only provides `standard_process`, `current_process`, `process_progress`, `abnormal_count`, `shortage_count`, and `machine_location`), **you MUST state clearly that the system only records the available fields and does not store that specific detail**. Never infer, guess, or invent process steps, percentages, dates, or numbers!
+4. **Follow-up Context**: If the user asks a follow-up question (e.g., "What is its current production progress?") without repeating the work order number, use the 9-digit work order number from the recent conversation history and call `get_order_specs` or `query_mes_orders`.
+5. Delivery delay definition: `Expected Delivery Date − Earliest Shortage Demand Date`. If a shortage item has no expected delivery date, label it as "No Delivery Date".
+6. Tool Selection:
+   - Specific 9-digit work order (e.g., `100003884`) specs or status → call `get_order_specs`.
+   - Filtering work orders by spec (e.g., "Which orders don't have CTS?", "List all 7.5KW spindle orders") → call `search_orders_by_spec` (set `exclude=true` for negative queries).
+   - **MES Production Management** (Plant 1 / Plant 3 work orders, standard process, current process, Delay/On Time progress, abnormal count, MES shortage, machine location) → call `query_mes_orders`.
 """
 
 BASE_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT_ZH
@@ -1144,12 +1154,18 @@ def _build_cli_stateless_prompt(user_message: str, history_messages: list, lang:
     auto_tools.append({'name': 'get_shortage_summary', 'args': {'dashboard_type': 'main'}})
     injected_blocks.append(f"【即時採購儀表板總覽】\n```json\n{json.dumps(summary_data, ensure_ascii=False)}\n```")
 
-    # 2. 自動偵測 9 碼工單號碼 (1/2/6 開頭共 9 碼)
+    # 2. 自動偵測 9 碼工單號碼 (1/2/6 開頭共 9 碼；若本輪未帶單號，從最近 4 則歷史訊息繼承最近討論的工單號)
     order_ids = list(dict.fromkeys(re.findall(r'\b[126]\d{8}\b', user_message)))
+    if not order_ids and history_messages:
+        for hm in reversed(history_messages[-4:]):
+            prev_ids = re.findall(r'\b[126]\d{8}\b', str(hm.get('content') or ''))
+            if prev_ids:
+                order_ids = [prev_ids[0]]
+                break
     for oid in order_ids[:3]:
         spec_res = tool_get_order_specs(oid)
         auto_tools.append({'name': 'get_order_specs', 'args': {'order_id': oid}})
-        injected_blocks.append(f"【工單 {oid} 規格與缺料明細】\n```json\n{json.dumps(spec_res, ensure_ascii=False)}\n```")
+        injected_blocks.append(f"【工單 {oid} 規格、MES狀態與缺料明細】\n```json\n{json.dumps(spec_res, ensure_ascii=False)}\n```")
 
     # 3. 自動偵測可能的物料品號（英數混合 8~16 碼，排除已匹配工單）
     mat_candidates = [
@@ -1358,23 +1374,86 @@ class AiController:
         return True
 
     # ---- 三引擎執行實作 ----
+    @staticmethod
+    def _collect_auto_grounding(user_message: str, history_messages: list) -> tuple[list[str], list[dict]]:
+        """
+        當模型第一輪未主動呼叫任何 Tool 時，自動從本輪提問與近期上下文抓取關聯數據強制注入，
+        徹底防止模型未查資料就自行編造數據（Hallucination）。
+        """
+        msg_clean = (user_message or '').strip()
+        msg_lower = msg_clean.lower()
+        # 純打招呼或極短禮貌詞不強制塞入業務表
+        greetings = {'你好', '您好', '嗨', '謝謝', '感謝', 'hi', 'hello', 'thanks', 'thank you', 'ok', '好'}
+        if msg_lower in greetings:
+            return [], []
+
+        blocks = []
+        auto_calls = []
+
+        # 1. 檢查本輪或最近 4 則歷史中的 9 碼工單號
+        order_ids = list(dict.fromkeys(re.findall(r'\b[126]\d{8}\b', msg_clean)))
+        if not order_ids and history_messages:
+            for hm in reversed(history_messages[-4:]):
+                prev_ids = re.findall(r'\b[126]\d{8}\b', str(hm.get('content') or ''))
+                if prev_ids:
+                    order_ids = [prev_ids[0]]
+                    break
+        for oid in order_ids[:2]:
+            spec_res = tool_get_order_specs(oid)
+            auto_calls.append({'name': 'get_order_specs', 'args': {'order_id': oid}})
+            blocks.append(f"【工單 {oid} 實際系統數據 (規格/MES狀態/缺料)】\n```json\n{json.dumps(spec_res, ensure_ascii=False)}\n```")
+
+        # 2. 檢查是否詢問 MES / 製程 / 進度 / 異況 / 位置 / 廠區
+        if any(k in msg_clean for k in ('MES', 'mes', '製程', '進度', '異況', '位置', '一廠', '三廠', '噴漆', '品管')) or any(
+            ek in msg_lower for ek in ('mes', 'process', 'progress', 'abnormal', 'location', 'plant')
+        ):
+            kw = order_ids[0] if order_ids else None
+            mes_res = tool_query_mes_orders(keyword=kw)
+            auto_calls.append({'name': 'query_mes_orders', 'args': {'keyword': kw or ''}})
+            blocks.append(f"【MES 生產管理看板實際數據】\n```json\n{json.dumps(mes_res, ensure_ascii=False)}\n```")
+
+        # 3. 檢查可能的物料品號
+        mat_candidates = [
+            tok for tok in re.findall(r'\b[A-Za-z0-9\-]{8,18}\b', msg_clean)
+            if tok not in order_ids and any(c.isdigit() for c in tok)
+        ]
+        for mat_tok in mat_candidates[:2]:
+            mat_res = tool_get_material_detail(mat_tok)
+            if 'error' not in mat_res:
+                auto_calls.append({'name': 'get_material_detail', 'args': {'material_id': mat_tok}})
+                blocks.append(f"【物料 {mat_tok} 實際系統數據】\n```json\n{json.dumps(mat_res, ensure_ascii=False)}\n```")
+
+        # 4. 若仍無匹配且詢問採購/缺料/交期，注入缺料總覽
+        if not blocks and (
+            any(k in msg_clean for k in ('缺料', '採購', '交期', '延遲', '延期', '到貨', '兩週', '兩周', '工單'))
+            or any(ek in msg_lower for ek in ('shortage', 'delay', 'delivery', 'arrival', 'buyer', 'order'))
+        ):
+            sum_res = tool_get_shortage_summary('main')
+            auto_calls.append({'name': 'get_shortage_summary', 'args': {'dashboard_type': 'main'}})
+            blocks.append(f"【採購儀表板實際總覽數據】\n```json\n{json.dumps(sum_res, ensure_ascii=False)}\n```")
+
+        return blocks, auto_calls
+
     def _run_vllm_local_agent(
         self, user_message: str, history_messages: list, cfg: dict, model_override: str = None, lang: str = 'zh'
     ) -> tuple[str, list, str]:
         """
         執行本地 Qwen3.8-27B (OpenAI-compatible API + 原生 Function Calling)
-        必帶 chat_template_kwargs: {"enable_thinking": False} 避免思考文字漏入回答
+        - temperature=0.0 零隨機性
+        - 必帶 chat_template_kwargs: {"enable_thinking": False}
+        - 若第 0 輪未呼叫任何 tool，自動執行 _collect_auto_grounding 強制綁定真實數據
         """
         base_url = (cfg.get('vllm_base_url') or DEFAULT_VLLM_BASE_URL).rstrip('/')
         model_name = model_override or cfg.get('vllm_model') or DEFAULT_VLLM_MODEL
         url = f'{base_url}/chat/completions'
+        is_en = str(lang or '').lower().startswith('en')
 
         sys_prompt = get_system_prompt(lang)
         messages = [{'role': 'system', 'content': sys_prompt}]
         for hm in history_messages[-10:]:
             messages.append({'role': hm['role'], 'content': hm['content']})
-        if str(lang or '').lower().startswith('en'):
-            messages.append({'role': 'user', 'content': f"{user_message}\n\n(Please respond in English.)"})
+        if is_en:
+            messages.append({'role': 'user', 'content': f"{user_message}\n\n(Please respond in English and strictly rely ONLY on tool JSON data.)"})
         else:
             messages.append({'role': 'user', 'content': user_message})
 
@@ -1386,7 +1465,7 @@ class AiController:
                 'messages': messages,
                 'tools': OPENAI_TOOLS_SCHEMA,
                 'tool_choice': 'auto',
-                'temperature': 0.2,
+                'temperature': 0.0,
                 'max_tokens': 2048,
                 'chat_template_kwargs': {'enable_thinking': False},
             }
@@ -1399,6 +1478,34 @@ class AiController:
             tool_calls = msg.get('tool_calls') or []
 
             if not tool_calls:
+                # 防呆：若第 0 輪模型偷懶沒呼叫任何工具，自動觸發後端強制查驗並重新生成
+                if _round == 0 and not recorded_tool_calls:
+                    auto_blocks, auto_calls = self._collect_auto_grounding(user_message, history_messages)
+                    if auto_blocks:
+                        recorded_tool_calls.extend(auto_calls)
+                        grounding_instruction = (
+                            "【System Mandatory Data Grounding】Below is the exact real-time JSON retrieved from the system for this query. "
+                            "Answer strictly based ONLY on the fields present below. If a requested detail (e.g. previous process steps) is not in the JSON, "
+                            "explicitly state that the system does not record that field. Do NOT invent any data!\n\n"
+                            if is_en
+                            else "【系統強制真實數據綁定】以下為後端自動查詢之最新系統真實 JSON 數據。請嚴格且唯一根據下方 JSON 內實際存在的欄位回答；"
+                            "若使用者詢問的細項（例如：前製程明細、歷史站別、未列出的欄位）不在下方 JSON 中，請直接回答「系統目前無此欄位的紀錄」，嚴禁自行推論或編造！\n\n"
+                        ) + '\n\n'.join(auto_blocks)
+                        messages.append({'role': 'user', 'content': grounding_instruction})
+                        retry_payload = {
+                            'model': model_name,
+                            'messages': messages,
+                            'temperature': 0.0,
+                            'max_tokens': 2048,
+                            'chat_template_kwargs': {'enable_thinking': False},
+                        }
+                        retry_resp = requests.post(url, json=retry_payload, timeout=60)
+                        retry_resp.raise_for_status()
+                        content = (((retry_resp.json().get('choices') or [{}])[0]).get('message') or {}).get('content', '').strip()
+                        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                        short_model = model_name.split('/')[-1]
+                        return content or '（無回應內容）', recorded_tool_calls, f'vLLM ({short_model})'
+
                 content = (msg.get('content') or '').strip()
                 # 防呆：萬一模型仍帶有 <think>...</think> 標籤則剝除
                 content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
@@ -1438,7 +1545,7 @@ class AiController:
         payload = {
             'model': model_name,
             'messages': messages,
-            'temperature': 0.2,
+            'temperature': 0.0,
             'max_tokens': 2048,
             'chat_template_kwargs': {'enable_thinking': False},
         }
@@ -1573,7 +1680,7 @@ class AiController:
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=get_system_prompt(lang),
-                temperature=0.2,
+                temperature=0.0,
                 tools=[
                     get_shortage_summary,
                     get_material_detail,
