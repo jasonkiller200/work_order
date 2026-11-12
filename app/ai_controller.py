@@ -44,6 +44,10 @@ from app.utils.helpers import get_taiwan_time
 
 app_logger = logging.getLogger(__name__)
 
+# Feature flag：輸出端窄白名單驗證（違規→重生成→降級為數據卡）。
+# 設環境變數 AI_ANSWER_VERIFY=0 重啟即一鍵關閉（決定性數據卡不受影響）。
+ANSWER_VERIFY_ENABLED = os.environ.get('AI_ANSWER_VERIFY', '1') != '0'
+
 # ---------------------------------------------------------------------------
 # Windows 背景程序防彈黑窗 Monkeypatch (藍本模式 6)
 # ---------------------------------------------------------------------------
@@ -624,21 +628,242 @@ def _order_confusion_guard_error(user_message: str, fn_name: str, parsed_args: d
     asked = set(re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str(user_message)))
     if not asked:
         return None
-    called = ''
+    # 從參數任意位置抽取工單號（原版 fullmatch 只接受純單號字串，
+    # keyword 帶「工單 」前綴/後綴會整個放過——2026-11 多 agent 審查發現的繞過洞）
+    called_ids = []
     if fn_name == 'get_order_specs':
-        called = re.sub(r'\D', '', str((parsed_args or {}).get('order_id') or ''))
+        called_ids = re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str((parsed_args or {}).get('order_id') or ''))
     elif fn_name in ('search_procurement', 'query_mes_orders'):
-        kw = str((parsed_args or {}).get('keyword') or '')
-        if re.fullmatch(r'\s*[126]\d{8}\s*', kw):
-            called = re.sub(r'\D', '', kw)
-    if not called or called in asked:
+        called_ids = re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str((parsed_args or {}).get('keyword') or ''))
+    if not called_ids:
+        return None
+    # 呼叫的工單號只要有一個落在問題集合即放行（涵蓋多單比較題）
+    if any(cid in asked for cid in called_ids):
         return None
     target = '/'.join(sorted(asked))
+    called_disp = '/'.join(sorted(set(called_ids)))
     return (
-        f'工單號不符：使用者本次詢問的是工單 {target}，但您呼叫了 {called}。'
-        f'您可能誤抄了上一輪的工單號，請勿以 {called} 的資料作答，'
+        f'工單號不符：使用者本次詢問的是工單 {target}，但您呼叫了 {called_disp}。'
+        f'您可能誤抄了上一輪的工單號，請勿以 {called_disp} 的資料作答，'
         f'請以正確工單號重新呼叫 {fn_name}。'
     )
+
+
+def _sanitize_history_for_llm(user_message: str, history_messages: list) -> list:
+    """歷史去污：本句含 9 碼工單號時，把過去的長回覆（表格/數值）折疊為一行提示。
+
+    防止連續相似提問時模型抄襲上一輪數據（in-context contamination，
+    2026-11 串單事故根因：上一輪 assistant 的完整規格表被原樣塞進 context）。
+    無單號的追問（如「那它的缺料有哪些？」）保留原歷史以銜接上下文。
+    只影響送給模型的 context，不改 DB 與前端歷史顯示。
+    """
+    if not history_messages or not user_message:
+        return history_messages
+    if not re.search(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str(user_message)):
+        return history_messages
+    note = ('[系統歷史紀錄：先前查詢已回答。本次提問涉及新工單，請嚴格根據本輪工具資料作答，'
+            '勿引用歷史回覆中的任何工單號、數值或規格。]')
+    return [
+        {'role': hm.get('role'), 'content': note}
+        if hm.get('role') == 'assistant' and len(str(hm.get('content') or '')) > 300
+        else hm
+        for hm in history_messages
+    ]
+
+
+def _pre_query_order(user_message: str) -> tuple:
+    """預查釘死：問題含「單一」9 碼工單號時，後端直接預查該單規格/MES/缺料。
+
+    回傳 (工單號, 工具結果)；無單一工單號（含多單比較題）或查詢失敗回傳 (None, None)。
+    """
+    asked = list(dict.fromkeys(re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', str(user_message or ''))))
+    if len(asked) != 1:
+        return None, None
+    try:
+        return asked[0], tool_get_order_specs(order_id=asked[0])
+    except Exception:
+        return None, None
+
+
+def _apply_pre_query_pinning(fn_name: str, parsed_args: dict, pre_query_oid: str) -> tuple:
+    """預查釘死：本題已預查單一工單時，把 get_order_specs 的 order_id 強制覆寫為該單號。
+
+    回傳 (parsed_args, 是否發生覆寫)。
+    """
+    if not pre_query_oid or fn_name != 'get_order_specs':
+        return parsed_args, False
+    called_oid = re.sub(r'\D', '', str((parsed_args or {}).get('order_id') or ''))
+    if called_oid and called_oid != pre_query_oid:
+        pinned = dict(parsed_args)
+        pinned['order_id'] = pre_query_oid
+        return pinned, True
+    return parsed_args, False
+
+
+def _md_escape_cell(value) -> str:
+    """Markdown 表格 cell 轉義：| 與換行。"""
+    return str(value if value is not None else '').replace('|', '\\|').replace('\n', '<br>')
+
+
+def _md_table(columns: list, rows: list) -> str:
+    """組 Markdown 表格（cell 已轉義）。"""
+    lines = [
+        '| ' + ' | '.join(_md_escape_cell(c) for c in columns) + ' |',
+        '|' + '|'.join([' --- '] * len(columns)) + '|',
+    ]
+    for r in rows:
+        lines.append('| ' + ' | '.join(_md_escape_cell(c) for c in r) + ' |')
+    return '\n'.join(lines)
+
+
+def _render_deterministic_order_card(spec_res: dict, user_message: str, lang: str = 'zh') -> str:
+    """決定性數據卡：直接把 get_order_specs 結果渲染成 Markdown 表格（事實不經模型嘴巴）。"""
+    oid = spec_res.get('工單號碼', '')
+    if not oid:
+        return ''
+    is_en = str(lang or '').lower().startswith('en')
+    T = {
+        'zh': dict(title='系統核對數據', basic='工單基本資訊', mes='MES 生產追蹤狀態', mes_str='MES 狀態',
+                   specs='規格明細', spec_cols=['特性說明', '特性值', '值說明'],
+                   sh='工單缺料料號', sh_cols=['物料', '物料說明', '缺料總量', '需求行數', '最早需求日'],
+                   none='無缺料', src='資料來源：SAP 系統快取（15 分鐘更新）＋ MES 看板（60 秒更新）',
+                   filtered='（依提問關鍵字篩選；此單共 {n} 項規格特性）', head='（共 {n} 項，僅列前 15 項）'),
+        'en': dict(title='Verified System Data', basic='Order Basic Info', mes='MES Production Status', mes_str='MES Status',
+                   specs='Specifications', spec_cols=['Spec', 'Value', 'Note'],
+                   sh='Shortage Parts', sh_cols=['Material', 'Description', 'Short Qty', 'Req. Lines', 'Earliest Date'],
+                   none='No shortage', src='Source: SAP cache (15-min refresh) + MES board (60-sec refresh)',
+                   filtered='(filtered by question keywords; this order has {n} specs in total)', head='({n} in total, first 15 shown)'),
+    }['en' if is_en else 'zh']
+
+    parts = []
+    # 1. 基本資訊
+    basic = spec_res.get('工單基本資訊') or {}
+    rows = [[k, v] for k, v in basic.items() if str(v or '').strip()]
+    if rows:
+        parts.append(f'**{T["basic"]}**\n' + _md_table(['項目' if not is_en else 'Item', '值' if not is_en else 'Value'], rows))
+    # 2. MES 狀態
+    mes = spec_res.get('MES生產追蹤狀態')
+    if isinstance(mes, dict):
+        mrows = [[k, v] for k, v in mes.items() if str(v or '').strip()]
+        if mrows:
+            parts.append(f'**{T["mes"]}**\n' + _md_table(['項目' if not is_en else 'Item', '值' if not is_en else 'Value'], mrows))
+    elif str(mes or '').strip():
+        parts.append(f'**{T["mes_str"]}**：{_md_escape_cell(mes)}')
+    # 3. 規格明細（提問關鍵字命中的項置頂；未命中列前 15）
+    specs = spec_res.get('規格明細') or []
+    if specs:
+        q_toks = re.findall(r'[A-Za-z0-9]{3,}|[\u4e00-\u9fff]{2,}', str(user_message or '').upper())
+        matched = [s for s in specs
+                   if any(t in f"{s.get('特性說明', '')}{s.get('特性值', '')}{s.get('值說明', '')}".upper() for t in q_toks)]
+        if matched and len(matched) < len(specs):
+            shown, note = matched, T['filtered'].format(n=len(specs))
+        else:
+            shown, note = specs[:15], (T['head'].format(n=len(specs)) if len(specs) > 15 else '')
+        srows = [[s.get('特性說明', ''), s.get('特性值', ''), s.get('值說明', '')] for s in shown]
+        parts.append(f'**{T["specs"]}**\n' + _md_table(T['spec_cols'], srows) + note)
+    # 4. 缺料明細（全列，按料號去重口徑）
+    sh = spec_res.get('工單缺料料號明細') or []
+    if sh:
+        hrows = [[s.get('物料', ''), s.get('物料說明', ''), s.get('缺料總量', 0), s.get('需求行數', 0), s.get('最早需求日', '')] for s in sh]
+        parts.append(f'**{T["sh"]}（{len(sh)} 項，按料號去重）**\n' + _md_table(T['sh_cols'], hrows))
+    else:
+        parts.append(f'**{T["sh"]}**：{T["none"]}')
+
+    return (f'### 📌 {T["title"]}｜工單 {oid}\n' + '\n\n'.join(parts) + f'\n> {T["src"]}')
+
+
+def _render_deterministic_mes_card(mes_res: dict, user_message: str, lang: str = 'zh') -> str:
+    """決定性數據卡：直接把 query_mes_orders 結果渲染成 Markdown 表格。"""
+    is_en = str(lang or '').lower().startswith('en')
+    T = {
+        'zh': dict(title='系統核對數據', stats='MES 全廠統計', detail='MES 工單明細',
+                   cols=['工單號碼', '廠區', '機型', '客戶', '預出貨日', '目前製程', '製程進度', '異況數', 'MES缺料數', '機台位置'],
+                   total_total='全廠追蹤工單總數', total_plant='各廠區工單數', total_delay='Delay 延遲工單數',
+                   total_ontime='OnTime 準時工單數', total_abn='有異況工單數', total_shrt='有缺料工單數',
+                   none='無符合條件的工單', head='（符合 {total} 筆，僅列前 {n} 筆）', only='（共 {total} 筆）',
+                   src='資料來源：MES 看板（最後同步 {t}）'),
+        'en': dict(title='Verified System Data', stats='MES Plant Summary', detail='MES Order List',
+                   cols=['Order', 'Plant', 'Model', 'Customer', 'Ship Date', 'Current Process', 'Progress', 'Abnormal', 'Shortage', 'Location'],
+                   total_total='Total Tracked Orders', total_plant='Orders by Plant', total_delay='Delayed Orders',
+                   total_ontime='On-Time Orders', total_abn='Abnormal Orders', total_shrt='Shortage Orders',
+                   none='No matching orders', head='({total} matched, first {n} shown)', only='({total} in total)',
+                   src='Source: MES board (last sync {t})'),
+    }['en' if is_en else 'zh']
+
+    detail_key = next((k for k in mes_res if str(k).startswith('MES工單明細')), None)
+    details = (mes_res.get(detail_key) or []) if detail_key else []
+    stats = mes_res.get('MES全廠統計摘要') or {}
+    total = mes_res.get('符合條件工單總筆數', 0)
+
+    parts = []
+    if stats:
+        plant_counts = stats.get('各廠區工單數') or {}
+        srows = [
+            [T['total_total'], stats.get('全廠追蹤工單總數', 0)],
+            [T['total_plant'], ' / '.join(f'{k} {v}' for k, v in plant_counts.items())],
+            [T['total_delay'], stats.get('製程Delay延遲工單數', 0)],
+            [T['total_ontime'], stats.get('製程OnTime準時工單數', 0)],
+            [T['total_abn'], stats.get('有異況工單數_abnormal', 0)],
+            [T['total_shrt'], stats.get('有缺料工單數_shortage', 0)],
+        ]
+        parts.append(f'**{T["stats"]}**\n' + _md_table(['項目' if not is_en else 'Item', '值' if not is_en else 'Value'], srows))
+    src_cols = ['工單號碼', '廠區', '機型', '客戶', '預出貨日', '目前製程', '製程進度', '異況數', 'MES缺料數', '機台位置']
+    rows = [[r.get(c, '') for c in src_cols] for r in details[:15]]
+    if rows:
+        note = T['head'].format(total=total, n=len(rows)) if total > len(rows) else (T['only'].format(total=total) if total else '')
+        parts.append(f'**{T["detail"]}**\n' + _md_table(T['cols'], rows) + note)
+    else:
+        parts.append(f'**{T["detail"]}**：{T["none"]}')
+
+    sync = mes_res.get('MES最後同步時間', '')
+    return (f'### 📌 {T["title"]}｜MES 生產看板\n' + '\n\n'.join(parts)
+            + (f'\n> {T["src"].format(t=_md_escape_cell(sync))}' if sync else ''))
+
+
+def _deterministic_cards_text(evidence: list, user_message: str, lang: str = 'zh') -> str:
+    """由本輪工具快照（evidence）產生決定性數據卡文字；無可渲染結果回空字串。"""
+    cards = []
+    for ev in (evidence or []):
+        name = ev.get('name')
+        res = ev.get('result')
+        if not isinstance(res, dict) or 'error' in res:
+            continue
+        if name == 'get_order_specs':
+            card = _render_deterministic_order_card(res, user_message, lang)
+        elif name == 'query_mes_orders':
+            card = _render_deterministic_mes_card(res, user_message, lang)
+        else:
+            continue
+        if card:
+            cards.append(card)
+    return '\n\n'.join(cards)
+
+
+def _verify_answer_entities(reply_text: str, evidence: list, user_message: str) -> list:
+    """窄白名單後置守衛：只驗 3 類高識別度實體——9 碼工單號、10 碼 PO（4xxxx）、YYYY-MM-DD 日期。
+
+    比對基準＝本輪工具快照（evidence）∪ 使用者本句 ∪ 今日日期（模型可能合理提及「今天」）。
+    不驗一般數字（加總/百分比/千分位/單位轉換會誤殺）；回傳違規清單（空＝通過）。
+    """
+    if not reply_text:
+        return []
+    blob_parts = [str(user_message or ''), time.strftime('%Y-%m-%d')]
+    for ev in (evidence or []):
+        if isinstance(ev.get('result'), (dict, list)):
+            blob_parts.append(json.dumps(ev.get('result'), ensure_ascii=False))
+    blob = '\n'.join(blob_parts)
+
+    violations = []
+    for oid in set(re.findall(r'(?<![0-9A-Za-z])[126]\d{8}(?!\d)', reply_text)):
+        if oid not in blob:
+            violations.append(f'9碼工單號 {oid} 不在本輪工具資料中')
+    for po in set(re.findall(r'(?<![0-9A-Za-z])4\d{9}(?![0-9A-Za-z])', reply_text)):
+        if po not in blob:
+            violations.append(f'採購單號 {po} 不在本輪工具資料中')
+    for d in set(re.findall(r'(?<![0-9A-Za-z])(20\d{2}-[01]\d-[0-3]\d)(?![0-9A-Za-z])', reply_text)):
+        if d not in blob:
+            violations.append(f'日期 {d} 不在本輪工具資料中')
+    return violations
 
 
 def _aggregate_shortage_by_material(order_mats: list) -> list:
@@ -1236,9 +1461,9 @@ def _build_cli_stateless_prompt(user_message: str, history_messages: list, lang:
         auto_tools.append({'name': 'query_mes_orders', 'args': {'plant': 'all'}})
         injected_blocks.append(f"【MES 生產管理看板快照】\n```json\n{json.dumps(mes_res, ensure_ascii=False)}\n```")
 
-    # 5. 組裝最近 10 則對話歷史
+    # 5. 組裝最近 10 則對話歷史（本句含工單號時折疊過去長回覆，防止抄襲上一輪數值）
     history_lines = []
-    for msg in history_messages[-10:]:
+    for msg in _sanitize_history_for_llm(user_message, history_messages)[-10:]:
         role_label = 'User' if (lang == 'en' and msg['role'] == 'user') else ('使用者' if msg['role'] == 'user' else 'Hartford AI')
         history_lines.append(f"{role_label}: {msg['content']}")
     history_text = '\n\n'.join(history_lines)
@@ -1476,6 +1701,64 @@ class AiController:
 
         return blocks, auto_calls
 
+    def _finalize_answer(
+        self, content: str, evidence: list, user_message: str, url: str,
+        model_name: str, lang: str, is_en: bool, messages: list,
+    ) -> str:
+        """輸出端守衛：窄白名單驗證 →（違規）重生成一次 →（仍違規）降級為數據卡 only；最後附決定性數據卡。
+
+        驗證只驗 3 類高識別度實體（9 碼工單號／10 碼 PO／YYYY-MM-DD 日期），
+        不驗一般數字（加總、百分比、千分位、單位轉換會誤殺）。
+        卡片與驗證都用「本輪工具快照」（evidence），不事後重查（MES 60 秒 TTL 會跨版本）。
+        """
+        content = (content or '').strip()
+        rejected = False
+        if content and ANSWER_VERIFY_ENABLED:
+            violations = _verify_answer_entities(content, evidence, user_message)
+            if violations:
+                rejected = True
+                app_logger.warning(f'輸出端驗證失敗: {violations} (user: {str(user_message)[:80]})')
+                messages.append({'role': 'assistant', 'content': content})
+                fix_note = (
+                    '【系統驗證未通過】你的回答包含本輪工具資料中不存在的项目：' + '; '.join(violations)
+                    + '。請只使用本輪工具 JSON 重新回答，刪除所有未出現在 JSON 中的工單號／採購單號／日期。'
+                    if not is_en else
+                    '[System verification failed] Your answer contains: ' + '; '.join(violations)
+                    + ' Answer again using ONLY this round\'s tool JSON; remove any order/PO numbers or dates not present in the JSON.'
+                )
+                messages.append({'role': 'user', 'content': fix_note})
+                try:
+                    resp = requests.post(url, json={
+                        'model': model_name,
+                        'messages': messages,
+                        'temperature': 0.0,
+                        'max_tokens': 2048,
+                        'chat_template_kwargs': {'enable_thinking': False},
+                    }, timeout=60)
+                    resp.raise_for_status()
+                    content = (((resp.json().get('choices') or [{}])[0]).get('message') or {}).get('content', '').strip()
+                    content = re.sub(r'\n.*?\n', '', content, flags=re.DOTALL).strip()
+                except Exception as ve:
+                    app_logger.warning(f'重生成失敗，降級為數據卡: {ve}')
+                    content = ''
+                if content and _verify_answer_entities(content, evidence, user_message):
+                    app_logger.warning(f'重生成後仍違規 → 降級為僅顯示系統數據卡 (user: {str(user_message)[:80]})')
+                    content = ''
+
+        cards_text = _deterministic_cards_text(evidence, user_message, lang)
+        if content:
+            return f'{content}\n\n---\n\n{cards_text}' if cards_text else content
+        if cards_text:
+            notice = ('💡 為確保生產數據 100% 精準，模型回答未通過一致性檢查已略去，以下為系統核對數據：'
+                      if not is_en else
+                      '💡 To ensure 100% data accuracy, the model summary failed the consistency check and is omitted. The verified system data is shown below:')
+            return f'{notice}\n\n{cards_text}'
+        if rejected:
+            return ('（本次回答未通過系統一致性檢查（含工具資料中不存在的編號／日期），且無可用之系統數據卡，請重新提問。）'
+                    if not is_en else
+                    '(This answer failed the system consistency check (contains IDs/dates not in the tool data) and no verified data card is available. Please ask again.)')
+        return '（無回應內容）' if not is_en else '(No response content)'
+
     def _run_vllm_local_agent(
         self, user_message: str, history_messages: list, cfg: dict, model_override: str = None, lang: str = 'zh'
     ) -> tuple[str, list, str]:
@@ -1491,8 +1774,18 @@ class AiController:
         is_en = str(lang or '').lower().startswith('en')
 
         sys_prompt = get_system_prompt(lang)
+        # 批 2：系統會在答案下方附加「系統核對數據卡」→ 模型只答 1–3 句（縮小捏造文字空間）
+        sys_prompt += (
+            '\n7. 回答保持精簡：單張工單的規格/狀態或 MES 看板問題，系統會自動在回答下方附上「系統核對數據表」（基本資訊/製程狀態/規格明細/缺料明細），該表為權威版本。'
+            '你只需 1–3 句回答（結論＋重點），請勿自行重列大段數據表格。'
+            if not is_en else
+            '\n7. Keep the answer concise: for single-order spec/status or MES board questions, the system automatically appends a verified data table '
+            '(basic info / process status / specs / shortages) below your answer; that table is authoritative. '
+            'Answer in 1-3 sentences only (conclusion + key points). Do NOT re-list large tables yourself.'
+        )
         messages = [{'role': 'system', 'content': sys_prompt}]
-        for hm in history_messages[-10:]:
+        # 歷史去污：本句含工單號時折疊過去長回覆，防止模型抄襲上一輪數據
+        for hm in _sanitize_history_for_llm(user_message, history_messages)[-10:]:
             messages.append({'role': hm['role'], 'content': hm['content']})
         if is_en:
             messages.append({'role': 'user', 'content': f"{user_message}\n\n(Please respond in English and strictly rely ONLY on tool JSON data.)"})
@@ -1500,6 +1793,23 @@ class AiController:
             messages.append({'role': 'user', 'content': user_message})
 
         recorded_tool_calls = []
+        evidence = []  # 本輪工具結果快照（證據池：輸出端驗證與數據卡的唯一資料來源）
+        pre_query_oid = None
+
+        # 預查釘死：問題含單一 9 碼工單號時，round 0 之前由後端直接預查，
+        # 從輸入端根除「模型不調工具」與「模型抄上一輪工單號」，並省去一輪模型往返
+        pq_oid, pq_res = _pre_query_order(user_message)
+        if pq_oid:
+            pre_query_oid = pq_oid
+            pre_args = {'order_id': pq_oid}
+            recorded_tool_calls.append({'name': 'get_order_specs', 'args': pre_args})
+            evidence.append({'name': 'get_order_specs', 'args': pre_args, 'result': pq_res})
+            messages.append({
+                'role': 'user',
+                'content': (f'[系統預查] 工單 {pq_oid} 已由系統查得，請嚴格以下方 JSON 為準作答。'
+                            f'如需再呼叫 get_order_specs，僅能使用工單號 {pq_oid}。\n'
+                            f'{json.dumps(pq_res, ensure_ascii=False)}'),
+            })
 
         for _round in range(5):
             payload = {
@@ -1546,13 +1856,13 @@ class AiController:
                         content = (((retry_resp.json().get('choices') or [{}])[0]).get('message') or {}).get('content', '').strip()
                         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                         short_model = model_name.split('/')[-1]
-                        return content or '（無回應內容）', recorded_tool_calls, f'vLLM ({short_model})'
+                        return self._finalize_answer(content, evidence, user_message, url, model_name, lang, is_en, messages), recorded_tool_calls, f'vLLM ({short_model})'
 
                 content = (msg.get('content') or '').strip()
                 # 防呆：萬一模型仍帶有 <think>...</think> 標籤則剝除
                 content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                 short_model = model_name.split('/')[-1]
-                return content or '（無回應內容）', recorded_tool_calls, f'vLLM ({short_model})'
+                return self._finalize_answer(content, evidence, user_message, url, model_name, lang, is_en, messages), recorded_tool_calls, f'vLLM ({short_model})'
 
             messages.append(msg)
             for tc in tool_calls:
@@ -1564,7 +1874,10 @@ class AiController:
                 except Exception:
                     parsed_args = {}
 
-                recorded_tool_calls.append({'name': fn_name, 'args': parsed_args})
+                # 預查釘死覆寫：本題已預查單一工單時，get_order_specs 一律鎖定該單號（不浪費一輪重試）
+                parsed_args, was_pinned = _apply_pre_query_pinning(fn_name, parsed_args, pre_query_oid)
+                if was_pinned:
+                    app_logger.warning(f'預查釘死覆寫: get_order_specs 已鎖定工單 {pre_query_oid} (user: {user_message[:80]})')
 
                 # 防工單混淆守衛：問題中明確的工單號必須與 tool call 相符，防止誤抄上一輪工單號
                 guard_error = _order_confusion_guard_error(user_message, fn_name, parsed_args)
@@ -1578,6 +1891,9 @@ class AiController:
                     })
                     continue
 
+                # 守衛通過才記錄（被攔截的呼叫未實際執行，不顯示假工具 badge）
+                recorded_tool_calls.append({'name': fn_name, 'args': parsed_args})
+
                 handler = TOOL_DISPATCH.get(fn_name)
                 if handler:
                     try:
@@ -1587,6 +1903,7 @@ class AiController:
                         tool_result = {'error': str(e)}
                 else:
                     tool_result = {'error': f'未知的工具: {fn_name}'}
+                evidence.append({'name': fn_name, 'args': parsed_args, 'result': tool_result})
 
                 messages.append({
                     'role': 'tool',
@@ -1608,7 +1925,7 @@ class AiController:
         content = ((resp.json().get('choices') or [{}])[0].get('message') or {}).get('content', '').strip()
         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
         short_model = model_name.split('/')[-1]
-        return content or '（無回應內容）', recorded_tool_calls, f'vLLM ({short_model})'
+        return self._finalize_answer(content, evidence, user_message, url, model_name, lang, is_en, messages), recorded_tool_calls, f'vLLM ({short_model})'
 
     def _run_cli_fallback(
         self, user_message: str, history_messages: list, cfg: dict, model_override: str = None, lang: str = 'zh'
@@ -1682,33 +1999,62 @@ class AiController:
 
         recorded_tool_calls = []
 
+        def _sdk_guard(fn_name: str, args: dict):
+            """防工單混淆守衛（與 vLLM 主路徑共用）：問題含工單號時 tool call 必須相符。
+
+            此前 failover 到 SDK 引擎時沒有任何守衛（2026-11 多 agent 審查發現的缺口）。
+            """
+            err = _order_confusion_guard_error(user_message, fn_name, args)
+            if err:
+                app_logger.warning(f'防混淆守衛攔截 (SDK): {fn_name} 被呼叫了錯誤工單號: {args} (user: {str(user_message)[:80]})')
+                return {'error': err}
+            return None
+
         def get_shortage_summary(dashboard_type: str = 'main', buyer: str = '') -> dict:
             """取得採購缺料與延遲總覽"""
+            _g = _sdk_guard('get_shortage_summary', {'dashboard_type': dashboard_type, 'buyer': buyer})
+            if _g:
+                return _g
             recorded_tool_calls.append({'name': 'get_shortage_summary', 'args': {'dashboard_type': dashboard_type, 'buyer': buyer}})
             return tool_get_shortage_summary(dashboard_type=dashboard_type, buyer=buyer or None)
 
         def get_material_detail(material_id: str) -> dict:
             """查詢單一物料品號完整明細"""
+            _g = _sdk_guard('get_material_detail', {'material_id': material_id})
+            if _g:
+                return _g
             recorded_tool_calls.append({'name': 'get_material_detail', 'args': {'material_id': material_id}})
             return tool_get_material_detail(material_id=material_id)
 
         def get_two_week_list(buyer: str = '') -> dict:
             """查詢未來兩週內預計到貨與交貨延期清單"""
+            _g = _sdk_guard('get_two_week_list', {'buyer': buyer})
+            if _g:
+                return _g
             recorded_tool_calls.append({'name': 'get_two_week_list', 'args': {'buyer': buyer}})
             return tool_get_two_week_list(buyer=buyer or None)
 
         def search_procurement(keyword: str) -> dict:
             """依關鍵字搜尋物料或工單"""
+            _g = _sdk_guard('search_procurement', {'keyword': keyword})
+            if _g:
+                return _g
             recorded_tool_calls.append({'name': 'search_procurement', 'args': {'keyword': keyword}})
             return tool_search_procurement(keyword=keyword)
 
         def get_order_specs(order_id: str) -> dict:
             """依9碼工單號查詢工單規格與缺料"""
+            _g = _sdk_guard('get_order_specs', {'order_id': order_id})
+            if _g:
+                return _g
             recorded_tool_calls.append({'name': 'get_order_specs', 'args': {'order_id': order_id}})
             return tool_get_order_specs(order_id=order_id)
 
         def search_orders_by_spec(spec_keyword: str, value_keyword: str = '', exclude: bool = False) -> dict:
             """依規格特性正反向篩選工單"""
+            _g = _sdk_guard('search_orders_by_spec', {'spec_keyword': spec_keyword, 'value_keyword': value_keyword, 'exclude': exclude})
+            if _g:
+                return _g
             recorded_tool_calls.append({
                 'name': 'search_orders_by_spec',
                 'args': {'spec_keyword': spec_keyword, 'value_keyword': value_keyword, 'exclude': exclude},
@@ -1717,6 +2063,9 @@ class AiController:
 
         def query_mes_orders(plant: str = 'all', keyword: str = '', status_filter: str = 'all') -> dict:
             """查詢 MES 生產管理看板（一廠/三廠工單製程、Delay進度、異況、缺料與機台位置）"""
+            _g = _sdk_guard('query_mes_orders', {'plant': plant, 'keyword': keyword, 'status_filter': status_filter})
+            if _g:
+                return _g
             recorded_tool_calls.append({
                 'name': 'query_mes_orders',
                 'args': {'plant': plant, 'keyword': keyword, 'status_filter': status_filter},
@@ -1724,7 +2073,8 @@ class AiController:
             return tool_query_mes_orders(plant=plant or 'all', keyword=keyword or None, status_filter=status_filter or 'all')
 
         contents = []
-        for hm in history_messages[-10:]:
+        # 歷史去污：本句含工單號時折疊過去長回覆，防止模型抄襲上一輪數據
+        for hm in _sanitize_history_for_llm(user_message, history_messages)[-10:]:
             role = 'user' if hm['role'] == 'user' else 'model'
             contents.append(types.Content(role=role, parts=[types.Part.from_text(text=hm['content'])]))
         contents.append(types.Content(role='user', parts=[types.Part.from_text(text=user_message)]))
