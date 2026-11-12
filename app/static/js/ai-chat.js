@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var ASSET_VER = '20261112d';
+  var ASSET_VER = '20261112e';
   var STORAGE_RECT_KEY = 'hartford_ai_window_rect_v2';
   var STORAGE_ENGINE_KEY = 'hartford_ai_engine_v1';
   var STORAGE_SESSION_KEY = 'hartford_ai_active_session_v1';
@@ -207,7 +207,7 @@
 
     function flushTable() {
       if (!tableRows.length) return;
-      var html = '<table><thead><tr>';
+      var html = '<div class="hf-ai-table-wrap"><table><thead><tr>';
       var headers = tableRows[0];
       headers.forEach(function (h) { html += '<th>' + h.trim() + '</th>'; });
       html += '</tr></thead><tbody>';
@@ -217,7 +217,7 @@
         tableRows[i].forEach(function (c) { html += '<td>' + c.trim() + '</td>'; });
         html += '</tr>';
       }
-      html += '</tbody></table>';
+      html += '</tbody></table></div>';
       outLines.push(html);
       tableRows = [];
       inTable = false;

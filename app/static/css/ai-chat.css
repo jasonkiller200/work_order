@@ -299,8 +299,10 @@
 
 /* 訊息捲動區 */
 .hf-ai-messages {
-  flex: 1 1 auto;
-  overflow-y: auto;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -309,19 +311,40 @@
 }
 
 .hf-ai-msg {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
   max-width: 92%;
-  padding: 9px 12px;
+  padding: 9px 13px;
   border-radius: 12px;
   font-size: 13.5px;
   line-height: 1.55;
   word-wrap: break-word;
-  overflow-x: auto;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible !important;
+}
+
+.hf-ai-msg p,
+.hf-ai-msg ul,
+.hf-ai-msg ol {
+  margin: 4px 0 !important;
+  color: inherit !important;
+}
+
+.hf-ai-msg h1,
+.hf-ai-msg h2,
+.hf-ai-msg h3,
+.hf-ai-msg h4 {
+  margin: 8px 0 4px 0 !important;
+  font-size: 14.5px !important;
+  line-height: 1.35 !important;
+  color: #90caf9 !important;
 }
 
 .hf-ai-msg-user {
   align-self: flex-end;
   background: var(--hf-ai-user-bubble);
-  color: #ffffff;
+  color: #ffffff !important;
   border-bottom-right-radius: 3px;
 }
 
@@ -333,11 +356,18 @@
   border-bottom-left-radius: 3px;
 }
 
-/* Markdown 表格與程式碼美化 */
+/* Markdown 表格與程式碼美化（僅表格與程式碼區塊本身可水平捲動，氣泡不產生捲軸） */
+.hf-ai-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
 .hf-ai-msg-assistant table {
   width: 100%;
   border-collapse: collapse;
-  margin: 6px 0;
+  margin: 0;
   font-size: 12px;
 }
 
