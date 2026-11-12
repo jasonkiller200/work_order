@@ -383,3 +383,56 @@ class ReceiptApplied(db.Model):
 
     def __repr__(self):
         return f'<ReceiptApplied {self.order_key} {self.receipt_date} {self.applied_qty}>'
+
+
+class AiSession(db.Model):
+    """AI 助手對話串（per 瀏覽器 visitor_id 隔離）"""
+    __tablename__ = 'ai_sessions'
+
+    id = db.Column(db.String(36), primary_key=True)
+    visitor_id = db.Column(db.String(64), nullable=False, index=True)
+    title = db.Column(db.String(200), default='新對話')
+    sdk_conversation_id = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time, index=True)
+
+    messages = db.relationship(
+        'AiMessage',
+        back_populates='session',
+        cascade='all, delete-orphan',
+        order_by='AiMessage.id.asc()'
+    )
+
+    def __repr__(self):
+        return f'<AiSession {self.id} ({self.visitor_id})>'
+
+
+class AiMessage(db.Model):
+    """AI 助手訊息記錄"""
+    __tablename__ = 'ai_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(36), db.ForeignKey('ai_sessions.id'), nullable=False, index=True)
+    role = db.Column(db.String(20), nullable=False)  # user, assistant
+    content = db.Column(db.Text, nullable=False)
+    tool_calls = db.Column(db.Text, nullable=True)   # JSON string
+    engine_label = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=get_taiwan_time)
+
+    session = db.relationship('AiSession', back_populates='messages')
+
+    def __repr__(self):
+        return f'<AiMessage {self.id} [{self.role}]>'
+
+
+class AiConfig(db.Model):
+    """AI 助手系統全域設定（K-V 結構）"""
+    __tablename__ = 'ai_config'
+
+    key = db.Column(db.String(50), primary_key=True)
+    value = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=get_taiwan_time, onupdate=get_taiwan_time)
+
+    def __repr__(self):
+        return f'<AiConfig {self.key}>'
+

@@ -7,6 +7,7 @@ from flask_compress import Compress
 from app.config import Config
 from app.controllers import page_bp, api_bp, auth_bp, user_api_bp
 from app.api.holidays import holidays_bp
+from app.ai_controller import ai_bp
 from app.services.cache_service import cache_manager
 from app.services.data_service import DataService
 from app.services.spec_service import SpecService
@@ -77,6 +78,7 @@ def create_app():
     app.register_blueprint(api_bp)
     app.register_blueprint(user_api_bp)
     app.register_blueprint(holidays_bp)
+    app.register_blueprint(ai_bp)
     
     app_logger.info("Blueprints 註冊完成")
 
@@ -99,9 +101,11 @@ def create_app():
     def ensure_visitor_cookie(response):
         try:
             if _flask_request.cookies.get(Config.PV_COOKIE_NAME) is None:
+                from flask import session as _flask_session
+                cookie_val = _flask_session.get('ai_visitor_id') or str(uuid.uuid4())
                 response.set_cookie(
                     Config.PV_COOKIE_NAME,
-                    str(uuid.uuid4()),
+                    cookie_val,
                     max_age=60 * 60 * 24 * 365,
                     httponly=True,
                     samesite='Lax',

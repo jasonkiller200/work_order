@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生產資訊中心 - Hartford AI 助手</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1234">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ai-avatar.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ai-chat.css') }}">
+</head>
+
+<body>
+    <!-- 系統狀態徽章（右上角） -->
+    <div class="system-status-badge">
+        <span class="status-indicator loading"></span>
+        <span id="status-badge-text">檢查中...</span>
+    </div>
+
+    <main class="container" id="hf-ai-page-container">
+        <header style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div id="hf-ai-page-avatar"></div>
+                <div>
+                    <h1 style="margin-bottom: 4px;">Hartford AI 採購與工單規格助手</h1>
+                    <p style="margin: 0; color: var(--pico-muted-color);">
+                        即時連接雙緩衝記憶體快取（缺料總覽、兩週清單、物料 PO 明細、工單規格正反向查詢）｜
+                        <span id="hf-ai-page-engine-badge" style="color: #64b5f6; font-weight: 600;">載入引擎中…</span>
+                    </p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="hf-ai-page-engine-select" style="margin: 0; font-size: 0.85rem; white-space: nowrap;">⚙️ 運算引擎：</label>
+                <select id="hf-ai-page-engine-select" style="margin: 0; padding: 6px 10px; font-size: 0.85rem; width: auto;">
+                    <option value="vllm_local">本地 Qwen3.8-27B (vLLM 預設・極速併發)</option>
+                    <option value="cli">Antigravity CLI (Gemini 3.8 Flash 免金鑰)</option>
+                    <option value="sdk">Gemini SDK (API Key)</option>
+                </select>
+            </div>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="/procurement">採購儀表板</a></li>
+                <li><a href="/allocated-shortage">已撥缺料</a></li>
+                <li><a href="/order_query">訂單查詢</a></li>
+                <li><a href="/open-purchase-orders">未結案採購單</a></li>
+                <li><a href="/admin_dashboard">後台管理</a></li>
+                {% if is_admin %}
+                <li><a href="/part-drawing-management">品號-圖號維護</a></li>
+                <li><a href="/component-requirements">成品組件需求</a></li>
+                {% endif %}
+                <li><a href="/work-order-statistics">工單詳情統計</a></li>
+                <li><a href="/finished-wo-materials">成品用料查詢</a></li>
+                <li><a href="/mes">MES 生產管理</a></li>
+                <li><a href="/ai" class="active">🤖 AI 助手</a></li>
+            </ul>
+        </nav>
+
+        <hr style="margin: 0.8rem 0 1.2rem 0;">
+
+        <div class="hf-ai-page-layout">
+            <!-- 左側：對話串清單 -->
+            <aside class="hf-ai-sidebar">
+                <div class="hf-ai-sidebar-header">
+                    <strong style="font-size: 14px; color: #e3f2fd;">💬 對話紀錄</strong>
+                    <button type="button" class="hf-ai-sm-btn" id="hf-ai-page-new-session">＋ 新對話</button>
+                </div>
+                <div class="hf-ai-session-list" id="hf-ai-page-session-list"></div>
+            </aside>
+
+            <!-- 右側：聊天主區 -->
+            <section class="hf-ai-main-panel">
+                <div class="hf-ai-messages" id="hf-ai-page-messages"></div>
+                <div class="hf-ai-chips" id="hf-ai-page-chips"></div>
+                <div class="hf-ai-input-area">
+                    <textarea class="hf-ai-textarea" id="hf-ai-page-input" rows="2"
+                        placeholder="請輸入問題，例如：「目前 30 日內缺料總覽」、「100003884 規格」、「哪些單沒有 CTS」… (Enter 發送，Shift+Enter 換行)"></textarea>
+                    <button type="button" class="hf-ai-send-btn" id="hf-ai-page-send">發送提問</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=1239"></script>
+    <script src="{{ url_for('static', filename='js/ai-avatar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ai-chat.js') }}"></script>
+</body>
+
+</html>
+
