@@ -55,14 +55,15 @@ cwd = 空工作目錄、timeout=120s、CREATE_NO_WINDOW
 - **零磁碟 I/O 複用現有雙緩衝快取**：`DataService` 每 15 分鐘已將半品/成品儀表板（`materials_dashboard`、`finished_dashboard`）、需求明細（`demand_details_map`）、工單總表摘要（`order_summary_map`）及工單規格總表（`specs_map`、`specs_data`）載入記憶體，Tools 直接 O(1) 或記憶體遍歷讀取，不重複讀 P 碟 Excel。
 - 採購人員對照、延遲定義＝到貨日−缺料需求日。
 
-### 3.3 唯讀 tools（`vllm_local` 與 `sdk` 原生 Function Calling；共 6 支）
+### 3.3 唯讀 tools（`vllm_local` 與 `sdk` 原生 Function Calling；共 7 支）
 1. `get_shortage_summary()`：缺料/延遲總覽（從 `materials_dashboard` / `finished_dashboard` 彙整）
 2. `get_material_detail(material_id)`：單物料明細（庫存、缺料工單、PO、buyer、到貨排程、替代品）
 3. `get_two_week_list(buyer=None)`：兩週內/延期交貨清單（可選填採購員過濾）
 4. `search_procurement(keyword)`：跨物料品號/品名/工單/供應商關鍵字搜尋
-5. `get_order_specs(order_id)`：**單筆訂單規格查詢**——直接讀取記憶體 `cache_manager.get_current_data()["specs_map"][order_id]` 並附帶 `order_summary_map`（客戶、機型、出貨日），零磁碟 I/O、隨系統 15 分鐘快取同步更新。實例問法：「100003884 規格」「這單主軸幾 KW」「有 CTS 嗎」
+5. `get_order_specs(order_id)`：**單筆訂單規格＋MES狀態查詢**——直接讀取記憶體 `cache_manager.get_current_data()["specs_map"][order_id]` 並附帶 `order_summary_map`（客戶、機型、出貨日）及 MES 看板該工單的製程/位置/異況，零磁碟 I/O、隨系統快取同步更新。實例問法：「100003884 規格」「這單主軸幾 KW」「有 CTS 嗎」
    - **agy CLI 模式**（無 function calling）：問題含 9 位工單號（regex）或品號 → 自動把該單規格/物料明細注入 prompt（同「每回合重注入」機制）
 6. `search_orders_by_spec(spec_keyword, value_keyword=None, exclude=False)`：**反向/條件規格篩選**（取代原 Phase 2 RAG）——直接在記憶體對線上工單的 `specs_data` 進行結構化條件過濾（支援正向匹配與 `exclude=True` 否定條件），100% 精確且耗時 `< 10ms`。實例問法：「哪些單沒有 CTS」「列出所有 7.5KW 主軸單」
+7. `query_mes_orders(plant='all', keyword=None, status_filter='all')`：**MES 生產管理看板即時查詢**——串接 `http://192.168.6.119:5009/api/mes/orders`（附 60 秒記憶體快取），查詢一廠/三廠工單的標準製程、目前製程、製程進度（On Time / Delay(天數)）、異況數、MES 缺料數與機台位置，支援廠區、關鍵字（工單/客戶/機型/製程/位置）與狀態（`delayed`/`abnormal`/`shortage`/`on_time`）過濾。
 
 ### 3.4 安全與權限隔離
 - 工作目錄鎖死在空目錄（`order/scratch/ai_chat_ws` 之類）；不傳 `--add-dir`

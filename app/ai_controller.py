@@ -457,7 +457,42 @@ BILINGUAL_SYNONYMS = {
     'GEARBOX': ['GEARBOX', '齒輪箱', '減速機'],
     'TRANSFORMER': ['TRANSFORMER', '變壓器'],
     'PUMP': ['PUMP', '幫浦', '泵浦', '油泵', '水泵'],
+    'PAINTING': ['PAINTING', 'PAINT', '噴漆'],
+    'QC': ['QC', 'INSPECTION', '品管', '覆驗', '檢驗'],
+    'PLANT 1': ['PLANT 1', 'PLANT1', '一廠'],
+    'PLANT 3': ['PLANT 3', 'PLANT3', '三廠'],
 }
+
+# MES 看板短期記憶體快取（來源：http://192.168.6.119:5009/api/mes/orders，TTL 60 秒）
+DEFAULT_MES_API_URL = 'http://192.168.6.119:5009/api/mes/orders?auto_sync=1&plant=all&search='
+_mes_cache_lock = threading.Lock()
+_mes_cache_state = {
+    'ts': 0.0,
+    'data': None,
+}
+
+
+def _fetch_mes_orders_cached(ttl_sec: int = 60) -> dict:
+    """從 :5009 MES 服務拉取最新工單追蹤資料，並快取 60 秒避免重複請求"""
+    now = time.time()
+    with _mes_cache_lock:
+        if _mes_cache_state['data'] is not None and (now - _mes_cache_state['ts']) < ttl_sec:
+            return _mes_cache_state['data']
+
+    try:
+        resp = requests.get(DEFAULT_MES_API_URL, timeout=5)
+        resp.raise_for_status()
+        payload = resp.json()
+        with _mes_cache_lock:
+            _mes_cache_state['ts'] = now
+            _mes_cache_state['data'] = payload
+        return payload
+    except Exception as e:
+        app_logger.warning(f'讀取 MES API (:5009) 失敗: {e}')
+        with _mes_cache_lock:
+            if _mes_cache_state['data'] is not None:
+                return _mes_cache_state['data']
+        return {'error': f'無法連線至 MES 服務 (192.168.6.119:5009): {e}', 'rows': [], 'count': 0}
 
 
 def _expand_bilingual_keywords(kw: str) -> list[str]:
@@ -607,8 +642,30 @@ def tool_get_order_specs(order_id: str) -> dict:
     summary_info = order_summary_map.get(oid, {})
     order_mats = order_details_map.get(oid, [])
 
-    if not raw_specs and not summary_info and not order_mats:
-        return {'error': f'在目前快取中找不到工單 {oid} 的規格或工單資料'}
+    # 同步查詢 MES 看板即時狀態（若該工單在 MES 看板中）
+    mes_info = None
+    mes_payload = _fetch_mes_orders_cached()
+    for m_row in (mes_payload.get('rows') or []):
+        wo_disp = str(m_row.get('work_order_no_display') or '').strip()
+        wo_full = str(m_row.get('work_order_no') or '').strip().lstrip('0')
+        if oid in (wo_disp, wo_full):
+            mes_info = {
+                '廠區': m_row.get('plant') or '-',
+                '機型': m_row.get('machine_model') or '-',
+                '客戶': m_row.get('customer_name') or '-',
+                '訂單編號': m_row.get('order_no') or '-',
+                '預出貨日': m_row.get('order_ship_date') or '-',
+                '標準製程': m_row.get('standard_process') or '尚未排入標準製程',
+                '目前製程': m_row.get('current_process') or '尚未開工/無目前製程',
+                '製程進度': m_row.get('process_progress') or '無進度狀態',
+                '異況數': int(m_row.get('abnormal_count') or 0),
+                'MES缺料數': int(m_row.get('shortage_count') or 0),
+                '機台位置': m_row.get('machine_location') or '未標示位置',
+            }
+            break
+
+    if not raw_specs and not summary_info and not order_mats and not mes_info:
+        return {'error': f'在目前快取與 MES 看板中找不到工單 {oid} 的規格或工單資料'}
 
     formatted_specs = [
         {
@@ -635,16 +692,17 @@ def tool_get_order_specs(order_id: str) -> dict:
     return {
         '工單號碼': oid,
         '工單基本資訊': {
-            '客戶名稱': summary_info.get('下單客戶名稱', ''),
-            '訂單號碼': summary_info.get('訂單號碼', ''),
+            '客戶名稱': summary_info.get('下單客戶名稱') or (mes_info or {}).get('客戶', ''),
+            '訂單號碼': summary_info.get('訂單號碼') or (mes_info or {}).get('訂單編號', ''),
             '機型品號': summary_info.get('物料品號', ''),
-            '機型說明': summary_info.get('物料說明', ''),
+            '機型說明': summary_info.get('物料說明') or (mes_info or {}).get('機型', ''),
             '生產開始': summary_info.get('生產開始', ''),
-            '生產結束_出貨日': summary_info.get('生產結束', ''),
-            '廠別': summary_info.get('廠別', ''),
+            '生產結束_出貨日': summary_info.get('生產結束') or (mes_info or {}).get('預出貨日', ''),
+            '廠別': summary_info.get('廠別') or (mes_info or {}).get('廠區', ''),
             '機械外包': summary_info.get('機械外包', ''),
             '電控外包': summary_info.get('電控外包', ''),
         },
+        'MES生產追蹤狀態': mes_info or '此工單目前不在 MES 追蹤看板中',
         '規格特性總數': len(formatted_specs),
         '規格明細': formatted_specs,
         '工單缺料項數': len(shortage_mats),
@@ -734,6 +792,140 @@ def tool_search_orders_by_spec(spec_keyword: str, value_keyword: str = None, exc
     }
 
 
+def tool_query_mes_orders(plant: str = 'all', keyword: str = None, status_filter: str = 'all') -> dict:
+    """
+    7. MES 生產管理看板即時查詢（來源：http://192.168.6.119:5009/api/mes/orders）
+    查詢廠內一廠/三廠各工單的目前製程、標準製程、製程進度（On Time / Delay(天數)）、異況數、MES 缺料數與機台位置。
+    Args:
+        plant: 廠區篩選 ('all'=全部, '一廠', '三廠')
+        keyword: 選填，搜尋關鍵字（工單號碼、訂單編號、客戶名稱、機型、目前製程如「噴漆」「品管」、或機台位置如「1C06」）
+        status_filter: 狀態過濾 ('all'=全部, 'delayed'=製程Delay延遲, 'abnormal'=有異況 abnormal_count>0, 'shortage'=有缺料 shortage_count>0, 'on_time'=準時 On Time)
+    """
+    mes_payload = _fetch_mes_orders_cached()
+    if mes_payload.get('error') and not mes_payload.get('rows'):
+        return {'error': mes_payload['error']}
+
+    all_rows = mes_payload.get('rows') or []
+    sync_info = mes_payload.get('sync') or {}
+
+    # 廠區正規化（相容英文 Plant 1 / Plant 3）
+    p_norm = (plant or 'all').strip()
+    if p_norm.upper() in ('1', 'PLANT 1', 'PLANT1', 'FACTORY 1'):
+        p_norm = '一廠'
+    elif p_norm.upper() in ('3', 'PLANT 3', 'PLANT3', 'FACTORY 3'):
+        p_norm = '三廠'
+    elif p_norm.lower() in ('all', '', '全部'):
+        p_norm = 'all'
+
+    kw = (keyword or '').strip()
+    kw_candidates = _expand_bilingual_keywords(kw) if kw else []
+    sf = (status_filter or 'all').strip().lower()
+
+    # 全域統計（不受過濾影響，方便回答整體概況）
+    plant_counts = {}
+    total_delayed = 0
+    total_on_time = 0
+    total_abnormal = 0
+    total_shortage = 0
+    for r in all_rows:
+        p = r.get('plant') or '未分類'
+        plant_counts[p] = plant_counts.get(p, 0) + 1
+        prog = str(r.get('process_progress') or '')
+        if prog.upper().startswith('DELAY'):
+            total_delayed += 1
+        elif prog.upper() == 'ON TIME':
+            total_on_time += 1
+        if int(r.get('abnormal_count') or 0) > 0:
+            total_abnormal += 1
+        if int(r.get('shortage_count') or 0) > 0:
+            total_shortage += 1
+
+    def _parse_delay_days(prog_str: str) -> int:
+        m = re.search(r'delay\s*\(\s*(\d+)\s*\)', str(prog_str or ''), flags=re.IGNORECASE)
+        return int(m.group(1)) if m else 0
+
+    filtered = []
+    for r in all_rows:
+        if p_norm != 'all' and r.get('plant') != p_norm:
+            continue
+
+        prog = str(r.get('process_progress') or '')
+        abn = int(r.get('abnormal_count') or 0)
+        shrt = int(r.get('shortage_count') or 0)
+        delay_days = _parse_delay_days(prog)
+
+        if sf == 'delayed' and not prog.upper().startswith('DELAY'):
+            continue
+        elif sf == 'abnormal' and abn <= 0:
+            continue
+        elif sf == 'shortage' and shrt <= 0:
+            continue
+        elif sf == 'on_time' and prog.upper() != 'ON TIME':
+            continue
+
+        if kw_candidates:
+            haystack = ' '.join([
+                str(r.get('work_order_no_display') or ''),
+                str(r.get('work_order_no') or ''),
+                str(r.get('machine_model') or ''),
+                str(r.get('customer_name') or ''),
+                str(r.get('order_no') or ''),
+                str(r.get('plant') or ''),
+                str(r.get('standard_process') or ''),
+                str(r.get('current_process') or ''),
+                prog,
+                str(r.get('machine_location') or ''),
+            ]).upper()
+            if not any(k in haystack for k in kw_candidates):
+                continue
+
+        filtered.append({
+            '工單號碼': r.get('work_order_no_display') or r.get('work_order_no') or '',
+            '廠區': r.get('plant') or '',
+            '機型': r.get('machine_model') or '',
+            '客戶': r.get('customer_name') or '',
+            '訂單編號': r.get('order_no') or '',
+            '預出貨日': r.get('order_ship_date') or '-',
+            '標準製程': r.get('standard_process') or '-',
+            '目前製程': r.get('current_process') or '-',
+            '製程進度': prog or '-',
+            '製程延遲天數': delay_days,
+            '異況數': abn,
+            'MES缺料數': shrt,
+            '機台位置': r.get('machine_location') or '-',
+        })
+
+    # 排序：優先排有異況、延遲天數高、有缺料、預出貨日早的工單
+    filtered.sort(
+        key=lambda x: (
+            -x['製程延遲天數'],
+            -x['異況數'],
+            -x['MES缺料數'],
+            x['預出貨日'] if x['預出貨日'] != '-' else '9999-12-31',
+        )
+    )
+
+    limit_n = 40 if kw else 25
+    return {
+        'MES最後同步時間': sync_info.get('last_synced_at') or '未知',
+        'MES全廠統計摘要': {
+            '全廠追蹤工單總數': len(all_rows),
+            '各廠區工單數': plant_counts,
+            '製程Delay延遲工單數': total_delayed,
+            '製程OnTime準時工單數': total_on_time,
+            '有異況工單數_abnormal': total_abnormal,
+            '有缺料工單數_shortage': total_shortage,
+        },
+        '查詢條件': {
+            'plant': p_norm,
+            'keyword': kw or '無',
+            'status_filter': sf,
+        },
+        '符合條件工單總筆數': len(filtered),
+        f'MES工單明細_前{limit_n}筆': filtered[:limit_n],
+    }
+
+
 # ---------------------------------------------------------------------------
 # OpenAI / vLLM Function Calling Schema 定義
 # ---------------------------------------------------------------------------
@@ -813,7 +1005,7 @@ OPENAI_TOOLS_SCHEMA = [
         'type': 'function',
         'function': {
             'name': 'get_order_specs',
-            'description': '依9碼工單號碼查詢該工單的完整訂單規格（特性說明、特性值、值說明）、客戶、機型、出貨日與該工單缺料項目。',
+            'description': '依9碼工單號碼查詢該工單的完整訂單規格（特性說明、特性值、值說明）、MES生產追蹤狀態（製程、位置、異況）、客戶、機型、出貨日與該工單缺料項目。',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -851,6 +1043,32 @@ OPENAI_TOOLS_SCHEMA = [
             },
         },
     },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'query_mes_orders',
+            'description': '查詢 MES 生產管理看板（一廠/三廠工單的標準製程、目前製程、製程進度 On Time / Delay、異況數、MES缺料數、機台位置）。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'plant': {
+                        'type': 'string',
+                        'enum': ['all', '一廠', '三廠'],
+                        'description': "廠區篩選：'all'=全部(預設)、'一廠'、'三廠'",
+                    },
+                    'keyword': {
+                        'type': 'string',
+                        'description': '選填，搜尋關鍵字（工單號碼、訂單號、客戶、機型、製程如「噴漆」「品管」、或機台位置如「1C06」）',
+                    },
+                    'status_filter': {
+                        'type': 'string',
+                        'enum': ['all', 'delayed', 'abnormal', 'shortage', 'on_time'],
+                        'description': "狀態篩選：'all'=全部(預設)、'delayed'=製程Delay延遲、'abnormal'=有異況(異況>0)、'shortage'=MES缺料>0、'on_time'=準時",
+                    },
+                },
+            },
+        },
+    },
 ]
 
 TOOL_DISPATCH = {
@@ -875,28 +1093,35 @@ TOOL_DISPATCH = {
         value_keyword=args.get('value_keyword'),
         exclude=bool(args.get('exclude', False)),
     ),
+    'query_mes_orders': lambda args: tool_query_mes_orders(
+        plant=args.get('plant', 'all'),
+        keyword=args.get('keyword'),
+        status_filter=args.get('status_filter', 'all'),
+    ),
 }
 
 
 # ---------------------------------------------------------------------------
 # System Prompt 與 CLI Stateless 快照建構器（支援中/英雙語切換）
 # ---------------------------------------------------------------------------
-BASE_SYSTEM_PROMPT_ZH = """你是哈特佛（Hartford / 協鴻工業）「生產資訊中心 - 採購與工單規格儀表板」內建的 AI 助手（Hartford AI）。
+BASE_SYSTEM_PROMPT_ZH = """你是哈特佛（Hartford / 協鴻工業）「生產資訊中心 - 採購、工單規格與 MES 生產管理儀表板」內建的 AI 助手（Hartford AI）。
 請遵守以下原則：
 1. 一律使用**繁體中文**回答，語氣專業、清晰、精準，善用 Markdown 表格或條列呈現數據。
-2. 回答採購缺料、交期、兩週清單、物料明細或訂單規格問題時，**必須優先呼叫工具查詢最新即時數據**，嚴禁自行編造品號、工單號、交期或數量。
+2. 回答採購缺料、交期、兩週清單、物料明細、訂單規格或 MES 生產進度問題時，**必須優先呼叫工具查詢最新即時數據**，嚴禁自行編造品號、工單號、交期或數量。
 3. 延遲定義：`預計到貨日 (expected_date) − 第一筆開始缺料的需求日 (demand_date)`；若無交期且有缺料則標示為「無交期」。
-4. 若使用者詢問某張 9 碼工單（如 100003884）的規格、主軸、控制器、CTS 等，請呼叫 `get_order_specs`。
+4. 若使用者詢問某張 9 碼工單（如 100003884）的規格、主軸、控制器、CTS 或該單 MES 狀態，請呼叫 `get_order_specs`。
 5. 若使用者詢問「哪些工單有/沒有某規格」（如「哪些單沒有 CTS」、「列出 7.5KW 主軸工單」），請呼叫 `search_orders_by_spec`（若問「沒有」請設 `exclude=true`）。
+6. 若使用者詢問 **MES 生產管理看板**（如一廠/三廠工單、目前製程、標準製程、製程進度 Delay/On Time、異況、機台位置），請呼叫 `query_mes_orders`。
 """
 
-BASE_SYSTEM_PROMPT_EN = """You are **Hartford AI**, the built-in AI Assistant for the Hartford (She Hong Industrial) "Production Information Center - Procurement & Work Order Spec Dashboard".
+BASE_SYSTEM_PROMPT_EN = """You are **Hartford AI**, the built-in AI Assistant for the Hartford (She Hong Industrial) "Production Information Center - Procurement, Work Order Spec & MES Dashboard".
 Please follow these strict rules:
-1. **Always respond in clear, professional English.** Even if the raw database/SAP data returned by tools contains Traditional Chinese (such as material descriptions, characteristic names, customer names, or buyer names), **translate the meanings, table headers, and explanations into natural English** while keeping part numbers, PO numbers, and 9-digit work order numbers intact (you may keep original buyer/customer Chinese names in parentheses for clarity).
-2. Always call the read-only tools first to retrieve real-time data before answering questions about shortages, delivery schedules, 2-week lists, material details, or work order specifications. Never fabricate part numbers, work order numbers, dates, or quantities.
+1. **Always respond in clear, professional English.** Even if the raw database/SAP/MES data returned by tools contains Traditional Chinese (such as material descriptions, characteristic names, process names, machine locations, customer names, or buyer names), **translate the meanings, table headers, and explanations into natural English** while keeping part numbers, PO numbers, and 9-digit work order numbers intact (you may keep original Chinese names/locations in parentheses for clarity).
+2. Always call the read-only tools first to retrieve real-time data before answering questions about shortages, delivery schedules, 2-week lists, material details, work order specifications, or MES production status. Never fabricate part numbers, work order numbers, dates, or quantities.
 3. Delivery delay definition: `Expected Delivery Date − Earliest Shortage Demand Date`. If a shortage item has no expected delivery date, label it as "No Delivery Date".
 4. When asked about a specific 9-digit work order (e.g., 100003884), call `get_order_specs`.
 5. When asked which work orders have or do NOT have a certain specification (e.g., "Which orders don't have CTS?", "List all 7.5KW spindle orders"), call `search_orders_by_spec` (set `exclude=true` for negative queries like "without / no").
+6. When asked about **MES Production Management** (Plant 1 / Plant 3 work orders, standard process, current process, process progress Delay/On Time, abnormal count, MES shortage, or machine location), call `query_mes_orders`.
 """
 
 BASE_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT_ZH
@@ -945,6 +1170,14 @@ def _build_cli_stateless_prompt(user_message: str, history_messages: list, lang:
         tw_res = tool_get_two_week_list()
         auto_tools.append({'name': 'get_two_week_list', 'args': {}})
         injected_blocks.append(f"【兩週內到貨與延期清單】\n```json\n{json.dumps(tw_res, ensure_ascii=False)}\n```")
+
+    # 5. 若訊息詢問 MES / 製程 / 異況 / 機台位置 / 一廠 / 三廠
+    if any(k in user_message for k in ('MES', 'mes', '製程', '異況', '位置', '一廠', '三廠', '噴漆', '品管')) or any(
+        ek in msg_lower for ek in ('mes', 'process', 'abnormal', 'location', 'plant 1', 'plant 3')
+    ):
+        mes_res = tool_query_mes_orders()
+        auto_tools.append({'name': 'query_mes_orders', 'args': {'plant': 'all'}})
+        injected_blocks.append(f"【MES 生產管理看板快照】\n```json\n{json.dumps(mes_res, ensure_ascii=False)}\n```")
 
     # 5. 組裝最近 10 則對話歷史
     history_lines = []
@@ -1321,6 +1554,14 @@ class AiController:
             })
             return tool_search_orders_by_spec(spec_keyword=spec_keyword, value_keyword=value_keyword or None, exclude=exclude)
 
+        def query_mes_orders(plant: str = 'all', keyword: str = '', status_filter: str = 'all') -> dict:
+            """查詢 MES 生產管理看板（一廠/三廠工單製程、Delay進度、異況、缺料與機台位置）"""
+            recorded_tool_calls.append({
+                'name': 'query_mes_orders',
+                'args': {'plant': plant, 'keyword': keyword, 'status_filter': status_filter},
+            })
+            return tool_query_mes_orders(plant=plant or 'all', keyword=keyword or None, status_filter=status_filter or 'all')
+
         contents = []
         for hm in history_messages[-10:]:
             role = 'user' if hm['role'] == 'user' else 'model'
@@ -1340,6 +1581,7 @@ class AiController:
                     search_procurement,
                     get_order_specs,
                     search_orders_by_spec,
+                    query_mes_orders,
                 ],
             ),
         )

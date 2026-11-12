@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var ASSET_VER = '20261112c';
+  var ASSET_VER = '20261112d';
   var STORAGE_RECT_KEY = 'hartford_ai_window_rect_v2';
   var STORAGE_ENGINE_KEY = 'hartford_ai_engine_v1';
   var STORAGE_SESSION_KEY = 'hartford_ai_active_session_v1';
@@ -16,7 +16,7 @@
   var I18N = {
     zh: {
       fabTooltip: 'Hartford AI 助手',
-      fabTitle: '開啟 Hartford AI 採購與規格助手',
+      fabTitle: '開啟 Hartford AI 採購、規格與 MES 助手',
       title: 'Hartford AI 助手',
       langToggleBtn: '🌐 EN',
       langToggleTitle: 'Switch to English (切換為英文介面與英文回覆)',
@@ -44,27 +44,28 @@
       newSessionTitle: '開新對話',
       newSessionDefaultName: '新對話',
       delSessionTitle: '刪除此對話',
-      inputPlaceholder: '輸入問題（如：30日內缺料、100003884規格、哪些單沒有CTS）…',
+      inputPlaceholder: '輸入問題（如：30日內缺料、100003884規格、MES延遲與異況、哪些單沒有CTS）…',
       sendBtn: '發送',
       welcomeHtml:
-        '👋 您好！我是 <strong>Hartford AI 採購與工單規格助手</strong>。<br>' +
-        '我可以即時查詢記憶體快取中的<strong>缺料總覽、兩週內到貨/延期清單、單一物料 PO/交期明細、以及工單規格正反向篩選</strong>。<br>' +
+        '👋 您好！我是 <strong>Hartford AI 採購、工單規格與 MES 助手</strong>。<br>' +
+        '我可以即時查詢記憶體快取中的<strong>缺料總覽、兩週內到貨/延期清單、單一物料 PO/交期明細、工單規格正反向篩選、以及 MES 生產製程/異況/機台位置</strong>。<br>' +
         '<span style="color:#90a4ae;font-size:12px;">請點選下方快速範例或直接輸入問題！（右上角可切換 🌐 EN 英文模式）</span>',
-      thinkingHtml: '⏳ <em>Hartford AI 正在查詢即時採購/規格數據並思考中…</em>',
+      thinkingHtml: '⏳ <em>Hartford AI 正在查詢即時採購/規格/MES 數據並思考中…</em>',
       sendErrorPrefix: '⚠️ 發送失敗：',
       pollErrorPrefix: '⚠️ 輪詢結果時發生錯誤：',
       noReply: '（無回應）',
       quickPrompts: [
         { label: '📊 缺料與延遲總覽', text: '請給我目前的採購缺料與延遲總覽，並列出最緊急的前10項。' },
+        { label: '🏭 MES 製程與異況', text: '請查詢目前 MES 生產管理看板的整體統計，並列出製程 Delay 最嚴重或有異況的工單。' },
         { label: '📅 兩週內到貨與延期', text: '列出未來兩週內預計到貨清單，以及目前交貨延期的項目。' },
-        { label: '🔍 查工單規格', text: '請幫我查詢工單 100003884 的規格與缺料狀況。' },
+        { label: '🔍 查工單規格與製程', text: '請幫我查詢工單 100003884 的規格、MES 目前製程與缺料狀況。' },
         { label: '🚫 哪些單沒有 CTS', text: '請問目前線上哪些工單沒有 CTS（中心出水）？' },
         { label: '⚡ 7.5KW 主軸工單', text: '列出所有規格包含 7.5KW 主軸的工單。' }
       ]
     },
     en: {
       fabTooltip: 'Hartford AI Assistant',
-      fabTitle: 'Open Hartford AI Procurement & Spec Assistant',
+      fabTitle: 'Open Hartford AI Procurement, Spec & MES Assistant',
       title: 'Hartford AI Assistant',
       langToggleBtn: '🌐 中文',
       langToggleTitle: '切換為繁體中文 (Switch to Traditional Chinese)',
@@ -92,20 +93,21 @@
       newSessionTitle: 'Start a new conversation',
       newSessionDefaultName: 'New Chat',
       delSessionTitle: 'Delete this conversation',
-      inputPlaceholder: 'Ask a question (e.g., 30-day shortages, order 100003884 specs, orders without CTS)…',
+      inputPlaceholder: 'Ask a question (e.g., 30-day shortages, MES delayed orders, order 100003884 specs, orders without CTS)…',
       sendBtn: 'Send',
       welcomeHtml:
-        '👋 Hello! I am the <strong>Hartford AI Procurement & Work Order Spec Assistant</strong>.<br>' +
-        'I can query real-time <strong>shortage summaries, 2-week arrival/delayed lists, material PO/delivery details, and work order specifications</strong>.<br>' +
+        '👋 Hello! I am the <strong>Hartford AI Procurement, Spec & MES Assistant</strong>.<br>' +
+        'I can query real-time <strong>shortage summaries, 2-week arrival/delayed lists, material PO/delivery details, work order specifications, and MES production status/locations</strong>.<br>' +
         '<span style="color:#90a4ae;font-size:12px;">Click a quick prompt below or type your question in English! (Click 🌐 中文 on top-right to switch language)</span>',
-      thinkingHtml: '⏳ <em>Hartford AI is querying real-time procurement/spec data and thinking…</em>',
+      thinkingHtml: '⏳ <em>Hartford AI is querying real-time procurement/spec/MES data and thinking…</em>',
       sendErrorPrefix: '⚠️ Failed to send: ',
       pollErrorPrefix: '⚠️ Error polling status: ',
       noReply: '(No response)',
       quickPrompts: [
         { label: '📊 Shortage & Delay Summary', text: 'Please give me the current procurement shortage and delivery delay summary, and list the top 10 most urgent shortage items in English.' },
+        { label: '🏭 MES Process & Status', text: 'Please check the MES production board summary and list the work orders with the longest process delays or abnormal status in English.' },
         { label: '📅 2-Week Arrivals & Delays', text: 'Please list the expected arrivals within the next 2 weeks and currently delayed items in English.' },
-        { label: '🔍 Order 100003884 Specs', text: 'Please check the specifications and shortage status for work order 100003884 in English.' },
+        { label: '🔍 Order 100003884 Specs', text: 'Please check the specifications, MES process status, and shortage status for work order 100003884 in English.' },
         { label: '🚫 Orders without CTS', text: 'Which active work orders do NOT have CTS (Coolant Through Spindle)? Please reply in English.' },
         { label: '⚡ 7.5KW Spindle Orders', text: 'List all work orders equipped with a 7.5KW spindle in English.' }
       ]
@@ -275,43 +277,43 @@
       '<div class="hf-ai-resizer hf-ai-resizer-sw" data-dir="sw"></div>' +
       '<div class="hf-ai-resizer hf-ai-resizer-se" id="hf-ai-resizer-se" data-dir="se"></div>' +
       '<div class="hf-ai-drawer-header" id="hf-ai-drag-header">' +
-        '<div class="hf-ai-header-left">' +
-          '<div id="hf-ai-header-avatar"></div>' +
-          '<div class="hf-ai-title-wrap">' +
-            '<span class="hf-ai-title" id="hf-ai-title-text">Hartford AI 助手</span>' +
-            '<span class="hf-ai-subtitle" id="hf-ai-engine-badge"></span>' +
-          '</div>' +
-        '</div>' +
-        '<div class="hf-ai-header-actions">' +
-          '<button type="button" class="hf-ai-lang-btn" id="hf-ai-lang-toggle"></button>' +
-          '<button type="button" class="hf-ai-icon-btn hf-ai-reset-pos-btn" id="hf-ai-reset-pos" style="width:30px;flex:0 0 30px;">⟲</button>' +
-          '<button type="button" class="hf-ai-icon-btn" id="hf-ai-toggle-settings" style="width:30px;flex:0 0 30px;">⚙️</button>' +
-          '<button type="button" class="hf-ai-icon-btn" id="hf-ai-close-drawer" style="width:30px;flex:0 0 30px;">✕</button>' +
-        '</div>' +
+      '<div class="hf-ai-header-left">' +
+      '<div id="hf-ai-header-avatar"></div>' +
+      '<div class="hf-ai-title-wrap">' +
+      '<span class="hf-ai-title" id="hf-ai-title-text">Hartford AI 助手</span>' +
+      '<span class="hf-ai-subtitle" id="hf-ai-engine-badge"></span>' +
+      '</div>' +
+      '</div>' +
+      '<div class="hf-ai-header-actions">' +
+      '<button type="button" class="hf-ai-lang-btn" id="hf-ai-lang-toggle"></button>' +
+      '<button type="button" class="hf-ai-icon-btn hf-ai-reset-pos-btn" id="hf-ai-reset-pos" style="width:30px;flex:0 0 30px;">⟲</button>' +
+      '<button type="button" class="hf-ai-icon-btn" id="hf-ai-toggle-settings" style="width:30px;flex:0 0 30px;">⚙️</button>' +
+      '<button type="button" class="hf-ai-icon-btn" id="hf-ai-close-drawer" style="width:30px;flex:0 0 30px;">✕</button>' +
+      '</div>' +
       '</div>' +
       '<div class="hf-ai-settings-panel" id="hf-ai-settings-panel">' +
-        '<div class="hf-ai-settings-row">' +
-          '<label for="hf-ai-engine-select" id="hf-ai-engine-label"></label>' +
-          '<select id="hf-ai-engine-select" style="flex:1 1 auto;width:auto;">' +
-            '<option value="vllm_local"></option>' +
-            '<option value="cli"></option>' +
-            '<option value="sdk"></option>' +
-          '</select>' +
-        '</div>' +
-        '<div class="hf-ai-settings-row" id="hf-ai-admin-row" style="display:none;">' +
-          '<button type="button" class="hf-ai-sm-btn" id="hf-ai-save-global-btn" style="width:100% !important;justify-content:center;"></button>' +
-        '</div>' +
+      '<div class="hf-ai-settings-row">' +
+      '<label for="hf-ai-engine-select" id="hf-ai-engine-label"></label>' +
+      '<select id="hf-ai-engine-select" style="flex:1 1 auto;width:auto;">' +
+      '<option value="vllm_local"></option>' +
+      '<option value="cli"></option>' +
+      '<option value="sdk"></option>' +
+      '</select>' +
+      '</div>' +
+      '<div class="hf-ai-settings-row" id="hf-ai-admin-row" style="display:none;">' +
+      '<button type="button" class="hf-ai-sm-btn" id="hf-ai-save-global-btn" style="width:100% !important;justify-content:center;"></button>' +
+      '</div>' +
       '</div>' +
       '<div class="hf-ai-toolbar">' +
-        '<select class="hf-ai-session-select" id="hf-ai-session-select" style="flex:1 1 auto;width:auto;"></select>' +
-        '<button type="button" class="hf-ai-sm-btn" id="hf-ai-new-session" style="flex:0 0 auto;width:auto;"></button>' +
-        '<button type="button" class="hf-ai-sm-btn" id="hf-ai-del-session" style="flex:0 0 auto;width:auto;">🗑️</button>' +
+      '<select class="hf-ai-session-select" id="hf-ai-session-select" style="flex:1 1 auto;width:auto;"></select>' +
+      '<button type="button" class="hf-ai-sm-btn" id="hf-ai-new-session" style="flex:0 0 auto;width:auto;"></button>' +
+      '<button type="button" class="hf-ai-sm-btn" id="hf-ai-del-session" style="flex:0 0 auto;width:auto;">🗑️</button>' +
       '</div>' +
       '<div class="hf-ai-messages" id="hf-ai-messages"></div>' +
       '<div class="hf-ai-chips" id="hf-ai-chips"></div>' +
       '<div class="hf-ai-input-area">' +
-        '<textarea class="hf-ai-textarea" id="hf-ai-input" rows="1" style="flex:1 1 auto;width:auto;"></textarea>' +
-        '<button type="button" class="hf-ai-send-btn" id="hf-ai-send" style="flex:0 0 auto;width:auto;"></button>' +
+      '<textarea class="hf-ai-textarea" id="hf-ai-input" rows="1" style="flex:1 1 auto;width:auto;"></textarea>' +
+      '<button type="button" class="hf-ai-send-btn" id="hf-ai-send" style="flex:0 0 auto;width:auto;"></button>' +
       '</div>';
 
     document.body.appendChild(drawer);
@@ -420,7 +422,7 @@
     };
     try {
       localStorage.setItem(STORAGE_RECT_KEY, JSON.stringify(data));
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function restoreWindowRect(drawer) {
@@ -441,7 +443,7 @@
         drawer.style.right = 'auto';
         drawer.style.bottom = 'auto';
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function resetWindowRect(drawer) {
@@ -710,7 +712,7 @@
           }
         }
       })
-      .catch(function () {});
+      .catch(function () { });
 
     refreshSessionsList(true);
   }
@@ -736,7 +738,7 @@
           }
         }
       })
-      .catch(function () {});
+      .catch(function () { });
   }
 
   function renderSessionSelectors() {
@@ -773,7 +775,7 @@
           renderMessages();
         }
       })
-      .catch(function () {});
+      .catch(function () { });
   }
 
   function createNewSession() {
